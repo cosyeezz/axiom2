@@ -3,12 +3,13 @@ import { randomUUID } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
-// Pi 1.1.0 computes a first write before taking its file lock. Install the same
-// fix in every application process before any file-backed SettingsManager runs.
+// Reviewed against pinned Pi 1.4.0: FileSettingsStorage still computes a first
+// write before taking its file lock. Install the fix in every application
+// process before any file-backed SettingsManager runs.
 // Unpatched external SDK processes remain outside this compatibility boundary.
 const entry = import.meta.resolve("@earendil-works/pi-coding-agent");
 const metadata = JSON.parse(readFileSync(new URL("../package.json", entry), "utf8"));
-if (metadata.version !== "1.1.0") throw Error("Pi 设置存储版本不兼容，无法保证配置并发写入安全。");
+if (metadata.version !== "1.4.0") throw Error("Pi 设置存储版本不兼容，无法保证配置并发写入安全。");
 const lockfile = createRequire(entry)("proper-lockfile") as { lockSync(path: string, options: { realpath: false; retries: 0 }): () => void };
 type FileStorage = {
   globalSettingsPath: string; projectSettingsPath: string;

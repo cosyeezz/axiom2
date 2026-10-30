@@ -36,7 +36,7 @@ test("OpenCLI: migration preserves external files and old versions, reload repla
   } finally { await s.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
-test("OpenCLI: candidate cannot publish over configuration changes or with missing disabled skills", async () => {
+test("OpenCLI: install commits over concurrent configuration changes; missing skills still fail after one retry", async () => {
   const f = openCliFixture(); f.install("1.8.8"); let breakSkills = false;
   const s = new OpenCliService(f.root, () => {}, async (args, options) => {
     const result = await f.execute(args, options);
@@ -51,32 +51,32 @@ test("OpenCLI: candidate cannot publish over configuration changes or with missi
     await call(s, "opencli.install", { version: "1.8.8" }); await turn();
     const concurrent = { ...original, revision: randomUUID(), profile: "other-window" };
     writeFileSync(openCliConfigPath(f.root), JSON.stringify(concurrent)); release();
-    assert.match((await settle(s)).job!.error!, /配置已变化/); assert.deepEqual(readOpenCliConfig(f.root), concurrent);
+    assert.equal((await settle(s)).job?.error, undefined, "component standard: no revision check on install");
+    assert.equal(readOpenCliConfig(f.root)!.profile, "other-window");
     await call(s, "opencli.refresh"); await settle(s); breakSkills = true;
-    await call(s, "opencli.install", { version: "1.8.8" }); assert.match((await settle(s)).job!.error!, /技能缺失/);
-    assert.deepEqual(readOpenCliConfig(f.root), concurrent); assert.ok(existsSync(f.packageRoot));
+    await call(s, "opencli.install"); assert.match((await settle(s)).job!.error!, /技能缺失/);
+    assert.equal(readOpenCliConfig(f.root)!.detached, true); assert.ok(existsSync(f.packageRoot), "external files are kept");
     assert.deepEqual(readdirSync(join(f.root, "integrations", "opencli", "versions")), []);
   } finally { await s.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
-test("OpenCLI: uninstall uses admission, preserves external files and prevents automatic global reconnection", async () => {
+test("OpenCLI: injected deletion failure preserves external files and prevents automatic global reconnection", async () => {
   const f = openCliFixture(); f.install("1.8.8"); let blocked = true;
-  const s = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, async work => { if (blocked) throw Error("active worker"); return work(); }, f.runtime);
+  const s = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, async work => { if (blocked) throw Error("injected deletion failure"); return work(); }, f.runtime);
   try {
     await call(s, "opencli.check"); await settle(s);
     await call(s, "opencli.install", { version: "1.8.8" }); await settle(s);
     const managed = readOpenCliConfig(f.root)!;
-    await assert.rejects(call(s, "opencli.uninstall", { revision: s.snapshot().revision }), { code: "CONFIRM_REQUIRED" });
-    await call(s, "opencli.uninstall", { confirm: true, revision: s.snapshot().revision }); assert.match((await settle(s)).job!.error!, /active worker/);
-    assert.deepEqual(readOpenCliConfig(f.root), managed); assert.ok(existsSync(managed.packageRoot));
-    blocked = false; await call(s, "opencli.uninstall", { confirm: true, revision: s.snapshot().revision }); assert.equal((await settle(s)).job?.error, undefined);
+    await call(s, "opencli.uninstall"); assert.match((await settle(s)).job!.error!, /injected deletion failure/);
+    assert.ok(existsSync(managed.packageRoot));
+    blocked = false; await call(s, "opencli.uninstall"); assert.equal((await settle(s)).job?.error, undefined);
     assert.equal(readOpenCliConfig(f.root)!.detached, true); assert.equal(existsSync(managed.packageRoot), false); assert.ok(existsSync(f.packageRoot));
     await call(s, "opencli.refresh"); assert.equal((await settle(s)).version, undefined); assert.equal(openCliResources(f.root, f.root).managed, false);
     await call(s, "opencli.install", { version: "1.8.8" }); assert.equal((await settle(s)).version, "1.8.8");
   } finally { await s.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
-test("OpenCLI: failed file removal is persisted before deletion and retried after restart", async t => {
+test("OpenCLI: a failed file removal is reported and the next uninstall after restart cleans it", async t => {
   const f = openCliFixture(); let s = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
   const remove = fs.rmSync; let fail = false, target = "";
   const mock = t.mock.method(fs, "rmSync", ((path, options) => {
@@ -86,15 +86,16 @@ test("OpenCLI: failed file removal is persisted before deletion and retried afte
   try {
     await call(s, "opencli.check"); await settle(s); await call(s, "opencli.install", { version: "1.8.8" }); await settle(s);
     target = join(f.root, "integrations", "opencli", "versions", readOpenCliConfig(f.root)!.directory!); fail = true;
-    await call(s, "opencli.uninstall", { confirm: true, revision: s.snapshot().revision }); assert.match((await settle(s)).job!.error!, /部分文件/);
-    assert.equal(s.snapshot().removalPending, true); await s.close(); fail = false;
+    await call(s, "opencli.uninstall"); assert.match((await settle(s)).job!.error!, /部分文件/);
+    assert.equal(readOpenCliConfig(f.root)!.detached, true); await s.close(); fail = false;
     s = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
-    await call(s, "opencli.uninstall", { confirm: true, revision: s.snapshot().revision }); assert.equal((await settle(s)).job?.error, undefined);
-    assert.equal(existsSync(target), false); assert.equal(readOpenCliConfig(f.root)!.removalPending, undefined);
+    assert.equal(s.snapshot().job, undefined, "no removal history after restart");
+    await call(s, "opencli.uninstall"); assert.equal((await settle(s)).job?.error, undefined);
+    assert.equal(existsSync(target), false);
   } finally { mock.mock.restore(); syncBuiltinESMExports(); await s.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
-for (const defect of ["linked-package", "wrong-shim", "wrong-skill"]) test(`OpenCLI: rejects ${defect} before switching its current installation`, async () => {
+for (const defect of ["linked-package", "wrong-shim", "wrong-skill"]) test(`OpenCLI: rejects ${defect} and force-cleans after the retry also fails`, async () => {
   const f = openCliFixture(); f.install("1.8.8");
   const s = new OpenCliService(f.root, () => {}, async (args, options) => {
     const result = await f.execute(args, options);
@@ -110,9 +111,8 @@ for (const defect of ["linked-package", "wrong-shim", "wrong-skill"]) test(`Open
   }, f.locateNpm, undefined, undefined, f.runtime);
   try {
     await call(s, "opencli.check"); await settle(s); await call(s, "opencli.save", { ...s.snapshot().settings, enabled: false, revision: "" });
-    const original = readOpenCliConfig(f.root);
-    await call(s, "opencli.install", { version: "1.8.8" }); assert.ok((await settle(s)).job?.error);
-    assert.deepEqual(readOpenCliConfig(f.root), original); assert.ok(existsSync(f.packageRoot));
+    await call(s, "opencli.install"); assert.ok((await settle(s)).job?.error);
+    assert.equal(readOpenCliConfig(f.root)!.detached, true); assert.equal(readOpenCliConfig(f.root)!.directory, undefined); assert.ok(existsSync(f.packageRoot));
     assert.deepEqual(readdirSync(join(f.root, "integrations", "opencli", "versions")), []);
   } finally { await s.close(); rmSync(f.root, { recursive: true, force: true }); }
 });

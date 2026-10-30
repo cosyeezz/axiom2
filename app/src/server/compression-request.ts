@@ -13,7 +13,7 @@ import { compactionInstructions } from "./compaction-display.js";
 
 type Preparation = SessionBeforeCompactEvent["preparation"];
 type CacheOptions = Pick<SimpleStreamOptions,
-  "sessionId" | "cacheRetention" | "reasoning" | "thinkingBudgets" | "transport" | "toolChoice" | "temperature">;
+  "sessionId" | "cacheRetention" | "reasoning" | "thinkingBudgets" | "transport" | "toolChoice" | "temperature" | "samplingParams">;
 export interface CompressionPrefix {
   version: 1;
   sessionId: string;
@@ -25,6 +25,7 @@ export interface CompressionPrefix {
   options: CacheOptions;
   /** JSON cannot preserve the agent's own reasoning: undefined (explicit off). */
   reasoningOff?: boolean;
+  /** Legacy sidecars may contain this diagnostic; it never blocks compression. */
   unavailableReason?: string;
 }
 export const compressionRequestMarker = "[Axiom native compaction request]";
@@ -81,13 +82,13 @@ export function captureCompressionPrefix(
   context: TranscriptContext, options: SimpleStreamOptions | undefined,
 ): CompressionPrefix {
   const sessionId = manager.getSessionId(), leafId = manager.getLeafId();
-  if (!leafId || options?.sessionId !== sessionId) throw unavailable("没有可关联的会话请求");
+  if (!leafId || options?.sessionId !== sessionId) throw Error("没有可关联的会话请求");
   const cache: CacheOptions = {
     sessionId,
     cacheRetention: options.cacheRetention ??
       ((options.env?.PI_CACHE_RETENTION ?? process.env.PI_CACHE_RETENTION) === "long" ? "long" : "short"),
   };
-  for (const key of ["reasoning", "thinkingBudgets", "transport", "toolChoice", "temperature"] as const)
+  for (const key of ["reasoning", "thinkingBudgets", "transport", "toolChoice", "temperature", "samplingParams"] as const)
     if (options[key] !== undefined) Object.assign(cache, { [key]: options[key] });
   const samplingReason = samplingUnavailable(model, modelSampling(model, options));
   return copy({ version: 1, sessionId, leafId, selection,
@@ -110,15 +111,16 @@ export function saveCompressionPrefix(file: string, prefix: CompressionPrefix) {
   } finally { rmSync(temporary, { force: true }); }
 }
 export function forgetCompressionPrefix(file: string) { rmSync(prefixPath(file), { force: true }); }
-export function readCompressionPrefix(file: string): CompressionPrefix {
+export function readCompressionPrefix(file: string): CompressionPrefix | undefined {
   try {
     const value = JSON.parse(readFileSync(prefixPath(file), "utf8")) as CompressionPrefix;
     if (value.version !== 1 || !value.sessionId || !value.leafId || !value.model?.identity ||
         !Array.isArray(value.context?.messages) || !value.context.messages.length || !value.options)
       throw Error();
     return value;
-  } catch { throw unavailable("尚无可用的真实请求记录，请先让当前会话模型完成一次请求"); }
+  } catch { return undefined; }
 }
+
 export function assertCompressionPrefix(prefix: CompressionPrefix, sessionId: string, selection: Selection) {
   if (prefix.sessionId !== sessionId || prefix.options.sessionId !== sessionId || json(prefix.selection) !== json(selection))
     throw unavailable("快照模型与最近真实会话请求不同，请重试压缩");
@@ -143,16 +145,25 @@ export function observeCompressionPayload(
   };
 }
 
-export function compressionRequestOptions(prefix: CompressionPrefix, native: SimpleStreamOptions = {}): SimpleStreamOptions {
-  const options = { ...native, ...prefix.options };
-  if (prefix.reasoningOff) options.reasoning = undefined;
+/** Reuse the real request's options without overriding a newer model configuration. */
+export function compressionRequestOptions(
+  prefix: CompressionPrefix | undefined, native: SimpleStreamOptions = {}, model?: Model<Api>,
+): SimpleStreamOptions {
+  const sameConfiguration = prefix && (!model || compressionModelIdentity(model) === prefix.model.identity);
+  const cached = prefix ? sameConfiguration ? prefix.options : {
+    sessionId: prefix.options.sessionId, cacheRetention: prefix.options.cacheRetention,
+  } : {};
+  const options = { ...native, ...cached };
+  if (sameConfiguration && prefix.reasoningOff) options.reasoning = undefined;
+  // A checkpoint produces text, not another forced tool turn. No tool executes.
+  if (options.toolChoice && !["auto", "none"].includes(String(options.toolChoice))) options.toolChoice = "none";
   return options;
 }
 
 /** A coarse native estimate, not a provider tokenizer. Never shorten the prefix to fit. */
 export function assertCompressionBudget(model: Model<Api>, context: TranscriptContext, options: SimpleStreamOptions) {
   const estimated = context.messages.reduce((sum, message) => sum + estimateTokens(message), 0);
-  const sampling = modelSampling(model, options);
+  const sampling = { ...modelSampling(model, options), ...options.samplingParams };
   const output = Math.max(0, options.maxTokens ?? 0, ...["max_tokens", "max_completion_tokens", "max_output_tokens"]
     .map((key) => typeof sampling[key] === "number" && Number.isFinite(sampling[key]) ? sampling[key] as number : 0));
   if (model.contextWindow > 0 && estimated + output > model.contextWindow)
@@ -165,17 +176,15 @@ function messageText(message: Message) {
 }
 
 /** Keep the exact previously dispatched transcript, then append only unseen entries. */
-function snapshotContext(prefix: CompressionPrefix, entries: SessionEntry[]): TranscriptContext {
+function snapshotContext(prefix: CompressionPrefix, entries: SessionEntry[]): TranscriptContext | undefined {
   const leaf = entries.findIndex((entry) => entry.id === prefix.leafId);
-  if (leaf < 0) throw unavailable("最近请求已不在当前分支");
+  if (leaf < 0) return undefined;
   const positions = new Map(entries.map((entry, index) => [entry.id, index]));
   const projection = buildSessionProjection(entries).entries;
   const before = projection.filter((entry) => positions.get(entry.sourceEntry.id)! <= leaf).flatMap((entry) => entry.messages);
-  if (hash(before) !== prefix.projectionHash)
-    throw unavailable("最近请求之后的编辑改变了已发送内容，请先完成一次新的会话请求");
+  if (hash(before) !== prefix.projectionHash) return undefined;
   const after = projection.filter((entry) => positions.get(entry.sourceEntry.id)! > leaf).flatMap((entry) => entry.messages);
-  if (after.some((message) => message.role === "system"))
-    throw unavailable("最近请求后系统或工具声明已更新，不能证明供应商前缀保持一致");
+  if (after.some((message) => message.role === "system")) return undefined;
   return normalizeContext({ messages: [...copy(prefix.context.messages), ...convertToLlm(after)] });
 }
 
@@ -189,7 +198,7 @@ function targetIndices(messages: Message[], target: Message[]) {
     // projected. Timestamps never enter provider payloads; all content stays exact.
     const fingerprint = (value: Message) => { const { timestamp: _timestamp, ...content } = value; return json(content); };
     const index = messages.findIndex((candidate, i) => i >= cursor && fingerprint(candidate) === fingerprint(message));
-    if (index < 0) throw unavailable("原生摘要目标无法对应到真实请求");
+    if (index < 0) return undefined;
     indices.push(index + 1);
     cursor = index + 1;
   }
@@ -199,16 +208,42 @@ function targetIndices(messages: Message[], target: Message[]) {
 /**
  * Pi 1.1 native summary protocol adapter. Keep its format/update/split instructions,
  * but remove its reserialized history. The actual chat prefix occurs exactly once.
- * Exact length matching fails closed if Pi changes its protocol; never split on a
- * user-supplied XML delimiter or infer the phase from an invocation/retry counter.
+ * Prefer the real chat prefix. If Pi's format or the current projection differs,
+ * keep the native summary request instead; cache reuse is an optimization only.
  */
+function nativeCompressionRequest(native: TranscriptContext): TranscriptContext {
+  const messages = copy(native.messages);
+  const user = messages.findLast((message) => message.role === "user");
+  if (user) user.content = typeof user.content === "string"
+    ? `${compressionRequestMarker}\n${user.content}`
+    : [{ type: "text", text: compressionRequestMarker }, ...user.content];
+  else messages.push({ role: "user", content: `${compressionRequestMarker}\n${compactionInstructions}`, timestamp: Date.now() });
+  return normalizeContext({ messages });
+}
+
 export function compressionPrefixRequest(
-  prefix: CompressionPrefix, entries: SessionEntry[], preparation: Preparation,
+  prefix: CompressionPrefix | undefined, entries: SessionEntry[], preparation: Preparation | undefined,
   native: TranscriptContext,
 ): TranscriptContext {
+  try { return cachedCompressionRequest(prefix, entries, preparation, native); }
+  catch {
+    // Even a damaged optional cache record must not block the native request.
+    // Provider execution is outside this adapter and its errors are not swallowed.
+    return nativeCompressionRequest(native);
+  }
+}
+
+function cachedCompressionRequest(
+  prefix: CompressionPrefix | undefined, entries: SessionEntry[], preparation: Preparation | undefined,
+  native: TranscriptContext,
+): TranscriptContext {
+  // Missing/old cache metadata must never prevent native compaction from running.
+  const fallback = () => nativeCompressionRequest(native);
+  if (!prefix || !preparation) return fallback();
   const request = snapshotContext(prefix, entries);
+  if (!request) return fallback();
   const users = native.messages.filter((message) => message.role === "user");
-  if (users.length !== 1) throw unavailable("原生摘要协议已变化");
+  if (users.length !== 1) return fallback();
   const prompt = messageText(users[0]);
   let target: Message[], instructions: string;
   const history = `<conversation>\n${serializeConversation(convertToLlm(preparation.messagesToSummarize))}\n</conversation>\n\n`;
@@ -219,21 +254,22 @@ export function compressionPrefixRequest(
     instructions = prompt.slice(history.length);
     if (preparation.previousSummary) {
       const previous = `<previous-summary>\n${preparation.previousSummary}\n</previous-summary>\n\n`;
-      if (!instructions.startsWith(previous)) throw unavailable("原生更新摘要协议已变化");
+      if (!instructions.startsWith(previous)) return fallback();
       instructions = instructions.slice(previous.length);
       const index = request.messages.findIndex((message) => message.role === "user" && messageText(message).includes(preparation.previousSummary!));
-      if (index < 0) throw unavailable("现有摘要不在真实请求中");
+      if (index < 0) return fallback();
       previousIndex = index + 1;
       instructions = instructions.replace("provided in <previous-summary> tags", "already present in the transcript at the message index specified below");
     }
-    if (!instructions.includes("## Critical Context")) throw unavailable("原生完整交接格式已变化");
+    if (!instructions.includes("## Critical Context")) return fallback();
   } else if (preparation.isSplitTurn && prompt.startsWith(turn)) {
     target = convertToLlm(preparation.turnPrefixMessages);
     instructions = prompt.slice(turn.length);
     if (!instructions.includes("## Original Request") || !instructions.includes("## Context Needed to Continue"))
-      throw unavailable("原生 split-turn 格式已变化");
-  } else throw unavailable("原生摘要请求协议已变化");
+      return fallback();
+  } else return fallback();
   const indices = targetIndices(request.messages, target);
+  if (!indices) return fallback();
   const nativeSystem = native.messages.filter((message) => message.role === "system").map(getSystemMessageText).join("\n\n");
   const directive = [prefix.model.api === "kiro-chat" ? "[Native compaction request]" : compressionRequestMarker, nativeSystem,
     "This is a checkpoint-only request, not a continuation. Do not execute or call any tool.",

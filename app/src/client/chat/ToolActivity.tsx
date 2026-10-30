@@ -18,7 +18,7 @@ import type { HistoryGroup } from "../../shared/history.js";
 import { toolPreview, toolStatusLabels, toolSummary, ordinaryToolStatus, type ToolCall, type ToolStatus } from "./tool-summary.js";
 
 import type { ToolIcon } from "../../shared/tool-summary.js";
-export type ActivityFact = { name: string; icon: ToolIcon | "thinking"; target: string; status: ToolStatus; startedAt?: number; durationMs?: number; kind?: "message" | "notice"; evidence?: boolean; runId?: string; origin?: RunOrigin; order: readonly [number, number] };
+export type ActivityFact = { name: string; icon: ToolIcon | "thinking"; target: string; status: ToolStatus; startedAt?: number; durationMs?: number; kind?: "message" | "notice"; evidence?: boolean; hasContent?: boolean; runId?: string; origin?: RunOrigin; order: readonly [number, number] };
 export const ActivityExpanded = createContext(true);
 export const ActivitySettled = createContext(false);
 
@@ -65,7 +65,7 @@ export function ActivityGroup({ scope, children, requesting = false, awaitingMor
   /** Archived prefix contributes counts/preview, never overrides a live tail's state. */
   prefixSummary?: HistoryGroup["process"]; disclosureKey?: string; className?: string;
 }) {
-  const [open, setOpen] = useRememberedDisclosure(disclosureKey ?? `process:${JSON.stringify([messageIds, thinkingOnlyIds, callsOnlyIds, callIds, inline])}`, animateFold);
+  const [expanded, setOpen] = useRememberedDisclosure(disclosureKey ?? `process:${JSON.stringify([messageIds, thinkingOnlyIds, callsOnlyIds, callIds, inline])}`, animateFold);
   const [folding, setFolding] = useState(animateFold);
   const card = useRef<HTMLDetailsElement>(null);
   useLayoutEffect(() => {
@@ -85,6 +85,11 @@ export function ActivityGroup({ scope, children, requesting = false, awaitingMor
   const facts = new Map(entries);
   const evidence = new Set(entries.filter(([, fact]) => fact.evidence).map(([id]) => id.slice("message:".length)));
   const items = entries.map(([, fact]) => fact);
+  // A streaming placeholder is status, not expandable content. Archived groups
+  // still open lazily: their bodies are not present in the live facts snapshot.
+  const canExpand = !!summary || !!prefixSummary || items.some(item => !item.kind || item.hasContent);
+  const open = expanded && canExpand;
+  useEffect(() => { if (!canExpand) setOpen(false); }, [canExpand, setOpen]);
   // Local tool/task outcomes belong to their rows, not the whole process.
   const messages = items.filter((item) => item.kind === "message");
   // Coalesced cards can span runs. Stale deltas from an earlier run must not
@@ -151,7 +156,7 @@ export function ActivityGroup({ scope, children, requesting = false, awaitingMor
   }, [previous]);
   return <ActivitySettled.Provider value={settled}>
     <details ref={card} className={`activity tool-activity${inline ? " process-live" : ""}${className ? ` ${className}` : ""}`} open={open} data-folding={folding || undefined} data-status={status} data-status-icon={showStatusIcon} data-settled={settled || undefined} data-call-count={summary?.calls ?? (prefixSummary?.calls ?? 0) + calls.length}>
-      <summary onClick={(e) => { e.preventDefault(); if (folding) { setFolding(false); setOpen(true); } else setOpen((value) => !value); }}>
+      <summary aria-disabled={!canExpand || undefined} tabIndex={canExpand ? undefined : -1} onClick={(e) => { e.preventDefault(); if (!canExpand) return; if (folding) { setFolding(false); setOpen(true); } else setOpen((value) => !value); }}>
         {showStatusIcon && <span className="activity-status" data-state={status} role="img" aria-label={toolStatusLabels[status]} data-tooltip={toolStatusLabels[status]}>
           {status === "completed" ? <CompletedStatusIcon animate={statusChange.animateCompletion} /> :
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" />{status === "failed" ? <path d="m9 9 6 6m0-6-6 6" /> : status === "cancelled" ? <path d="M9 8v8m6-8v8" /> : <path d="M12 7v6m0 4h.01" />}</svg>}
@@ -160,7 +165,7 @@ export function ActivityGroup({ scope, children, requesting = false, awaitingMor
           <ProcessTitle label={label} active={status === "running"} thinking={thinking} />
         </span>
         {failedCalls > 0 && <span className="process-counts"><span>成功 {succeeded}</span><span data-status={failedCalls ? "failed" : undefined}>失败 {failedCalls}</span></span>}
-        {!inline && <Icon name="chevron" />}
+        {!inline && canExpand && <Icon name="chevron" />}
           {!inline && (!open || folding) && <span className="activity-ticker" aria-live="polite" aria-atomic="true">
             {!current && <span className="activity-current">{status === "running" ? <ThinkingDots /> : summary?.preview || prefixSummary?.preview || "思考与任务记录"}</span>}
             {previous && <span key={`out-${previous[0]}`} className="activity-current activity-current-out" data-tool={previous[1].name} data-status={previous[1].status} aria-hidden="true"><ActivitySummary fact={previous[1]} settled={settled} /></span>}

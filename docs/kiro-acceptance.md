@@ -1,6 +1,6 @@
 # Kiro 真实接入验收（进行中）
 
-本轮依据 [交接](kiro-handoff.md) 继续排查。**真实接入仍未验收通过。用户要求所有修复必须依据当前 Kiro 客户端流程，自定 UUIDv5 候选已撤回、未部署。** 下列 UUID 红绿与182项通过是已撤回候选的历史证据，不代表当前源码验收。当前优先使用 REA 补齐客户端完整发送链，不将离线通过、模型目录存在或历史成功等同当前可用。
+本轮依据 [交接](kiro-handoff.md) 继续排查。**真实接入仍未验收通过。用户要求所有修复必须依据当前 Kiro CLI 流程，桌面证据不可替代；自定 UUIDv5 和桌面流错误候选均已撤回、未部署。** 下列 UUID 红绿与182项通过是已撤回候选的历史证据，不代表当前源码验收。当前优先使用 REA 补齐客户端完整发送链，不将离线通过、模型目录存在或历史成功等同当前可用。
 
 ## 本轮真实文本诊断
 
@@ -57,13 +57,19 @@
 
 [当前产物、差异、REA Evidence 和局限](evidence/kiro-acceptance-20261027/current-client/README.md)；[桌面字段级对比](evidence/kiro-acceptance-20261027/current-client/desktop/REPORT.md)；[CLI 认证与 endpoint 静态契约](evidence/kiro-acceptance-20261027/current-client/cli-auth-contract.md)。CLI 只确认独立 `KIRO_API_KEY` 入口，未证实 Axiom OAuth 的受支持导入入口；不把 OAuth 当 API key，不写 CLI 数据库。
 
+### CLI 原生分析未成功
+
+REA 的正式 MCP 重载和实际状态调用已恢复，但 Ghidra 的前置全量分析在 330 秒及 600 秒均超时，**没有取得当前 CLI 的有效函数反编译或完整 caller→wire**。单函数查询并未降低其全量启动成本，已经停止此路线，不继续延长预算。没有证据证明 macOS 是根因或 Windows 会更快。
+
+[完整恢复及失败记录](evidence/kiro-acceptance-20261027/current-client/recovery/STATUS.md)与 [CLI 普通静态定位](evidence/kiro-acceptance-20261027/current-client/cli-static/REPORT.md)已归档，后者不是 REA Evidence。撤回候选后，全部 23 个 provider 文件及 10 个测试文件与现有 **179/179、exit0** 基线精确同 SHA，因此复用该离线结果，不无谓重测；未新构建、部署或请求真实模型。见 [完整性核验](evidence/kiro-acceptance-20261027/current-client/archive-verification.json)。
+
 ## 官方 CLI 对照与后续验收
 
 本机保存的官方 macOS arm64 CLI `2.33.1` 可以执行，初次 `whoami` 报 `Not logged in`。用户已授权研究复用现有 Axiom 授权给本地 CLI，不要求远端用户更新程序。必须核对受支持凭据入口及认证/profile/区域/scopes，不输出 token，不盲猜写 CLI 数据库。
 
 下一步：
 
-1. 使用 REA 对当前 Kiro client 恢复登录、模型、会话/历史、headers/body、endpoint、最终发送链，与 Axiom 逐项比较。任何修复必须引用 Kiro 依据，不自行设计替代。
+1. 先核实 REA 是否有不触发全量分析、能限定函数范围的当前 CLI 入口；只支持 symbol 的入口不能把地址冒充 symbol。入口可用后恢复登录、模型、会话/历史、headers/body、endpoint、最终发送链，与 Axiom 逐项比较。任何修复必须引用当前 CLI 依据，不自行设计替代；不再重试已结束的 Ghidra 全量尝试。
 2. 用户已允许随时按后台重启 skill 重启；仅在有客户端证据支持的修复准备好后，完整构建、独立控制器重启并验证实际部署，再以新隔离 scope 验证同一模型文本。失败获取字段级诊断，不盲目重发。
 3. 文本成功后，依次验证只读工具闭环、历史续接、思考开关、真实图片及工具图片、取消和恢复。
 4. CLI 登录后，以同条件小型任务对照；请求协议/默认行为、能力和未验证项分别记证据。

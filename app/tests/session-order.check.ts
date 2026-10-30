@@ -21,7 +21,7 @@ try {
   const create = (title: string, updatedAt: number, pinned = false, owner = workspace) => {
     const s = run("session.create", {}, owner.id) as Session;
     run("session.rename", { title }, owner.id, s.id);
-    app.store.db.prepare("UPDATE sessions SET updatedAt=?,pinned=? WHERE id=?").run(updatedAt, Number(pinned), s.id);
+    app.store.db.prepare("UPDATE sessions SET updatedAt=?,listOrderAt=?,pinned=? WHERE id=?").run(updatedAt, updatedAt, Number(pinned), s.id);
     return { ...s, title, updatedAt, pinned };
   };
   const pin = create("Manual pin", 1, true);
@@ -83,6 +83,42 @@ try {
   publish({});
   await waitOrder([old.title, pin.title, recent.title]);
   assert.equal(await pins.locator(".history-row").count(), 2);
+
+  // Concurrent updates used to swap top rows on every updatedAt/selfAuto change.
+  app.store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt) VALUES(?,?,'completed','{}',1)").run(pin.id, pin.id);
+  publish({ runStatus: "running" }, remote);
+  await waitOrder([remote.title, old.title, pin.title, recent.title]);
+  await page.evaluate(() => {
+    (window as any).__stableTopRows = [...document.querySelectorAll('[aria-label="置顶会话"] .history-row')]
+      .map(node => ({ node, id: (node as HTMLElement).dataset.sessionId, y: node.getBoundingClientRect().y }));
+  });
+  let tick = 0;
+  for (const runStatus of ["starting", "running", "stopping", "completed"] as const) {
+    for (const target of [old, pin, remote]) {
+      const title = `${target.title} update ${++tick}`;
+      app.store.db.prepare("UPDATE sessions SET title=?,updatedAt=? WHERE id=?").run(title, 10000 + tick, target.id);
+      publish({ runStatus, unread: runStatus === "completed" }, target);
+      // Observe changed content, not an already-true order before the delivery.
+      await page.waitForFunction(({ id, title }) => document.querySelector(`[data-session-id="${id}"] strong`)?.textContent === title,
+        { id: target.id, title });
+      assert.equal(await page.evaluate(() => {
+        const saved = (window as any).__stableTopRows as { node: Element; id: string; y: number }[];
+        const rows = [...document.querySelectorAll('[aria-label="置顶会话"] .history-row')];
+        return rows.length === saved.length && rows.every((node, i) => node === saved[i].node && Math.abs(node.getBoundingClientRect().y - saved[i].y) < 1);
+      }), true, "status/content updates keep the same DOM rows at the same screen positions");
+      assert.equal(await prompt.inputValue(), "Keep this draft");
+    }
+  }
+  for (const target of [old, pin, remote])
+    app.store.db.prepare("UPDATE sessions SET title=?,updatedAt=? WHERE id=?").run(target.title, target.updatedAt, target.id);
+  app.agents.publish(`sessions:${workspace.id}`);
+  await waitOrder([remote.title, old.title, pin.title, recent.title]);
+  await page.reload();
+  await waitOrder([remote.title, old.title, pin.title, recent.title]);
+  console.log("PASS fixed top DOM identity/coordinates across 12 concurrent metadata updates and page reload");
+  await prompt.focus();
+  publish({}); publish({}, pin); publish({}, remote);
+  await waitOrder([old.title, pin.title, recent.title]);
   run("session.pin", { pinned: false }, workspace.id, old.id);
   publish({});
   await waitOrder([pin.title, recent.title, old.title]);
@@ -116,6 +152,10 @@ try {
   assert.equal(await page.locator("#chat-title").textContent(), remote.title, "reading keeps the automatic foreign pin open and visible");
   assert.equal(await page.locator("#workspace-picker summary strong").textContent(), workspace.name);
   assert.equal(await page.locator("#title-path").textContent(), foreign.path);
+  // Selection hides its unread dot before the asynchronous read acknowledgement.
+  const readDeadline = Date.now() + 5000;
+  while (app.store.session(foreign.id, remote.id).unread && Date.now() < readDeadline)
+    await new Promise(resolve => setTimeout(resolve, 20));
   assert.equal(app.store.session(foreign.id, remote.id).unread, false);
   await row(recent).locator(".history-item").click();
   await page.waitForFunction(() => (document.querySelector("#prompt") as HTMLTextAreaElement)?.value === "Keep this draft");
@@ -168,15 +208,16 @@ try {
   assert.equal(await editor.inputValue(), "Unsaved title");
   assert.equal(await editor.evaluate((el) => el === document.activeElement), true);
   await editor.press("Escape");
-  await waitOrder([old.title, pin.title, recent.title]);
   await page.waitForFunction((id) => document.querySelector(`[data-session-id="${id}"] button.history-item`) === document.activeElement, old.id);
-  assert.equal(await pins.locator(`[data-session-id="${old.id}"]`).count(), 1);
+  assert.equal(await local.locator(`[data-session-id="${old.id}"]`).count(), 1, "the focused row retains its group even after the editor closes");
   await prompt.focus();
+  await waitOrder([old.title, pin.title, recent.title]);
+  assert.equal(await pins.locator(`[data-session-id="${old.id}"]`).count(), 1);
   assert.equal(await prompt.inputValue(), "Keep this draft");
   publish({});
   await waitOrder([pin.title, recent.title, old.title]);
   assert.deepEqual(errors, []);
-  console.log("PASS: automatic priority, view-only cooldown, foreground hold, revisit renewal, timed foreign return, manual pins, independent drafts/focus and deferred inline editor movement");
+  console.log("PASS: fixed top DOM order/positions through concurrent run, unread, title and timestamp updates plus reload; automatic priority, cooldown, foreign return, manual pins, drafts/focus and deferred editor movement");
 } finally {
   await browser.close();
   await app.close();

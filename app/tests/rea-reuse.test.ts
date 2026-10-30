@@ -39,7 +39,7 @@ async function downloaded(root: string) {
   return { ...prepared, record };
 }
 
-test("equivalent installed JDK is revalidated without downloading and its recommendation survives restart", async () => {
+test("equivalent installed JDK is revalidated without downloading; the recommendation is not persisted across restart", async () => {
   const root = temporary(), initial = config(root), java = join(root, "external JDK");
   mkdirSync(java); writeFileSync(join(java, "release"), 'JAVA_RUNTIME_VERSION="21.0.13+9-LTS"\n');
   initial.engines = { java }; atomicReaJson(reaConfigPath(root), initial);
@@ -62,8 +62,9 @@ test("equivalent installed JDK is revalidated without downloading and its recomm
     const restarted = new ReaService(root, () => {}, dependencies);
     try {
       const item = restarted.snapshot().engines![0];
-      assert.equal(item.version, "21.0.13+9-LTS"); assert.equal(item.recommendedVersion, "21.0.13+9.0.LTS");
-      assert.equal(item.available, undefined); assert.equal(engineRecommendationSatisfied(item), true);
+      // Component standard: no job history is persisted, so the recommendation returns with the next check.
+      assert.equal(item.version, "21.0.13+9-LTS"); assert.equal(item.recommendedVersion, undefined);
+      assert.equal(item.available, undefined); assert.equal(engineRecommendationSatisfied(item), false);
       await call(restarted, "rea.refresh"); assert.equal(probes, 4, "refresh does not execute the JDK");
     } finally { await restarted.close(); }
   } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
@@ -153,8 +154,9 @@ test("manual download requests reuse verified packages after refresh and restart
     const saved = readReaConfig(root).downloads!.hopper!, path = service.snapshot().engines!.find(item => item.id === "hopper")!.download!.path;
     assert.equal(preparations, 1);
     await service.close(); service = new ReaService(root, () => {}, dependencies);
-    assert.equal(engineDownloadSatisfied(service.snapshot().engines!.find(item => item.id === "hopper")!), true);
+    assert.ok(service.snapshot().engines!.find(item => item.id === "hopper")!.download, "the verified package itself survives restart");
     await call(service, "rea.engine-check", { engine: "hopper" }); await settle(service);
+    assert.equal(engineDownloadSatisfied(service.snapshot().engines!.find(item => item.id === "hopper")!), true);
     await call(service, "rea.engine-download", selection(service, "hopper")); const state = await settle(service);
     assert.equal(state.job?.error, undefined); assert.match(state.job!.message, /复用/); assert.equal(preparations, 1);
     assert.deepEqual(readReaConfig(root).downloads!.hopper, saved); assert.deepEqual(readFileSync(path), data);

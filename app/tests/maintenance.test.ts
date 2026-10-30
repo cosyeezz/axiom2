@@ -26,7 +26,7 @@ test("idle timeout interrupts body while sustained slow data and unknown length 
   const slow: typeof fetch = async () => new Response(new ReadableStream({ async pull(stream) { await delay(60); if (remaining--) stream.enqueue(new Uint8Array([97])); else stream.close(); } }));
   assert.equal(await (await maintenanceFetch("https://fixture.invalid", {}, undefined, { ...short, idleMs: 150 }, slow)).text(), "aaaaaa");
 });
-test("task history retains real progress, does not record subscription credentials and recovers interrupted work", async t => {
+test("task progress is real, credentials are not recorded and history is not restored after restart", async t => {
   const root = mkdtempSync(join(tmpdir(), "axiom-maintenance-")); t.after(() => rmSync(root, { recursive: true, force: true }));
   const service = new MaintenanceService(root); t.after(() => service.close());
   await service.run({ id: "one", resource: "test", label: "测试", action: "install", cancel: true }, new AbortController(), async () => {
@@ -42,11 +42,12 @@ test("task history retains real progress, does not record subscription credentia
   const saved = service.snapshot(); assert.equal(saved.tasks[0].status, "succeeded");
   assert.ok(!JSON.stringify(saved).includes("private")); assert.ok(!JSON.stringify(saved).includes("/secret"));
   saved.tasks[0].status = "running";
+  mkdirSync(join(root, "maintenance"), { recursive: true });
   writeFileSync(join(root, "maintenance/tasks.json"), JSON.stringify(saved));
   const restored = new MaintenanceService(root); t.after(() => restored.close());
-  assert.equal(restored.snapshot().tasks[0].status, "interrupted");
+  assert.deepEqual(restored.snapshot().tasks, [], "component standard: no interrupted records survive a restart");
   restored.command({ op: "maintenance.clear", requestId: "clear" });
-  assert.equal(restored.snapshot().tasks.length, 1, "unverified work cannot be cleared");
+  assert.deepEqual(restored.snapshot().tasks, []);
 });
 test("running task deadline can be extended without restarting; decreasing it is rejected", async t => {
   const root = mkdtempSync(join(tmpdir(), "axiom-maintenance-budget-")); t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -59,7 +60,7 @@ test("running task deadline can be extended without restarting; decreasing it is
   assert.throws(() => service.command({ op: "maintenance.extend", requestId: "extend-2", params: { id: "extend", budgets } }), { code: "INVALID_BUDGETS" });
   await pending; assert.equal(count, 1); assert.equal(service.snapshot().tasks[0].status, "succeeded");
 });
-test("history retention, duplicate admission, pre-cancellation and transient storage recovery", async t => {
+test("no history retention, duplicate admission, pre-cancellation and storage failures never block work", async t => {
   const root = mkdtempSync(join(tmpdir(), "axiom-maintenance-boundaries-")); t.after(() => rmSync(root, { recursive: true, force: true }));
   const service = new MaintenanceService(root); t.after(() => service.close());
   const admission = { id: "first", resource: "test", label: "测试", action: "check", cancel: true };
@@ -73,19 +74,20 @@ test("history retention, duplicate admission, pre-cancellation and transient sto
   release(); await pending;
   const saved = service.snapshot(), base = saved.tasks[0];
   saved.tasks = [{ ...base, id: "unverified", status: "interrupted" }, ...Array.from({ length: 101 }, (_, i) => ({ ...base, id: String(i) }))];
+  mkdirSync(join(root, "maintenance"), { recursive: true });
   const path = join(root, "maintenance/tasks.json"); writeFileSync(path, JSON.stringify(saved));
   const restored = new MaintenanceService(root); t.after(() => restored.close());
-  assert.ok(restored.snapshot().tasks.some(task => task.id === "unverified"));
-  rmSync(path); mkdirSync(path);
-  await assert.rejects(restored.run({ ...admission, id: "storage-failed" }, new AbortController(), async () => { throw Error("must not execute"); }), { code: "STORAGE_ERROR" });
-  const rejected = restored.snapshot().tasks.at(-1)!;
-  assert.ok(rejected.finishedAt); assert.equal(rejected.capabilities.cancel, false); assert.ok(rejected.error);
+  assert.deepEqual(restored.snapshot().tasks, []);
+  rmSync(path, { force: true }); mkdirSync(path);
+  let executed = false;
+  await restored.run({ ...admission, id: "storage-failed" }, new AbortController(), async () => { executed = true; });
+  assert.equal(executed, true, "an unwritable history file does not block maintenance");
+  await restored.run({ ...admission, id: "replacement" }, new AbortController(), async () => {});
+  assert.deepEqual(restored.snapshot().tasks.map(task => task.id), ["replacement"], "a new task replaces the finished task of the same resource");
   rmSync(path, { recursive: true });
-  await restored.run({ ...admission, id: "recovered" }, new AbortController(), async () => {});
-  assert.equal(restored.snapshot().error, undefined);
 });
 
-test("cleanup uncertainty survives cancellation, later catches and history reload", async t => {
+test("cleanup uncertainty is reported for the live task but not persisted", async t => {
   const root = mkdtempSync(join(tmpdir(), "axiom-maintenance-uncertain-")); t.after(() => rmSync(root, { recursive: true, force: true }));
   const service = new MaintenanceService(root); t.after(() => service.close());
   const controller = new AbortController();
@@ -97,8 +99,9 @@ test("cleanup uncertainty survives cancellation, later catches and history reloa
   assert.equal(service.snapshot().tasks[0].status, "unknown");
   assert.equal(service.snapshot().tasks[0].error?.message, "process exit not confirmed");
   const restored = new MaintenanceService(root); t.after(() => restored.close());
-  restored.command({ op: "maintenance.clear", requestId: "clear" });
-  assert.equal(restored.snapshot().tasks[0].status, "unknown");
+  assert.deepEqual(restored.snapshot().tasks, []);
+  service.command({ op: "maintenance.clear", requestId: "clear" });
+  assert.deepEqual(service.snapshot().tasks, []);
 });
 
 test("large install logs do not kill process; structured output overflow is reported separately", async t => {

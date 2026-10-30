@@ -15,7 +15,9 @@ import com.axiom.sdk.AxiomWebView;
 /** Native connection chooser; projects and execution stay on the selected computer. */
 public class MainActivity extends Activity {
     private final int bg = 0xff08090a, muted = 0xff969ca6, fg = 0xfff7f8f8, accent = 0xfff0995b;
-    private FrameLayout root;
+    private ConnectionSwipeLayout root;
+    private ConnectionSwipeBridge swipeBridge;
+    private boolean foreground;
     private ScrollView status;
     private AxiomWebView web;
     private TailnetPanel tailnet;
@@ -38,7 +40,7 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         scanPending = state != null && state.getBoolean("scanPending");
         getWindow().setStatusBarColor(bg); getWindow().setNavigationBarColor(bg); getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-        root = new FrameLayout(this); root.setBackgroundColor(bg); root.setFitsSystemWindows(true); setContentView(root);
+        root = new ConnectionSwipeLayout(this, this::canSwipeStatus, this::swipeConnection); root.setBackgroundColor(bg); root.setFitsSystemWindows(true); setContentView(root);
         if (android.os.Build.VERSION.SDK_INT >= 30) {
             getWindow().setDecorFitsSystemWindows(false); root.setFitsSystemWindows(false);
             root.setOnApplyWindowInsetsListener((view, insets) -> { android.graphics.Insets cutout = insets.getInsets(android.view.WindowInsets.Type.displayCutout()); android.graphics.Insets ime = insets.getInsets(android.view.WindowInsets.Type.ime()); view.setPadding(cutout.left, cutout.top, cutout.right, Math.max(cutout.bottom, ime.bottom)); return android.view.WindowInsets.CONSUMED; });
@@ -46,9 +48,12 @@ public class MainActivity extends Activity {
         enterFullscreen();
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
         web = new AxiomWebView(this); root.addView(web, new FrameLayout.LayoutParams(-1, -1)); web.setVisibility(View.GONE);
+        swipeBridge = new ConnectionSwipeBridge(this, this::swipeConnection);
         web.setListener(new AxiomWebView.Listener() {
-            public void onReady() { if (!connecting) return; loaded = true; connecting = false; web.clearHistory(); saveConnection(); status.setVisibility(View.GONE); web.setVisibility(View.VISIBLE); }
-            public void onError(String message) { showError(message); }
+            public void onReady() { if (!connecting) return; loaded = true; connecting = false; web.clearHistory(); saveConnection(); status.setVisibility(View.GONE); web.setVisibility(View.VISIBLE); installSwipe(); }
+            public void onDocumentLoading() { invalidateBack(); swipeBridge.close(); root.cancelGesture(); }
+            public void onDocumentLoaded() { if (loaded && !connecting) installSwipe(); }
+            public void onError(String message) { web.cancelConnect(); showError(message); }
             public void onRendererGone() { loaded = false; recreate(); }
             public void onExternalLink(Uri uri) { try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); } catch (Exception e) { Toast.makeText(MainActivity.this, "没有可打开此链接的浏览器。", Toast.LENGTH_LONG).show(); } }
         });
@@ -104,13 +109,13 @@ public class MainActivity extends Activity {
     private void begin(boolean cycling) {
         if (connecting) return;
         try { connectingAddress = AxiomWebView.normalizeAddress(address.getText().toString()); } catch (Exception e) { showError(e.getMessage()); return; }
-        invalidateBack(); cyclingConnection = cycling;
+        invalidateBack(); swipeBridge.close(); root.cancelGesture(); cyclingConnection = cycling;
         connecting = true; loaded = false; scan.setVisibility(View.GONE); address.setEnabled(false); tailnet.setAvailable(false); web.setVisibility(View.GONE); status.setVisibility(View.VISIBLE);
         progress.setVisibility(View.VISIBLE); retry.setVisibility(View.GONE); vpn.setVisibility(View.GONE); cancel.setVisibility(View.VISIBLE); feedback.setTextColor(muted); feedback.setText("正在连接 " + connectingAddress + "…");
         web.connect(connectingAddress);
     }
     private void showError(String message) {
-        invalidateBack(); connecting = false; loaded = false; if (status == null) return;
+        invalidateBack(); swipeBridge.close(); root.cancelGesture(); connecting = false; loaded = false; if (status == null) return;
         status.setVisibility(View.VISIBLE); scan.setVisibility(View.VISIBLE); web.setVisibility(View.GONE); address.setEnabled(true); tailnet.setAvailable(true); progress.setVisibility(View.GONE); retry.setVisibility(View.VISIBLE); vpn.setVisibility(View.VISIBLE); cancel.setVisibility(View.GONE); feedback.setTextColor(0xffe6ac94); feedback.setText(message);
     }
     private void updateHistory() {
@@ -123,18 +128,42 @@ public class MainActivity extends Activity {
         getSharedPreferences("connection", MODE_PRIVATE).edit().putString("last", connectingAddress).putString("history", history).apply();
         updateHistory();
     }
-    private void switchConnection() {
+    private void installSwipe() {
+        if (ConnectionHistory.entries(getSharedPreferences("connection", MODE_PRIVATE).getString("history", "")).size() > 1) swipeBridge.install(web);
+    }
+    private boolean canSwipeStatus(float x, float y) {
+        if (!foreground || status == null || status.getVisibility() != View.VISIBLE || !cyclingConnection
+            || ConnectionHistory.entries(getSharedPreferences("connection", MODE_PRIVATE).getString("history", "")).size() < 2) return false;
+        // An address-field drag must remain text editing, not connection switching.
+        android.graphics.Rect bounds = new android.graphics.Rect(); int[] location = new int[2]; root.getLocationOnScreen(location);
+        return !address.getGlobalVisibleRect(bounds) || !bounds.contains((int) x + location[0], (int) y + location[1]);
+    }
+    private void swipeConnection(int direction) {
+        if (!foreground || (!loaded && !cyclingConnection)
+            || ConnectionHistory.entries(getSharedPreferences("connection", MODE_PRIVATE).getString("history", "")).size() < 2) return;
+        switchConnection(direction);
+    }
+    private void switchConnection() { switchConnection(1); }
+    private void switchConnection(int direction) {
         String saved = getSharedPreferences("connection", MODE_PRIVATE).getString("history", "");
-        String next = ConnectionHistory.next(saved, connectingAddress);
+        String next = ConnectionHistory.next(saved, connectingAddress, direction);
         if (next.isEmpty()) { web.cancelConnect(); showError("尚无已保存的连接，请选择或输入连接地址。"); return; }
-        address.setText(next); address.dismissDropDown(); begin(true);
+        // A new swipe advances from the pending target and supersedes its attempt.
+        // SDK generation checks keep late responses from mounting or saving it.
+        if (connecting) { web.cancelConnect(); connecting = false; }
+        address.setText(next, false); address.dismissDropDown(); begin(true);
     }
     @Override public void onBackPressed() {
-        if (status.getVisibility() == View.VISIBLE) { if (tailnet.back()) return; invalidateBack(); web.cancelConnect(); connecting = false; super.onBackPressed(); return; }
+        if (status.getVisibility() == View.VISIBLE) {
+            if (tailnet.back()) return;
+            invalidateBack(); web.cancelConnect(); connecting = false;
+            if (cyclingConnection) { showError("已取消连接。可继续左右滑动切换，或选择地址重试。"); return; }
+            super.onBackPressed(); return;
+        }
         if (backPending || connecting || !loaded) return;
         backPending = true; int owned = connectionGeneration;
         web.evaluateJavascript("(()=>{try{const p=document.querySelector('[popover]:popover-open');if(p){p.hidePopover();return true}}catch(e){}const ds=document.querySelectorAll('dialog[open]:not([popover])');const d=ds[ds.length-1];if(d){const event=new Event('cancel',{cancelable:true});if(d.dispatchEvent(event)&&d.open)d.close();return true}const h=document.querySelector('.history-open #collapse-history');if(h){h.click();return true}return false})()", result -> {
-            if (owned != connectionGeneration || isFinishing() || isDestroyed()) return;
+            if (owned != connectionGeneration || !foreground || isFinishing() || isDestroyed()) return;
             backPending = false;
             if ("true".equals(result) || !loaded || connecting || status.getVisibility() == View.VISIBLE) return;
             if (web.canGoBack()) web.goBack(); else switchConnection();
@@ -152,7 +181,7 @@ public class MainActivity extends Activity {
         }
         if (requestCode == 41 && upload != null) { upload.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data)); upload = null; }
     }
-    @Override protected void onResume() { super.onResume(); if (web != null) web.onResume(); if (tailnet != null) tailnet.resume(); }
-    @Override protected void onPause() { if (tailnet != null) tailnet.pause(); if (web != null) web.onPause(); super.onPause(); }
-    @Override protected void onDestroy() { invalidateBack(); if (tailnet != null) tailnet.close(); if (upload != null) upload.onReceiveValue(null); root.removeView(web); web.destroy(); super.onDestroy(); }
+    @Override protected void onResume() { super.onResume(); foreground = true; if (web != null) web.onResume(); if (tailnet != null) tailnet.resume(); }
+    @Override protected void onPause() { foreground = false; invalidateBack(); if (root != null) root.cancelGesture(); if (tailnet != null) tailnet.pause(); if (web != null) web.onPause(); super.onPause(); }
+    @Override protected void onDestroy() { invalidateBack(); if (swipeBridge != null) swipeBridge.close(); if (tailnet != null) tailnet.close(); if (upload != null) upload.onReceiveValue(null); root.removeView(web); web.destroy(); super.onDestroy(); }
 }

@@ -14,7 +14,7 @@ import sql from "highlight.js/lib/languages/sql.js";
 import { canTransformCode, codeLanguage, sqlDialect, transformCode, type CodeTransform } from "./code-transform.js";
 import { MermaidDiagram } from "./MermaidDiagram.js";
 import { hasAsciiDiagramLayout, type AsciiDiagram } from "../../shared/ascii-diagram.js";
-import { cachedAsciiDiagram } from "./ascii-diagram-cache.js";
+import { cachedAsciiDiagram, cachedAsciiForm, cachedAsciiPanels } from "./ascii-diagram-cache.js";
 import { AsciiDiagramPreview, DiagramRenderingContext } from "./AsciiDiagram.js";
 import "../styles/code-block.css";
 for (const [name, grammar] of Object.entries({
@@ -52,7 +52,22 @@ export const CodeBlock = memo(
     const diagramLanguage = ["", "text", "txt", "plaintext", "plain", "ascii"].includes(codeLanguage(language));
     const literalDiagram = useMemo(() => diagramsEnabled && diagramLanguage && hasAsciiDiagramLayout(text), [text, diagramLanguage, diagramsEnabled]);
     const diagram = useMemo(() => diagramsEnabled && diagramLanguage
-      ? parsedDiagram ?? cachedAsciiDiagram(cache, text) : undefined, [text, diagramLanguage, diagramsEnabled, parsedDiagram, cache]);
+      ? parsedDiagram ?? cachedAsciiDiagram(cache, text) ?? cachedAsciiForm(cache, text) : undefined, [text, diagramLanguage, diagramsEnabled, parsedDiagram, cache]);
+    const panels = useMemo(() => diagramsEnabled && diagramLanguage && !diagram
+      ? cachedAsciiPanels(cache, text) : [], [text, diagramLanguage, diagramsEnabled, diagram, cache]);
+    const hasDiagram = !!diagram || panels.length > 0;
+    const alignment = diagram?.alignment ?? (panels.some(panel => panel.diagram.alignment) ? {
+      rows: panels.reduce((sum, panel) => sum + (panel.diagram.alignment?.rows ?? 0), 0),
+      maxShift: Math.max(...panels.map(panel => panel.diagram.alignment?.maxShift ?? 0)),
+    } : undefined);
+    const panelContent: ReactNode[] = [];
+    let panelEnd = 0;
+    for (const panel of panels) {
+      if (panel.start > panelEnd) panelContent.push(<pre key={`text:${panelEnd}`} className="ascii-diagram-source"><code>{text.slice(panelEnd, panel.start)}</code></pre>);
+      panelContent.push(<AsciiDiagramPreview key={`panel:${panel.start}`} diagram={panel.diagram} source={panel.text} />);
+      panelEnd = panel.end;
+    }
+    if (panelEnd < text.length && panels.length) panelContent.push(<pre key={`text:${panelEnd}`} className="ascii-diagram-source"><code>{text.slice(panelEnd)}</code></pre>);
     const transformable = canTransformCode(language);
     useEffect(() => {
       revision.current++;
@@ -89,9 +104,9 @@ export const CodeBlock = memo(
     return (
       <div className="code-card">
         <div className="code-head">
-          <span className="code-language" title={diagram?.alignment && !showSource ? `仅美化视图对齐了 ${diagram.alignment.rows} 行缩进（最多 ${diagram.alignment.maxShift} 格）；原文和复制保持不变。` : undefined}>{diagram ? diagram.alignment && !showSource ? "字符图 · 已对齐" : "字符图" : language || "代码"}</span>
+          <span className="code-language" title={alignment && !showSource ? `仅美化视图对齐了 ${alignment.rows} 行边框或缩进（最多 ${alignment.maxShift} 格）；原文和复制保持不变。` : undefined}>{hasDiagram ? alignment && !showSource ? "字符图 · 已对齐" : "字符图" : language || "代码"}</span>
           <div className="code-actions">
-          {diagram && <button type="button" className="code-action" aria-pressed={showSource} onClick={() => setShowSource(value => !value)}>{showSource ? "美化" : "原文"}</button>}
+          {hasDiagram && <button type="button" className="code-action" aria-pressed={showSource} onClick={() => setShowSource(value => !value)}>{showSource ? "美化" : "原文"}</button>}
           {isMermaid && <button type="button" className="code-action" aria-pressed={showSource} onClick={() => setShowSource(value => !value)}>{showSource ? "图表" : "源码"}</button>}
           {transformable && <>
             <button type="button" className="code-action" disabled={busy || displayed.length > 200_000} onClick={() => void convert("format")}>格式化</button>
@@ -121,7 +136,7 @@ export const CodeBlock = memo(
           <span className="screen-reader" role="status" aria-live="polite">{copied}</span>
         </div>
         {error && <div className="code-notice" role="status">{error}</div>}
-        {diagram && !showSource ? <AsciiDiagramPreview diagram={diagram} source={text} /> : isMermaid && !showSource ? <MermaidDiagram text={text} /> : <pre aria-busy={busy} className={diagram || literalDiagram ? "ascii-diagram-source" : undefined}>
+        {diagram && !showSource ? <AsciiDiagramPreview diagram={diagram} source={text} /> : panels.length > 0 && !showSource ? <div className="ascii-diagram-parts">{panelContent}</div> : isMermaid && !showSource ? <MermaidDiagram text={text} /> : <pre aria-busy={busy} className={hasDiagram || literalDiagram ? "ascii-diagram-source" : undefined}>
           <code>{highlighted}</code>
         </pre>}
       </div>

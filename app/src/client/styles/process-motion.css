@@ -28,6 +28,8 @@
 .tool-activity.activity.process-live[open] > summary { padding: 6px 10px; }
 .tool-activity.activity.process-live[open] > .activity-content { padding: 2px 10px 8px; }
 .tool-activity.process-live > summary:hover { background: transparent; }
+/* Empty status rows have no hover, press or focus feedback suggesting disclosure. */
+:is(.tool-activity, .thinking-block) > summary[aria-disabled="true"] { cursor: default; color: inherit; background: transparent; outline: none; }
 .tool-activity.process-live[data-status="completed"] > summary .activity-title { color: #9ca3af; }
 .tool-activity > summary .activity-title, .process-requesting .activity-title { font-size: var(--thread-text-size, 15px); line-height: var(--thread-line-height, 24px); font-style: normal; }
 .process-requesting { display: flex; align-items: center; min-height: 28px; padding: 2px 0; margin: 0 0 8px; }

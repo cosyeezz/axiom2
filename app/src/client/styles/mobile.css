@@ -5,13 +5,19 @@
   .sidebar{display:none}.mobile-toggle{display:grid}
   .workspace{position:relative;overflow:hidden}.workspace > .topnav{padding:8px 12px 8px 60px!important;min-height:64px;gap:8px;background:var(--bg)}
   .workspace > .topnav h1{font-size:15px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .workspace > .topnav>.row{gap:0}.workspace > .topnav #toggle-history{left:8px}.title-meta{height:22px;font-size:10px;max-width:100%}.title-meta #title-path{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;max-width:100%}.title-meta .path-actions{display:inline-flex}
+  /* Give the metadata its full row; 44px touch actions must not erase the path. */
+  .workspace > .topnav{display:grid;grid-template-columns:minmax(0,1fr) 44px;column-gap:8px;row-gap:0}
+  .workspace > .topnav>.row,.workspace > .topnav .title-block{display:contents}
+  .workspace > .topnav .title-heading{grid-column:1;grid-row:1}
+  .workspace > .topnav>.mobile-reading-toggle{grid-column:2;grid-row:1}
+  .workspace > .topnav .title-meta{grid-column:1 / -1;grid-row:2;width:100%;height:auto;min-height:22px}
+  .workspace > .topnav #toggle-history{left:8px}.title-meta{height:22px;font-size:12px;max-width:100%}.title-meta #title-path{overflow:hidden;white-space:nowrap;display:flex;max-width:100%}.title-meta .path-actions{display:inline-flex}
   .mobile-reading-toggle{display:grid;flex-shrink:0;color:var(--muted)}.mobile-reading-toggle svg{width:22px;height:22px}
   .app.history-open .sidebar{display:flex;position:fixed;left:0;width:min(360px,calc(100vw - 32px));max-width:none;top:0;bottom:0;border-radius:0 20px 20px 0;padding:calc(18px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));box-shadow:16px 0 64px #0008;z-index:70}
   .app.history-open .backdrop{display:block;position:fixed;inset:0;z-index:60;backdrop-filter:blur(5px);background:#0009}.sidebar .brand{padding-bottom:18px}.sidebar .new-chat{min-height:46px;border-radius:10px}.sidebar .search{margin-top:6px}.sidebar .history-item{min-height:64px;border-radius:10px}.sidebar .workspace-picker>summary{min-height:56px;border-radius:12px}.sidebar-foot{padding-bottom:0}
   .thread-shell .thread-content{padding-inline:16px}
   .workspace .container,.thread-content{max-width:100%;width:100%}.thread-content{padding:20px 16px 72px}.thread{overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}.message-body{font-size:15px;line-height:1.85}.thread-content .log-row{padding-bottom:28px}.log-row:has(.user-text){max-width:96%}.user-text{padding:12px 14px;border-radius:14px 14px 4px 14px}.user-text.editable-user-message{padding-inline:14px}.markdown :is(pre,.table-scroll){max-width:100%}.markdown .code-card pre{font-size:12px}
-  .composer-area{max-height:62%;overflow-y:auto;overscroll-behavior:contain;padding:8px 12px max(8px,env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--border-soft)}.composer-area>.container{width:100%;max-width:none}.composer{border-radius:20px;padding:5px 8px;column-gap:4px}.composer textarea{font-size:16px;max-height:min(140px,25dvh)}.composer-tools>.row>.btn{grid-column:1/4;grid-row:2;justify-self:start;max-width:100%;text-align:left}.composer-foot{padding:0}.model-picker>summary span{max-width:min(150px,42vw)}.usage-row{gap:3px 8px;min-height:44px;flex-wrap:wrap}.usage{font-size:10px}.context-controls{gap:0}
+  .composer-area{max-height:62%;overflow-y:auto;overscroll-behavior:contain;padding:8px 12px max(8px,env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--border-soft)}.composer-area>.container{width:100%;max-width:none}.composer{border-radius:20px;padding:5px 8px;column-gap:4px}.composer textarea{font-size:16px;max-height:min(140px,25dvh)}.composer-tools>.row>.btn{grid-column:1/4;grid-row:2;justify-self:start;max-width:100%;text-align:left}.composer-foot{padding:0}.usage-row{gap:3px 8px;min-height:44px;flex-wrap:wrap}.usage{font-size:10px}.context-controls{gap:0}
   .model-picker .model-popover{position:fixed;left:12px;right:12px;bottom:calc(120px + env(safe-area-inset-bottom));width:auto;max-width:none;max-height:max(80px,calc(var(--visual-height,100dvh) - 144px - env(safe-area-inset-bottom)));overflow:auto;border-radius:16px}.model-picker .model-list{flex-shrink:1;max-height:360px}.model-footer{flex-wrap:wrap}
   :is(.compression-settings,.memory-dialog) .model-picker .model-popover{position:static;inset:auto;width:100%;max-width:100%;max-height:min(440px,55dvh);border-radius:var(--radius-md)}
   .subagent-dialog{width:100%;height:var(--visual-height,100dvh);max-height:none;max-width:none;margin:0;border:0;border-radius:0;padding-top:env(safe-area-inset-top)}.subagent-dialog .container{width:100%}.subagent-dialog .topnav{padding-left:16px!important}.subagent-dialog .composer-area{padding-inline:12px}.subagent-dialog-head{min-height:56px}
@@ -23,22 +29,23 @@
 /* Start compact, then grow the mobile input as its text wraps. */
 .app:is(.mobile-workbench,.android-workbench) .composer{--display-font-scale:1;--composer-mobile-layout:1;grid-template-columns:44px minmax(0,1fr) auto auto;grid-template-rows:minmax(44px,auto);align-items:end;gap:4px;padding:5px 8px}
 .app:is(.mobile-workbench,.android-workbench) .composer textarea{grid-column:2;grid-row:1;align-self:center;height:40px;min-height:40px;max-height:148px;min-width:0;font-size:16px;line-height:22px;padding:8px 4px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;overflow-x:hidden;overflow-y:auto;scrollbar-width:none}
-.app:is(.mobile-workbench,.android-workbench) .composer :is(.model-picker,.composer-model-controls){grid-column:3;grid-row:1;min-width:0;margin:0;justify-self:end}
-.app:is(.mobile-workbench,.android-workbench) .composer .model-picker{max-width:80px}
-.app:is(.mobile-workbench,.android-workbench) .composer .model-picker>summary{min-width:44px;max-width:80px;padding-inline:6px;gap:4px}
-.app:is(.mobile-workbench,.android-workbench) .composer .model-picker>summary>span{max-width:50px}
+.app:is(.mobile-workbench,.android-workbench) .composer :is(.model-picker,.composer-model-controls){grid-column:3;grid-row:1;min-width:0;max-width:min(24rem,calc(100cqi - 118px));margin:0;justify-self:end}
+.app:is(.mobile-workbench,.android-workbench) .composer .model-picker{max-width:100%}
+.app:is(.mobile-workbench,.android-workbench) .composer .model-picker>summary{min-width:44px;max-width:100%;padding-inline:6px;gap:4px}
+.app:is(.mobile-workbench,.android-workbench) .composer .model-selection-provider{display:none}
 .app:is(.mobile-workbench,.android-workbench) .composer :is(.send,.composer-actions){grid-column:4;grid-row:1}
 .app:is(.mobile-workbench,.android-workbench) .composer-tools>.row>.btn{grid-column:3;grid-row:1;max-width:80px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding-inline:4px}
 /* Expanded drafts use all the space above a bottom-aligned control row. */
-.app:is(.mobile-workbench,.android-workbench) .composer[data-multiline]{grid-template-rows:auto 44px;row-gap:0}
+.app:is(.mobile-workbench,.android-workbench) .composer[data-multiline]{grid-template-rows:auto minmax(44px,auto);row-gap:0}
 .app:is(.mobile-workbench,.android-workbench) .composer[data-multiline] textarea{grid-column:1/-1;grid-row:1;width:100%}
 .app:is(.mobile-workbench,.android-workbench) .composer[data-multiline] :is(.attachment-picker,#attach,.model-picker,.composer-model-controls,.send,.composer-actions),.app:is(.mobile-workbench,.android-workbench) .composer[data-multiline] .composer-tools>.row>.btn{grid-row:2}
-.app:is(.mobile-workbench,.android-workbench) .usage{--toolbar-icon-size:16px;--toolbar-gap:8px;flex-wrap:nowrap;gap:8px;padding:0;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;font-size:10px}
+.app:is(.mobile-workbench,.android-workbench) .composer[data-multiline] :is(.model-picker,.composer-model-controls){grid-column:2/4}
+.app:is(.mobile-workbench,.android-workbench) .composer[data-multiline] .composer-model-controls>.model-picker{max-width:100%}
+.app:is(.mobile-workbench,.android-workbench) .usage{--toolbar-gap:8px;flex-wrap:nowrap;gap:8px;padding:0;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;font-size:10px}
 .app:is(.mobile-workbench,.android-workbench) :is(.usage-row,.usage-settings,.context-controls){flex-wrap:nowrap;flex:0 0 auto;gap:8px;max-width:none;width:auto;min-height:44px;white-space:nowrap}
 .app:is(.mobile-workbench,.android-workbench) .usage-settings{gap:0}
 .app:is(.mobile-workbench,.android-workbench) .usage :is(.usage-metric,.compression-trigger,.memory-todo-toggle,.memory-global){min-height:44px;height:44px;gap:6px;white-space:nowrap;flex-shrink:0}
 .app:is(.mobile-workbench,.android-workbench) .usage :is(.compression-trigger,.memory-todo-toggle,.memory-global){min-width:44px;padding-inline:8px}.app:is(.mobile-workbench,.android-workbench) .usage .memory-global{width:44px}
-.app:is(.mobile-workbench,.android-workbench) .usage :is(.usage-metric,.compression-trigger,.memory-todo-toggle,.memory-global)>svg{width:16px;height:16px;flex-basis:16px}
 .android-workbench .thread-shell .thread-content{padding-inline:16px;max-width:100%;width:100%}.android-workbench .mobile-reading-toggle{display:grid}
 .app.reading-mode{grid-template-columns:minmax(0,1fr);height:var(--visual-height,100dvh);overflow:hidden}.reading-mode .workspace{position:relative;overflow:hidden}
 .reading-mode .sidebar,.reading-mode .backdrop,.reading-mode #content>.topnav,.reading-mode #content>.composer-area,.reading-mode #content>.mobile-connection,.reading-mode #content>.execution-alert,.reading-mode .context-panel{display:none!important}
@@ -54,6 +61,8 @@
 .app:is(.mobile-workbench,.android-workbench) .thread-navigation[data-direction=up] [data-scroll=up],.app:is(.mobile-workbench,.android-workbench) .thread-navigation[data-direction=down] [data-scroll=down]{display:grid}
 .app:is(.mobile-workbench,.android-workbench) .thread-navigation[data-empty=true]{display:none}
 @media (max-height:400px) {
+  /* The conversation's scaled minimum must leave room for wrapped model labels. */
+  .app:is(.mobile-workbench,.android-workbench) .thread-shell{min-height:min(96px,25dvh)}
   /* In a keyboard-sized viewport, keep typing and sending before the scrollable
      attachment and tool rows rather than pushing the form below them. */
   .app:is(.mobile-workbench,.android-workbench) .composer-area>.container{display:flex;flex-direction:column}
@@ -80,5 +89,11 @@
   .composer-area .container .composer .model-picker > summary > span { max-width:100%; }
   .composer-area .container .composer :is(.send,.composer-actions) { grid-column:3; grid-row:2; }
   .composer-area .container .composer-tools > .row > .btn { grid-column:1; grid-row:2; max-width:100%; }
+  /* Give complete identities the full row, even beside enlarged desktop actions. */
+  .composer-area .container .composer:has(.model-selection-provider) .composer-model-controls { display:contents; }
+  .composer-area .container .composer:has(.model-selection-provider) .model-picker { grid-column:1/-1; grid-row:2; width:max-content; max-width:100%; justify-self:end; }
+  .composer-area .container .composer:has(.model-selection-provider) .composer-clear { grid-column:1; grid-row:3; width:2.75rem; min-width:2.75rem; height:2.75rem; }
+  .composer-area .container .composer:has(.model-selection-provider) .attachment-picker { grid-row:3; }
+  .composer-area .container .composer:has(.model-selection-provider) :is(.send,.composer-actions) { grid-row:3; }
 }
 @keyframes mobile-drawer-in{from{transform:translateX(-24px);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes mobile-control-in{from{transform:translateY(8px);opacity:0}to{transform:translateY(0);opacity:1}}

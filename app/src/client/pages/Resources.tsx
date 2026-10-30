@@ -2,7 +2,8 @@ import { BackendMaintenance } from "../maintenance/BackendMaintenance.js";
 import { useEffect, useRef, useState } from "react";
 import { LocalPath, ResourceLocation, PathNotice } from "../LocalPath.js";
 import { SettingsSidebar } from "../components.js";
-import { ConfirmDialog } from "../ConfirmDialog.js";
+import { ComponentConfirmation as ConfirmDialog } from "../maintenance/ComponentCard.js";
+import { emptyMaintenanceState } from "../../shared/maintenance.js";
 import { PathInput } from "../FilePicker.js";
 import { JsonPathInput } from "../JsonPathInput.js";
 import { skillImportName } from "../../shared/skill-import.js";
@@ -22,6 +23,7 @@ function readDismissedJob() {
 type View = "skill" | "mcp";
 export default function Resources() {
   const state = useScope("resources", empty), connection = useConnectionState();
+  const maintenance = useScope("maintenance", emptyMaintenanceState);
   const [view, setView] = useState<View>("skill"), [scopeId, setScopeId] = useState("global");
   const [selected, setSelected] = useState<string>(), [creating, setCreating] = useState(false), [query, setQuery] = useState("");
   const [kind, setKind] = useState<"skill" | "package">("skill");
@@ -37,6 +39,15 @@ export default function Resources() {
   const [notice, setNotice] = useState("");
   const [dismissedJob, setDismissedJob] = useState(readDismissedJob);
   const jobs = state.jobs ?? (state.job ? [state.job] : []);
+  const maintenanceResources = new Map<string, string>();
+  for (const job of jobs) {
+    if (job.resource && (job.running || (!creating && selected ? job.targetId === selected || job.resourceId === selected : job.scopeId === scopeId && job.id === jobs.at(-1)?.id))) maintenanceResources.set(job.resource, job.label ?? "技能与 MCP");
+  }
+  if (!creating && selected && !jobs.some(job => job.resource && (job.targetId === selected || job.resourceId === selected))) maintenanceResources.set(`resources:${selected}`, state.items.find(item => item.id === selected)?.name ?? "技能与 MCP");
+  for (const task of maintenance.tasks) {
+    if (task.resource === "resources") maintenanceResources.set(task.resource, "此前资源操作（具体资源未记录）");
+    else if (task.resource.startsWith("resources:") && (task.status === "unknown" || task.status === "interrupted")) maintenanceResources.set(task.resource, task.label);
+  }
   const failedJob = jobs.findLast(job => !job.running && job.error);
   const failedJobKey = failedJob ? JSON.stringify([failedJob.id, failedJob.error]) : "";
   function dismissJob() {
@@ -92,14 +103,14 @@ export default function Resources() {
     if (localImport && (!name || name === skillImportName(source))) setName(skillImportName(value));
     setSource(value);
   }
-  async function act(op: string, params: Record<string, unknown> = {}) {
+  async function act(op: string, params: Record<string, unknown> = {}, throwFailure = false) {
     const epoch = viewEpoch.current, key = selected ?? `form:${epoch}`, target = typeof params.id === "string" ? params.id : undefined;
     setSending(current => [...current, key]); setError(""); setNotice("");
     try {
       const result = await command<ResourceState>(op, { ...(op === "resources.get" ? {} : { revision: state.revision, scopeId }), ...params });
       const id = result.acceptedJobId ?? result.job?.id;
       if (op !== "resources.get" && id) setOperations(current => [...current, { id, op, target, epoch, destinationScopeId: typeof params.destinationScopeId === "string" ? params.destinationScopeId : undefined }]);
-    } catch (cause) { if (epoch === viewEpoch.current) setError((cause as Error).message); }
+    } catch (cause) { if (epoch === viewEpoch.current) setError((cause as Error).message); if (throwFailure) throw cause; }
     finally { setSending(current => current.filter(value => value !== key)); }
   }
   useEffect(() => { if (connection.connected) void act("resources.get"); }, [connection.connected, connection.generation]);
@@ -188,7 +199,7 @@ export default function Resources() {
           <div className="tools-content">
             <div className="tools-feedback" aria-live="polite">
               {sending.length > 0 && <p role="status">正在提交资源操作，编辑内容已保留…</p>}
-              {error && <p className="tools-error" role="alert">{error}</p>}
+              {error && (!modal || modal.kind === "rename") && <p className="tools-error" role="alert">{error}</p>}
               {failedJob && failedJobKey !== dismissedJob && <details key={failedJobKey} className="resources-job-history">
                 <summary>上次资源操作未完成（查看记录）</summary>
                 <p>{failedJob.error}</p><p className="resources-job-context">这是历史记录，不代表当前操作状态，也不会阻止新的操作。</p>
@@ -198,7 +209,7 @@ export default function Resources() {
               {!connection.connected && <p>服务未连接，编辑内容已保留；重连后请核实实际配置。</p>}
               {state.warnings.map(warning => <p key={warning}>{warning}</p>)}
             </div>
-            {jobs.some(job => job.running) ? jobs.filter(job => job.running).map(job => <BackendMaintenance key={job.id} resource={job.resource ?? "resources"} activeOnly label={job.label ?? state.items.find(item => item.id === job.targetId)?.name ?? "技能与 MCP"} location={`所连接后台 · ${scopeName(job.scopeId ?? "global")}`} />) : <BackendMaintenance resource="resources" activeOnly label="技能与 MCP" location={`所连接后台 · ${scopeName(scopeId)}`} />}
+            {[...maintenanceResources].map(([resource, label]) => resource === "resources" ? <details key={resource} className="maintenance-details resources-legacy-maintenance"><summary>此前资源维护详情</summary><BackendMaintenance resource={resource} label={label} /></details> : <BackendMaintenance key={resource} resource={resource} label={label} description={maintenance.tasks.find(task => task.resource === resource)?.scope} showError={!error} />)}
             {creating ? <section className="section tools-section"><div className="section-heading"><h3>{view === "mcp" ? "连接设置" : "安装来源"}</h3></div><fieldset className="tools-fields" disabled={busy}>
               {view === "skill" && <div className="field"><label htmlFor="resource-kind">安装方式</label><Select id="resource-kind" label="安装方式" value={kind} disabled={busy} onChange={value => setKind(value as "skill" | "package")} options={[{ value: "skill", label: "本机文件 / 文件夹 / npm 技能" }, { value: "package", label: "pi 资源包" }]} /></div>}
               {view === "mcp" && <div className="field"><label htmlFor="resource-name">MCP 名称</label><input className="input" id="resource-name" value={name} maxLength={128} onChange={e => setName(e.target.value)} placeholder="例如 docs" /><p className="field-help">名称在当前作用范围内唯一；项目同名配置会覆盖全局定义。</p></div>}
@@ -227,10 +238,6 @@ export default function Resources() {
               </section>
             </> : <div className="resources-welcome"><h3>{query ? "没有匹配的资源" : `管理${scopeId === "global" ? "全局" : "项目"}${view === "skill" ? "技能" : " MCP"}`}</h3><p>选择一个资源，查看实际内容、来源与维护选项。</p><button className="btn btn-primary" disabled={navigationBusy} onClick={() => choose()}>{addLabel}</button></div>}
             {(creating || !item) && actions}
-          </div>
-        </article>
-      </div>
-    </main>
     <dialog ref={dialog} className="resources-dialog" aria-labelledby="resource-dialog-title" onCancel={() => setModal(undefined)} onClose={() => setModal(current => current?.kind === "rename" ? undefined : current)}>
       {modal?.kind === "rename" && <>
         <h2 id="resource-dialog-title">修改 {modal.item.name} 的名称</h2>
@@ -248,11 +255,15 @@ export default function Resources() {
       confirmLabel={modal.kind === "remove" ? modal.item.removalPending ? "确认清理" : modal.force || modal.clearCredentials ? "确认删除" : "确认卸载" : modal.kind === "move" || modal.kind === "copy" ? `确认${modal.kind === "copy" ? "复制" : "移动"}${modal.overwrite ? "并覆盖" : ""}` : modal.kind === "template" ? "替换配置" : "放弃修改"}
       confirmDisabled={busy}
       onClose={() => setModal(current => current === modal ? undefined : current)}
-      onConfirm={() => {
-        const action = modal; setModal(undefined);
-        if (action.kind === "remove") void act("resources.remove", { id: action.item.id, confirm: true, revision: action.revision, clearCredentials: action.clearCredentials === true, force: action.force === true });
-        else if (action.kind === "move" || action.kind === "copy") void act(`resources.${action.kind}`, { id: action.item.id, destinationScopeId: action.destinationScopeId, revision: action.revision, overwrite: action.overwrite });
+      onConfirm={async () => {
+        const action = modal;
+        if (action.kind === "remove") await act("resources.remove", { id: action.item.id, confirm: true, revision: action.revision, clearCredentials: action.clearCredentials === true, force: action.force === true }, true);
+        else if (action.kind === "move" || action.kind === "copy") await act(`resources.${action.kind}`, { id: action.item.id, destinationScopeId: action.destinationScopeId, revision: action.revision, overwrite: action.overwrite }, true);
         else if ("run" in action) action.run();
       }} />}
+          </div>
+        </article>
+      </div>
+    </main>
   </div>;
 }

@@ -53,7 +53,8 @@ test("mihomo periodic refresh skips unchanged bytes, switches verified candidate
     t.mock.timers.tick(3_600_000); await settle(s); assert.equal(downloads, 2); assert.equal(instances.length, 1);
     content = "changed"; t.mock.timers.tick(3_600_000); await settle(s);
     assert.equal(instances.length, 2); assert.deepEqual(stopped, [instances[0]]); assert.equal(s.snapshot().profiles[0].status, "running");
-    const tasks = history.snapshot().tasks; assert.equal(tasks.length, 3); assert.equal(new Set(tasks.map(task => task.id)).size, 3); assert.ok(tasks.every(task => task.status === "succeeded"));
+    // Component standard: no history; each refresh replaces the previous record for this resource.
+    const tasks = history.snapshot().tasks; assert.equal(tasks.length, 1); assert.equal(tasks[0].status, "succeeded");
     hold = true; t.mock.timers.tick(3_600_000); await turn(); assert.equal(downloads, 4);
     await s.close(); assert.equal(aborted, true); assert.equal(history.snapshot().tasks.at(-1)!.status, "cancelled");
     t.mock.timers.tick(7_200_000); await turn(); assert.equal(downloads, 4); assert.equal(instances.length, 2);

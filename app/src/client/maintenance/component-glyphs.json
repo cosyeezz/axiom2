@@ -1,0 +1,119 @@
+{
+  "component": {
+    "code": "C-25",
+    "id": "lucide:blocks",
+    "viewBox": "-0.504439 -0.504439 25.008878 25.008878",
+    "body": "<g stroke=\"none\"><g fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\"><path d=\"M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2\"/><rect width=\"8\" height=\"8\" x=\"14\" y=\"2\" rx=\"1\"/></g></g>",
+    "source": "https://icon-sets.iconify.design/lucide/blocks/",
+    "sha256": "e29f60d87a2f09892e8e9678973940e95ca266cb151734ccc03b53ae1431dc1d",
+    "opticalScale": 0.96
+  },
+  "environment": {
+    "code": "E-03",
+    "id": "iconmind:dependency-outline-regular",
+    "viewBox": "-0.004261 -0.508168 24.008523 24.008523",
+    "body": "<g stroke=\"none\"><g fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\"><path d=\"M2 5a2 2 0 0 1 2 -2h5a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2H4a2 2 0 0 1 -2 -2Z\"/><path d=\"M6.5 11v5H13\"/><path d=\"M13 14a2 2 0 0 1 2 -2h5a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-5a2 2 0 0 1 -2 -2Z\"/></g></g>",
+    "source": "https://icon-sets.iconify.design/iconmind/dependency-outline-regular/",
+    "sha256": "589e6531652cbfb2773d5140134791538dddfb6281e772497ce5c4a47cd97c9a",
+    "opticalScale": 1
+  },
+  "check": {
+    "code": "Q-47",
+    "id": "mingcute:refresh-2-line",
+    "viewBox": "1.502295 1.502295 20.995411 20.995411",
+    "body": "<g stroke=\"none\"><path fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M3.811 8.264A9 9 0 0 1 14.33 3.307a9 9 0 0 1 6.672 8.622c0 .08-.088.126-.154.082l-2.678-1.804c-.091-.062-.03-.205.078-.181L20 10.41m.189 5.327c-1.789 3.932-6.208 6.112-10.519 4.956a9 9 0 0 1-6.672-8.622c0-.08.088-.126.154-.082l2.678 1.805c.091.061.03.204-.078.18L4 13.59\"/></g>",
+    "source": "https://icon-sets.iconify.design/mingcute/refresh-2-line/",
+    "sha256": "d5d2d30018488941ad93b0e8774ec4e640dcf7f3d65b4393e43753cc1fd6be70",
+    "opticalScale": 1.04
+  },
+  "install": {
+    "code": "I-33",
+    "id": "tabler:download",
+    "viewBox": "1.93408 2.437986 20.13184 20.13184",
+    "body": "<g stroke=\"none\"><path fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5l5-5m-5-7v12\"/></g>",
+    "source": "https://icon-sets.iconify.design/tabler/download/",
+    "sha256": "4d11d36b957942e3d4a3ffec36169678afbe8d442cf20157167d7cf86c4590dd",
+    "opticalScale": 1.03
+  },
+  "update": {
+    "code": "U-04",
+    "id": "keyline-icons:package-arrow-up",
+    "viewBox": "-0.504439 -0.504439 25.008878 25.008878",
+    "body": "<g stroke=\"none\"><path fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M2.3084 7.0066L12 12M12 12L21.6916 7.0066M7 4.3017L17 9.4239M12 12L12 22C11.6888 22 11.3776 21.9274 11.0925 21.7822L3.0925 17.7086C2.4221 17.3672 2 16.6786 2 15.9263L2 8.0737C2 7.3214 2.4221 6.6328 3.0925 6.2914L11.0925 2.2178C11.6627 1.9274 12.3373 1.9274 12.9075 2.2178L20.9075 6.2914C21.5779 6.6328 22 7.3214 22 8.0737L22 12M19 22V16M16 19L19 16L22 19\"/></g>",
+    "source": "https://icon-sets.iconify.design/keyline-icons/package-arrow-up/",
+    "sha256": "60ddd238532f39f6ca38d303f1e111d4da824f3a3f261c6948ee3b7209249de6",
+    "opticalScale": 0.96
+  },
+  "reinstall": {
+    "code": "R-02",
+    "id": "mdi:box-refresh-outline",
+    "viewBox": "1.424361 1.670455 22.159091 22.159091",
+    "body": "<g stroke=\"none\"><path fill=\"currentColor\" d=\"M18 12.03V10h2v2.18c-.5-.11-1-.18-1.5-.18c-.17 0-.33 0-.5.03M9.5 11c-.28 0-.5.22-.5.5V13h6v-1.5c0-.28-.22-.5-.5-.5zM6 19v-9H4v11h8.5c-.26-.62-.41-1.3-.47-2zM21 9H3V3h18zm-2-4H5v2h14zm3 13.5v-4l-1.17 1.17A4 4 0 0 0 18 14.5c-2.21 0-4 1.79-4 4s1.79 4 4 4c1.68 0 3.12-1.03 3.71-2.5H20a2.5 2.5 0 1 1-.23-3.27L18 18.5z\"/></g>",
+    "source": "https://icon-sets.iconify.design/mdi/box-refresh-outline/",
+    "sha256": "e1f0b990860fcf198ece1eadbd65aa4d4c1390ed60d0143e1b2aaf0d4edb0edb",
+    "opticalScale": 0.96
+  },
+  "uninstall": {
+    "code": "X-24",
+    "id": "lucide:trash",
+    "viewBox": "-0.004261 -0.004261 24.008523 24.008523",
+    "body": "<g stroke=\"none\"><path fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M10 11v6m4-6v6m5-11v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/></g>",
+    "source": "https://icon-sets.iconify.design/lucide/trash/",
+    "sha256": "210cc548384ac7f27342ac20875d2b35ee60c32199d00e6354538cc48043ca1e",
+    "opticalScale": 1
+  },
+  "cleanup-package": {
+    "code": "P-02",
+    "id": "lucide:package-x",
+    "viewBox": "0.241832386 -0.004261364 24.008522727 24.008522727",
+    "body": "<g stroke=\"none\"><g fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\"><path d=\"M12 22V12m4.5 2.5l5 5m-5 0l5-5m-.5-4V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.729l7 4a2 2 0 0 0 2 .001l.13-.074\"/><path d=\"M3.29 7L12 12l8.71-5M7.5 4.27l8.997 5.148\"/></g></g>",
+    "source": "https://icon-sets.iconify.design/lucide/package-x/",
+    "sha256": "931639771fc3db2bd26ca4d92eb18e2c4c8e70da4c70cc9c64760a322d56b517",
+    "opticalScale": 1
+  },
+  "download-package": {
+    "code": "D-23",
+    "id": "hugeicons:package-receive-01",
+    "viewBox": "0.813920455 0.813920455 22.372159091 22.372159091",
+    "body": "<g stroke=\"none\"><path fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\" d=\"M2.5 7.5v6c0 3.771 0 5.657 1.172 6.828S6.729 21.5 10.5 21.5H13m8.5-8.5V7.5M3.87 5.315L2.5 7.5h19l-1.252-2.087c-.854-1.423-1.28-2.134-1.969-2.524c-.687-.389-1.517-.389-3.176-.389h-6.15c-1.623 0-2.435 0-3.113.375c-.678.376-1.109 1.064-1.97 2.44M12 7.5v-5m-2 8h4m7.5 8s-2.21 3-3 3s-3-3-3-3m3 2.5v-6.5\"/></g>",
+    "source": "https://icon-sets.iconify.design/hugeicons/package-receive-01/",
+    "sha256": "f106beb2e49a2338e7bed3a8b926c449901c6ab622f1df7f3e6fe36fbee90b73",
+    "opticalScale": 1
+  },
+  "install-cached": {
+    "code": "K-01",
+    "id": "lucide:package-check",
+    "viewBox": "0.493785511 -0.004261364 24.008522727 24.008522727",
+    "body": "<g stroke=\"none\"><g fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\"><path d=\"M12 22V12m4 5l2 2l4-4\"/><path d=\"M21 11.127V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.729l7 4a2 2 0 0 0 2 .001l1.32-.753\"/><path d=\"M3.29 7L12 12l8.71-5M7.5 4.27l8.997 5.148\"/></g></g>",
+    "source": "https://icon-sets.iconify.design/lucide/package-check/",
+    "sha256": "f8d788e7546257a5e7c8ae46b57a9cb58c989063f509c1dad8af88719900995f",
+    "opticalScale": 1
+  },
+  "open-installer": {
+    "code": "O-26",
+    "id": "ri:share-box-line",
+    "viewBox": "2.181818182 2.181818182 19.636363636 19.636363636",
+    "body": "<g stroke=\"none\"><path fill=\"currentColor\" d=\"M10 3v2H5v14h14v-5h2v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm7.586 2H13V3h8v8h-2V6.414l-7 7L10.586 12z\"/></g>",
+    "source": "https://icon-sets.iconify.design/ri/share-box-line/",
+    "sha256": "d114a4371fada79f5625f7cc223764e30f65312c45b659f1fa9da79a32f0adb2",
+    "opticalScale": 1
+  },
+  "switch-version": {
+    "code": "V-02",
+    "id": "ri:swap-box-line",
+    "viewBox": "1.094637784 1.094637784 21.822443182 21.822443182",
+    "body": "<g stroke=\"none\"><path fill=\"currentColor\" d=\"M4.005 5.003v14h16v-14zm-1-2h18a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-18a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1m12 4l3.5 3l-3.5 3v-2h-4v-2h4zm-6 10l-3.5-3l3.5-3v2h4v2h-4z\"/></g>",
+    "source": "https://icon-sets.iconify.design/ri/swap-box-line/",
+    "sha256": "62cf559f8eb383ae3b327fd97f68e00799bda9dc0c31fe5b39bdc67c267ee71b",
+    "opticalScale": 1
+  },
+  "repair": {
+    "code": "F-46",
+    "id": "heroicons:wrench-screwdriver",
+    "viewBox": "0.532670455 0.53852983 22.934659091 22.934659091",
+    "body": "<g stroke=\"none\"><path fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\" d=\"M11.42 15.17L17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14q.19.017.384.017a4.5 4.5 0 0 0 4.102-6.352l-3.276 3.276a3 3 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008z\"/></g>",
+    "source": "https://icon-sets.iconify.design/heroicons/wrench-screwdriver/",
+    "sha256": "f096e9c9c5ba070d27b649b170cd2ce8716658fc485e0a0f8a37c41f88a84865",
+    "opticalScale": 1
+  }
+}

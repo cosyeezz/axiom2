@@ -14,6 +14,8 @@ import { TaskDelivery } from "../src/server/tasks/delivery.js";
 import { ServiceRecoveryCoordinator } from "../src/server/service-recovery.js";
 import { startServer } from "../src/server/index.js";
 import type { Agents } from "../src/server/agents.js";
+import type { ExecutionPool, ExecutionLease, AcquireRequest } from "../src/server/execution-pool.js";
+import type { PreparedEnvironment } from "../src/server/execution-profile.js";
 import type { Tasks } from "../src/server/tasks.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 
@@ -105,7 +107,7 @@ test("startup excludes stopping and failed runs, and blocks unauthorized recover
   }
 });
 
-test("ten interrupted sessions auto-resume with bounded concurrency; user stop and terminal runs stay stopped", { timeout: 240000 }, async () => {
+test("ten interrupted sessions reconnect serially without an active-run cap; stopped and terminal runs stay stopped", { timeout: 240000 }, async () => {
   const root = realpathSync.native(mkdtempSync(join(tmpdir(), "axiom-service-recovery-"))), project = join(root, "project");
   const previous = process.env.AXIOM_PI_DIR;
   process.env.AXIOM_PI_DIR = join(root, "pi"); mkdirSync(project); mkdirSync(join(root, "pi"));
@@ -165,9 +167,8 @@ test("ten interrupted sessions auto-resume with bounded concurrency; user stop a
     await app.close(); app = undefined; // A second restart before the delay must retain all ten.
     assert.equal(hits, before);
     app = await startServer({ root, port: 0 });
-    await until(() => hits >= before + 3, "automatic recovery did not launch first batch");
-    await delay(1300);
-    assert.equal(hits, before + 3, "only three automatic main sessions may remain active");
+    await until(() => hits >= before + 10, "automatic recovery stopped before reconnecting all ten held sessions", 90000);
+    assert.equal(hits, before + 10, "running recovered sessions must not consume recovery slots");
     hold = false; for (const res of [...pending]) reply(res);
     await until(() => batch.every(item => app!.agents.info(item.scope).run?.status === "completed"), "batch did not finish automatically", 90000);
     assert.equal(hits, before + 10, "one request per recovered session, no duplicate dispatch");
@@ -199,12 +200,14 @@ test("ten interrupted sessions auto-resume with bounded concurrency; user stop a
     ];
     await app.close(); app = undefined;
     const restartRequest = requests.length;
-    hold = false; // Immediate completion must not race away the recovered additions.
     app = await startServer({ root, port: 0 });
+    await until(() => pending.size === 3, "both children and parent must reconnect despite concurrency=1 and unfinished child work", 90000);
+    assert.equal(app.agents.info(parent.scope).run?.resumedFromRunId, parent.runId);
+    hold = false; for (const res of [...pending]) reply(res);
     await until(() => children.every(id => app!.store.db.prepare("SELECT status FROM tasks WHERE id=?").get(id)?.status === "completed") && app!.agents.info(parent.scope).run?.status === "completed", "child queue and parent did not recover automatically", 90000);
     assert.equal(app.agents.info({ workspaceId: first.workspaceId, sessionId: first.sessionId }).run?.resumedFromRunId, childRun);
     assert.equal(app.store.db.prepare("SELECT workDeadlineAt FROM tasks WHERE id=?").get(first.id)!.workDeadlineAt, deadline, "recovery does not extend the original child budget");
-    assert.equal(app.agents.info(parent.scope).run?.resumedFromRunId, parent.runId);
+    assert.ok(app.store.db.prepare("SELECT 1 FROM runs WHERE sessionId=? AND resumedFromRunId=?").get(parent.scope.sessionId, parent.runId));
     const recovered = requests.slice(restartRequest).filter(request => JSON.stringify(request.messages).includes("fixture running child"));
     assert.equal(recovered.length, 1, "recovery must include all saved additions in its first request, not send a later turn");
     const text = JSON.stringify(recovered[0].messages);
@@ -213,6 +216,56 @@ test("ten interrupted sessions auto-resume with bounded concurrency; user stop a
     for (const requirement of requirements) assert.equal(text.split(requirement).length - 1, 1);
     for (const id of additions) assert.equal(app.store.db.prepare("SELECT state FROM task_input_receipts WHERE inputId=?").get(id)?.state, "delivered");
     assert.equal(app.store.recoveries.pending().length, 0);
+
+    // Real worker loss uses the same durable queue without restarting the service.
+    hold = true;
+    const runtime = await create("fixture runtime disconnect");
+    await until(() => pending.size === 1, "runtime worker did not reach fixture");
+    const runtimeHits = hits;
+    const oldWorker = (app.agents as any).runs.live.get(runtime.scope.sessionId).child;
+    const pool = (app.agents as any).pool as ExecutionPool;
+    await pool.trim();
+    const held: ExecutionLease[] = [];
+    let vacancy: Promise<ExecutionLease> | undefined;
+    try {
+      // Reserve capacity without spawning fixture workers. A queued ordinary
+      // waiter fills the old worker's slot before recovery can acquire it.
+      const environment = { profileHash: "capacity-fixture", entry: "memory", reuse: "single-use", prewarmAllowed: false,
+        current: () => true, snapshotValid: () => true, retain() {}, release() {} } as unknown as PreparedEnvironment;
+      const acquire = (extra: Partial<AcquireRequest> = {}) => pool.acquire({ environment, kind: "agent",
+        signal: new AbortController().signal, requestStartedAtMonoMs: performance.now(), ...extra });
+      for (let i = 1; i < pool.limits.maxLiveProcesses - pool.limits.nestedLeafReserve; i++) held.push(await acquire());
+      held.push(await acquire({ kind: "memory-query", parentLease: held[0].ref }));
+      vacancy = acquire(); void vacancy.catch(() => {});
+      // Parent-side disconnect() lacks Node 22's IPC EOF close accounting.
+      // Kill the real worker instead: the owner must actually exit before reuse.
+      oldWorker.kill("SIGKILL");
+      held.push(await vacancy); vacancy = undefined;
+      assert.equal(pool.stats().total, pool.limits.maxLiveProcesses);
+      const runCount = app.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE sessionId=?").get(runtime.scope.sessionId)!.n;
+      await until(() => !!app!.store.recoveries.get(runtime.scope.sessionId)?.error?.includes("执行资源暂不可用"),
+        "full capacity must return the current recovery attempt to pending", 15000);
+      assert.equal(app.agents.active(runtime.scope), false, "busy recovery releases its startup owner");
+      assert.equal(app.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE sessionId=?").get(runtime.scope.sessionId)!.n, runCount,
+        "busy recovery must not create a durable run");
+      assert.equal(pool.stats().queued, 0, "busy recovery must not remain in the physical wait queue");
+      assert.equal(hits, runtimeHits, "capacity busy must not dispatch another model request");
+      const idle = app.store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: runtime.scope.workspaceId }) as Session;
+      app.store.db.prepare("INSERT INTO service_recoveries(sessionId,runId,kind,createdAt) VALUES(?,NULL,'notify',?)").run(idle.id, Date.now());
+      await until(() => !app!.store.recoveries.get(idle.id), "a busy recovery must not hold the coordinator's only slot", 15000);
+      assert.ok(app.store.recoveries.get(runtime.scope.sessionId), "the busy intention remains available for retry");
+    } finally {
+      await Promise.all(held.map(lease => pool.retire(lease.ref, "fixture_release")));
+      if (vacancy) await vacancy.then(lease => pool.retire(lease.ref, "fixture_release"), () => {});
+    }
+    await until(() => app!.agents.info(runtime.scope).run?.resumedFromRunId === runtime.runId && pending.size === 1 && hits === runtimeHits + 1,
+      "disconnected worker did not reconnect automatically");
+    assert.notEqual(oldWorker.exitCode ?? oldWorker.signalCode, null, "old owner exits before replacement");
+    assert.equal(hits, runtimeHits + 1, "runtime interruption starts exactly one continuation");
+    hold = false; for (const res of [...pending]) reply(res);
+    await until(() => app!.agents.info(runtime.scope).run?.status === "completed", "runtime continuation did not finish");
+    assert.equal(app.agents.messages(runtime.scope).filter(m => m?.role === "user").length, 1);
+    assert.equal(app.store.recoveries.get(runtime.scope.sessionId), undefined);
   } finally {
     await app?.close(); fixture.closeAllConnections(); await new Promise<void>(resolve => fixture.close(() => resolve()));
     if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;

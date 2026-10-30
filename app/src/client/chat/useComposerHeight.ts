@@ -13,6 +13,7 @@ export function useComposerHeight(input: RefObject<HTMLTextAreaElement | null>, 
     mirror.style.cssText = "position:fixed;left:-10000px;top:0;visibility:hidden;pointer-events:none;height:0;min-height:0;max-height:none;overflow:hidden;resize:none";
     document.body.append(mirror);
     const form = node.closest<HTMLElement>(".composer");
+    const controls = form?.querySelector<HTMLElement>('.composer-model-controls, .model-picker');
     const resize = () => {
       let style = getComputedStyle(node);
       for (const property of ["box-sizing", "width", "font-family", "font-size", "font-weight", "font-style", "line-height", "letter-spacing", "padding-top", "padding-right", "padding-bottom", "padding-left", "border-top-width", "border-right-width", "border-bottom-width", "border-left-width", "border-style", "white-space", "overflow-wrap", "word-break", "tab-size", "text-indent"])
@@ -22,15 +23,15 @@ export function useComposerHeight(input: RefObject<HTMLTextAreaElement | null>, 
         const layout = getComputedStyle(form);
         // Derive the compact text budget independently of the current grid:
         // multiline controls span columns 2–3, so its second track is wider.
-        const controls = form.querySelector<HTMLElement>('.composer-model-controls, .model-picker');
         const compactWidth = form.clientWidth - parseFloat(layout.paddingLeft) - parseFloat(layout.paddingRight)
           - 88 - (controls?.getBoundingClientRect().width ?? 0) - 3 * (parseFloat(layout.columnGap) || 0);
-        if (compactWidth > 0) {
+        // Even an empty draft needs usable space beside a complete model name.
+        if (compactWidth >= 40) {
           mirror.style.width = `${compactWidth}px`;
           mirror.style.paddingLeft = mirror.style.paddingRight = '0px';
           const singleLine = parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
           form.toggleAttribute("data-multiline", mirror.scrollHeight > singleLine + 1);
-        } else form.removeAttribute("data-multiline");
+        } else form.setAttribute("data-multiline", "");
         style = getComputedStyle(node);
         mirror.style.width = style.width;
         mirror.style.paddingLeft = style.paddingLeft; mirror.style.paddingRight = style.paddingRight;
@@ -45,19 +46,24 @@ export function useComposerHeight(input: RefObject<HTMLTextAreaElement | null>, 
     };
     measure.current = resize;
     resize();
-    let width = node.clientWidth;
+    let width = node.clientWidth, controlsWidth = controls?.clientWidth, frame = 0;
     const observer = new ResizeObserver(() => {
-      if (node.clientWidth === width) return;
+      if (node.clientWidth === width && controls?.clientWidth === controlsWidth) return;
       width = node.clientWidth;
-      resize();
+      controlsWidth = controls?.clientWidth;
+      // Moving controls or growing the field also resizes observed elements.
+      // Write in the next frame, not during ResizeObserver delivery (WebKit).
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(resize);
     });
     observer.observe(node);
+    if (controls) observer.observe(controls);
     const unsubscribeDisplay = subscribeDisplaySettings(resize);
     window.addEventListener("resize", resize);
     window.visualViewport?.addEventListener("resize", resize);
     return () => {
       measure.current = () => {};
-      observer.disconnect(); unsubscribeDisplay();
+      observer.disconnect(); cancelAnimationFrame(frame); unsubscribeDisplay();
       window.removeEventListener("resize", resize);
       window.visualViewport?.removeEventListener("resize", resize);
       mirror.remove();

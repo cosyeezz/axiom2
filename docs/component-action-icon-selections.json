@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "status": "user-confirmed",
+  "sourceManifest": "component-action-icon-picker.json",
+  "selections": [
+    {"category":"清理安装包","code":"P-02","id":"lucide:package-x","assetFile":"../artifacts/component-icon-picker/svg/cleanup/lucide--package-x.svg","sha256":"931639771fc3db2bd26ca4d92eb18e2c4c8e70da4c70cc9c64760a322d56b517"},
+    {"category":"下载安装包","code":"D-23","id":"hugeicons:package-receive-01","assetFile":"../artifacts/component-icon-picker/svg/download/hugeicons--package-receive-01.svg","sha256":"f106beb2e49a2338e7bed3a8b926c449901c6ab622f1df7f3e6fe36fbee90b73"},
+    {"category":"使用缓存安装","code":"K-01","id":"lucide:package-check","assetFile":"../artifacts/component-icon-picker/svg/cached/lucide--package-check.svg","sha256":"f8d788e7546257a5e7c8ae46b57a9cb58c989063f509c1dad8af88719900995f"},
+    {"category":"打开系统安装器","code":"O-26","id":"ri:share-box-line","assetFile":"../artifacts/component-icon-picker/svg/installer/ri--share-box-line.svg","sha256":"d114a4371fada79f5625f7cc223764e30f65312c45b659f1fa9da79a32f0adb2"},
+    {"category":"切换版本","code":"V-02","id":"ri:swap-box-line","assetFile":"../artifacts/component-icon-picker/svg/switch/ri--swap-box-line.svg","sha256":"62cf559f8eb383ae3b327fd97f68e00799bda9dc0c31fe5b39bdc67c267ee71b"},
+    {"category":"修复组件","code":"F-46","id":"heroicons:wrench-screwdriver","assetFile":"../artifacts/component-icon-picker/svg/repair/heroicons--wrench-screwdriver.svg","sha256":"f096e9c9c5ba070d27b649b170cd2ce8716658fc485e0a0f8a37c41f88a84865"}
+  ]
+}

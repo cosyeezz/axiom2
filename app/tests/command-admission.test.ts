@@ -65,7 +65,7 @@ test("online removal holds admission after the final barrier and through config 
     }
     return rename(source, target);
   }) as typeof fs.renameSync); syncBuiltinESMExports();
-  try { assert.equal((await f.remove()).job?.error, undefined); assert.equal(attempts, 2); assert.equal(existsSync(f.bin), false); }
+  try { assert.equal((await f.remove()).job?.error, undefined); assert.equal(attempts, 1); assert.equal(existsSync(f.bin), false); }
   finally { mock.mock.restore(); syncBuiltinESMExports(); f.cleanup(); }
 });
 

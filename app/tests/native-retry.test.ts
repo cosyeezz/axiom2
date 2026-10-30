@@ -10,6 +10,8 @@ import { randomUUID } from "node:crypto";
 import { startServer } from "../src/server/index.js";
 import { openTranscript } from "../src/server/transcript.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
+import type { SessionEnvironment } from "../src/shared/agent.js";
+import { sessionRetryDelaysMs } from "../src/shared/retry-policy.js";
 
 const until = async (check: () => boolean, message: string, ms = 25000) => {
   const end = Date.now() + ms;
@@ -222,6 +224,20 @@ test("native retries, cancellation, persisted recovery, single tool effects and 
     assert.equal(info(stopped).run?.status, "completed");
     assert.equal(count, 1);
     assert.equal(entries(stopped).filter((e) => e.type === "message" && e.message.role === "user").length, 1);
+
+    // No session timing/count override: the real host worker must install the
+    // nine-stage policy, not merely display it in a preview. Stop, don't wait.
+    writeFileSync(join(root, "pi", "settings.json"), JSON.stringify({ retry: { provider: { maxRetries: 0 } }, compaction: { enabled: false }, cacheWarming: "off" }));
+    const defaults = await create();
+    const preview = await call(defaults, "agent.environment") as SessionEnvironment;
+    assert.equal(preview.retry?.maxRetries, 9);
+    assert.deepEqual(preview.retry?.delaysMs, [...sessionRetryDelaysMs]);
+    await run(defaults, "stop");
+    await until(() => info(defaults).run?.retry?.state === "waiting", "missing default-policy waiting state");
+    assert.equal(info(defaults).run?.retry?.maxAttempts, 9, "actual worker event uses the new budget");
+    assert.deepEqual(info(defaults).environment?.retry, JSON.parse(JSON.stringify(preview.retry)), "worker IPC omits undefined optional provider fields");
+    await call(defaults, "agent.stop", { runId: info(defaults).run!.id });
+    assert.equal(info(defaults).run?.status, "cancelled");
   } finally {
     await app?.close(); fixture.closeAllConnections(); await new Promise<void>((resolve) => fixture.close(() => resolve()));
     if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;

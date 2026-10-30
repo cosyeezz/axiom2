@@ -1,5 +1,5 @@
 import { setImmediate } from "node:timers/promises";
-import { KiroChatError, kiroObject, type KiroJson } from "./kiro-chat-protocol.js";
+import { KiroChatError, kiroObject, type KiroJson } from "./kiro-native-protocol.js";
 
 // AWS event-stream framing, independently implemented from the published wire format.
 const table = Uint32Array.from({ length: 256 }, (_, value) => {

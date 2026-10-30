@@ -4,9 +4,9 @@ import { randomUUID } from "node:crypto";
 import { closeSync, constants, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { lockResourcePaths } from "../resource-file-lock.js";
-import { canRecoverProcessOwner, processOwnerFingerprint, stopRecordedProcessOwner } from "../process-owner-record.js";
-import { currentMaintenance, recordMaintenanceInterruption, recordMaintenanceUnconfirmed } from "../maintenance.js";
-import { MaintenanceError, validMaintenanceBudgets, type MaintenanceTask } from "../../shared/maintenance.js";
+import { processOwnerFingerprint, stopRecordedProcessOwner } from "../process-owner-record.js";
+import { currentMaintenance } from "../maintenance.js";
+import { MaintenanceError, type MaintenanceTask } from "../../shared/maintenance.js";
 import { runTool, type ToolRunOptions } from "./tool-process.js";
 
 type Tool = "opencli" | "rea";
@@ -67,13 +67,9 @@ function controlDirectory(root: string, tool: Tool, scope?: ReaEngineId) {
   if (scope !== undefined && (tool !== "rea" || !isReaEngineId(scope))) throw unknown();
   return join(root, "integrations", ".maintenance", tool, ...(scope ? ["engines", scope] : []));
 }
-export function builtinPendingOperation(root: string, tool: Tool, scope?: ReaEngineId): string | undefined {
-  root = realpathSync(root);
-  let previous: Record;
-  try { previous = read(join(controlDirectory(root, tool, scope), "current.json")); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw unknown(); }
-  if (previous.format !== 1 || !uuid(previous.id) || previous.root !== root || previous.tool !== tool || previous.scope !== scope || !["active", "complete", "interrupted"].includes(previous.state)) throw unknown();
-  return previous.state === "complete" ? undefined : previous.id;
+export function builtinPendingOperation(_root: string, _tool: Tool, _scope?: ReaEngineId): string | undefined {
+  // Component standard: interrupted operations are not reported or blocking.
+  return undefined;
 }
 function managedPath(root: string, tool: Tool, path: unknown, scope?: ReaEngineId): path is string {
   if (typeof path !== "string") return false;
@@ -89,10 +85,9 @@ export function builtinPendingRemovals(root: string, tool: Tool, scope?: ReaEngi
   root = realpathSync(root);
   let record: Record;
   try { record = read(join(controlDirectory(root, tool, scope), "current.json")); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw unknown(); }
-  if (record.format !== 1 || record.root !== root || record.tool !== tool || record.scope !== scope || !uuid(record.id) ||
-      record.removals !== undefined && (!Array.isArray(record.removals) || record.removals.some(path => !managedPath(root, tool, path, scope)))) throw unknown();
-  return [...record.removals ?? []];
+  catch { return []; }
+  if (record.format !== 1 || record.root !== root || record.tool !== tool || record.scope !== scope || !Array.isArray(record.removals)) return [];
+  return record.removals.filter(path => managedPath(root, tool, path, scope));
 }
 /** Planning only: absence of an inode proof must preserve an orphan, not turn
  * the entire uninstall into a permanently unknown operation. Deletion still
@@ -229,50 +224,17 @@ export function beginBuiltinOperation(root: string, tool: Tool, reconcileId?: st
   let record: Record, task: MaintenanceTask | undefined, closed = false;
   try {
     releaseWriter = acquireReaWriter(root, tool);
-    // Reconciliation only verifies a stopped parent and preserves its files.
-    // Cross-scope pending records must not make global/scoped recovery deadlock.
-    if (!reconcileId && (scope && builtinPendingOperation(root, tool) || !scope && tool === "rea" && reaEngineIds.some(id => builtinPendingOperation(root, tool, id)))) throw unknown();
     release = lockResourcePaths([join(directory, "parent")]);
+    // Component standard: a stale, interrupted or unreadable journal never
+    // blocks the next button press. Its leftovers are discarded; directory
+    // proofs that still match are carried forward so uninstall can clean them.
     let previous: Record | undefined;
-    let observed: string | undefined, observedIdentity: Identity | undefined;
-    const checkPrevious = () => {
-      assertRoots();
-      if (observed !== undefined && (!matches(identity(path), observedIdentity!) || JSON.stringify(read(path)) !== observed)) throw unknown();
-    };
-    try { previous = read(path); observed = JSON.stringify(previous); observedIdentity = identity(path); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-    if (previous) {
-      if (previous.format !== 1 || !uuid(previous.id) || previous.root !== root || previous.tool !== tool || previous.scope !== scope || !["active", "complete", "interrupted"].includes(previous.state) || !Array.isArray(previous.commands) || !Array.isArray(previous.directories)) throw unknown();
-      if (previous.state !== "complete" && reconcileId !== previous.id || reconcileId && (previous.id !== reconcileId || previous.state === "complete")) throw unknown();
-      if (!matches(previous.rootIdentity, rootIdentity) || !matches(previous.controlIdentity, controlIdentity)) throw unknown();
-      previous.directories.forEach(directoryOwned); assertRemovals(previous.directories, previous.removals); inventory(previous.commands);
-      for (const entry of previous.commands) {
-        if (dirname(entry.path) !== directory || !/^\.axiom-command-[a-f0-9-]{36}\.json$/.test(basename(entry.path)) || !uuid(entry.ownerId) || !["registered", "cleaned"].includes(entry.state)) throw unknown();
-        const exists = sameOwner(entry, entry.state === "cleaned");
-        if (entry.state !== "cleaned" && (!exists || !canRecoverProcessOwner(entry.path))) throw unknown();
-      }
-      if (previous.state === "active") {
-        if (previous.task) {
-          const task = previous.task;
-          if (!uuid(task.id) || !uuid(task.attemptId) || !validMaintenanceBudgets(task.budgets) || !Array.isArray(task.steps) || task.steps.some(step => !["queued", "checking", "downloading", "verifying", "installing", "validating", "removing"].includes(step)) ||
-            ![task.resource, task.label, task.action, task.scope].every(value => typeof value === "string") || task.endpoint !== "backend" ||
-            !(scope ? task.resource === `rea:${scope}` : task.resource === tool || tool === "rea" && /^rea:(java|ghidra|jadx|wabt|hopper)$/.test(task.resource)) ||
-            !["running", "cancelling", "succeeded", "failed", "cancelled", "interrupted", "unknown"].includes(task.status) ||
-            !["queued", "checking", "downloading", "verifying", "installing", "validating", "removing"].includes(task.phase) || !Number.isSafeInteger(task.completedSteps) ||
-            !Number.isFinite(task.createdAt) || !Number.isFinite(task.updatedAt) || typeof task.capabilities?.cancel !== "boolean" || typeof task.capabilities?.extend !== "boolean") throw unknown();
-          recordMaintenanceInterruption(maintenanceRoot, previous.task);
-        }
-        checkPrevious();
-        previous.state = "interrupted";
-        // Persist interruption and all cleanup proofs before releasing owners.
-        for (const entry of previous.commands) entry.state = "cleaned";
-        durable(path, previous); observed = JSON.stringify(previous); observedIdentity = identity(path);
-      }
-      checkPrevious();
-      for (const entry of previous.commands) if (sameOwner(entry, true)) rmSync(entry.path);
-    }
-    if (!previous && reconcileId) throw unknown();
-    checkPrevious(); inventory([]);
-    record = { format: 1, id: randomUUID(), tool, ...(scope ? { scope } : {}), root, rootIdentity, controlIdentity, state: "active", commands: [], directories: previous?.directories ?? [], ...(previous?.removals?.length ? { removals: previous.removals } : {}) };
+    try { previous = read(path); } catch { previous = undefined; }
+    if (previous && (previous.format !== 1 || previous.root !== root || previous.tool !== tool || previous.scope !== scope || !Array.isArray(previous.directories))) previous = undefined;
+    for (const name of readdirSync(directory)) if (/^\.axiom-command-.*\.json$/.test(name)) rmSync(join(directory, name), { force: true });
+    const carried = (previous?.directories ?? []).filter(item => { try { directoryOwned(item); return true; } catch { return false; } });
+    const removals = Array.isArray(previous?.removals) ? previous!.removals.filter(item => managedPath(root, tool, item, scope) && (carried.some(entry => entry.path === item) || (() => { try { lstatSync(item); return false; } catch { return true; } })())) : [];
+    record = { format: 1, id: randomUUID(), tool, ...(scope ? { scope } : {}), root, rootIdentity, controlIdentity, state: "active", commands: [], directories: carried, ...(removals.length ? { removals } : {}) };
     durable(path, record);
   } catch (error) { release(); releaseWriter(); throw error; }
   finally { admit(); }
@@ -361,15 +323,10 @@ export function beginBuiltinOperation(root: string, tool: Tool, reconcileId?: st
     },
     finish() {
       safe();
-      if (task) {
-        const persisted = read(join(root, "maintenance", "tasks.json"), 8 * 1024 * 1024).tasks?.find((item: MaintenanceTask) => item.id === task!.id && item.attemptId === task!.attemptId);
-        if (!["succeeded", "failed", "cancelled"].includes(task.status) || persisted?.status !== task.status) throw unknown();
-      }
       save({ ...record, state: "complete", task: task ? structuredClone(task) : undefined });
     },
-    retain() {
-      if (task) recordMaintenanceUnconfirmed(maintenanceRoot, task, unknown().message);
-    },
+    /** No unresolved history is kept; the next operation starts clean. */
+    retain() {},
     close() { if (!closed) { closed = true; try { release(); } finally { releaseWriter(); } } },
     run<T>(work: () => T): T { return contexts.run(handle, work); },
   };

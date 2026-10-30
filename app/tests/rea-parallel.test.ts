@@ -10,7 +10,7 @@ import { ReaService } from "../src/server/integrations/rea.js";
 import { listEngines } from "../src/server/integrations/rea-engines.js";
 import { prepareEngineDownload } from "../src/server/integrations/rea-engine-download.js";
 import { atomicReaJson, reaConfigPath, readReaConfig, type ReaConfig } from "../src/server/integrations/rea-runtime.js";
-import { beginBuiltinOperation, builtinPendingOperation, reconcileBuiltinOperation, runBuiltinTool } from "../src/server/integrations/builtin-operation.js";
+import { beginBuiltinOperation, runBuiltinTool } from "../src/server/integrations/builtin-operation.js";
 import { fixtureEngineRelease, writeReaPackage } from "./rea-fixture.js";
 import { tmpdir } from "./temporary.js";
 import type { ReaEngineId } from "../src/shared/rea-engines.js";
@@ -72,10 +72,8 @@ for (const outcome of ["success", "cancel", "failure"] as const) test(`independe
     const active = service.snapshot().jobs!.filter(job => job.running);
     assert.equal(active.length, 2); assert.equal(new Set(active.map(job => job.id)).size, 2);
     await assert.rejects(call(service, "rea.engine-check", { engine: "java" }), { code: "BUSY" });
-    await assert.rejects(call(service, "rea.install", { version: "6.7.0" }), { code: "BUSY" });
-    await assert.rejects(call(service, "rea.uninstall", { revision: initial.revision, confirm: true }), { code: "BUSY" });
     await assert.rejects(call(service, "rea.save", { revision: initial.revision, enabled: true }), { code: "BUSY" });
-    await assert.rejects(call(service, "rea.engine-uninstall", { engine: "java", revision: javaSelection.revision, confirm: true }), { code: "BUSY" });
+    // Main-program install/uninstall and engine uninstall preempt instead; see the dedicated test below.
     // The later task finishes first; the earlier task must not overwrite it.
     jadx.release(); await settle(service, "jadx");
     assert.ok(service.snapshot().jobs!.find(job => job.engine === "java")?.running);
@@ -92,11 +90,35 @@ for (const outcome of ["success", "cancel", "failure"] as const) test(`independe
     assert.equal(state.jobs!.find(job => job.engine === "jadx")!.error, undefined);
     assert.equal(!!state.jobs!.find(job => job.engine === "java")!.error, outcome === "failure");
     assert.equal(state.pendingOperation, undefined); assert.ok(state.engines!.every(item => !item.pendingOperation));
-    const tasks = JSON.parse(readFileSync(join(root, "maintenance", "tasks.json"), "utf8")).tasks;
-    for (const job of active) assert.equal(tasks.find((task: { id: string }) => task.id === job.id).status, job.engine === "java" && outcome !== "success" ? outcome === "cancel" ? "cancelled" : "failed" : "succeeded");
+    const history = join(root, "maintenance", "tasks.json");
+    if (existsSync(history)) assert.deepEqual(JSON.parse(readFileSync(history, "utf8")).tasks, [], "no task history is persisted");
     const restarted = new ReaService(root, () => {});
-    assert.deepEqual(restarted.snapshot().jobs?.map(job => [job.engine, job.id]).sort(), state.jobs?.map(job => [job.engine, job.id]).sort());
+    assert.deepEqual(restarted.snapshot().jobs ?? [], []);
     await restarted.close();
+  } finally { java.release(); jadx.release(); await service.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("engine uninstall preempts every running component install", async () => {
+  const root = temporary(); config(root);
+  const java = gate(), jadx = gate(), entered = new Set<string>();
+  const service = new ReaService(root, () => {}, {
+    engineRelease: fixtureEngineRelease,
+    checkEngines: async (_root, value) => listEngines(value).map(item => ({ ...item, status: item.path ? "ready" : item.status })),
+    prepareEngine: async (_root, id, signal) => {
+      entered.add(id); await (id === "java" ? java : jadx).wait(signal);
+      const directory = join(root, "integrations", "rea", "engines", `${id}-${randomUUID()}`);
+      mkdirSync(directory, { recursive: true }); return { directory, path: directory };
+    },
+  });
+  try {
+    await Promise.all([call(service, "rea.engine-check", { engine: "java" }), call(service, "rea.engine-check", { engine: "jadx" })]);
+    await settle(service);
+    await Promise.all([call(service, "rea.engine-install", selection(service, "java")), call(service, "rea.engine-install", selection(service, "jadx"))]);
+    await until(() => entered.size === 2);
+    await call(service, "rea.engine-uninstall", { engine: "java" });
+    const state = await settle(service), saved = readReaConfig(root);
+    assert.equal(state.jobs!.find(job => job.kind === "engine-uninstall")?.error, undefined);
+    assert.equal(saved.managedEngines?.java, undefined); assert.equal(saved.managedEngines?.jadx, undefined, "the preempted install never publishes");
   } finally { java.release(); jadx.release(); await service.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -169,20 +191,17 @@ for (const cancel of [false, true]) test(`two manual downloads overlap and ${can
   } finally { ghidra.release(); hopper.release(); await service.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
-test("component requests automatically reconcile stopped jobs and legacy global barriers", async () => {
+test("stopped jobs and legacy global journals are discarded without history or barriers", async () => {
   const root = temporary(); config(root);
   const first = beginBuiltinOperation(root, "rea", undefined, "java"), second = beginBuiltinOperation(root, "rea", undefined, "jadx");
   first.close(); second.close(); // Simulate parent exit before its terminal record.
   for (const engine of ["java", "jadx"] as const) atomicReaJson(join(root, "integrations", "rea", "jobs", `${engine}.json`), { id: randomUUID(), kind: "engine-install", engine, running: true, message: "unfinished", startedAt: Date.now() });
   const service = new ReaService(root, () => {}, { engineRelease: fixtureEngineRelease, checkEngines: async (_root, value) => listEngines(value) });
   try {
-    const state = service.snapshot(); assert.equal(state.jobs!.length, 2);
-    assert.ok(state.jobs!.every(job => !job.running && /中断/.test(job.message)));
+    assert.deepEqual(service.snapshot().jobs ?? [], []);
     await call(service, "rea.engine-check", { engine: "java" }); await settle(service);
-    assert.equal(service.snapshot().engines!.find(item => item.id === "java")!.pendingOperation, undefined);
-    await call(service, "rea.engine-check", { engine: "wabt" }); await settle(service);
-    assert.ok(service.snapshot().engines!.find(item => item.id === "jadx")!.pendingOperation);
-    await call(service, "rea.reconcile", { engine: "jadx", operationId: state.engines!.find(item => item.id === "jadx")!.pendingOperation });
+    await call(service, "rea.engine-check", { engine: "jadx" }); await settle(service);
+    assert.ok(service.snapshot().engines!.every(item => !item.pendingOperation));
     const legacy = beginBuiltinOperation(root, "rea"); legacy.close();
     await call(service, "rea.engine-check", { engine: "java" }); await settle(service);
     assert.equal(service.snapshot().pendingOperation, undefined);
@@ -200,11 +219,9 @@ for (const scope of ["java", undefined] as const) test(`separate processes honor
     assert.throws(() => beginBuiltinOperation(root, "rea", undefined, "java"));
     assert.throws(() => beginBuiltinOperation(root, "rea"));
     assert.throws(() => beginBuiltinOperation(root, "rea", undefined, "jadx"), "a second backend cannot overwrite the running backend's shared maintenance history");
-    const operationId = builtinPendingOperation(root, "rea", scope);
-    assert.throws(() => reconcileBuiltinOperation(root, "rea", operationId, scope));
     child.kill("SIGKILL"); await exited;
-    assert.throws(() => beginBuiltinOperation(root, "rea", undefined, "java"), "an available OS lock cannot bypass an unfinished parent commit");
-    reconcileBuiltinOperation(root, "rea", operationId, scope);
+    // Once the holder's OS lock is gone its unfinished journal is discarded; no reconcile is required.
+    const next = beginBuiltinOperation(root, "rea", undefined, "java"); next.finish(); next.close();
     const fresh = beginBuiltinOperation(root, "rea"); fresh.finish(); fresh.close();
   } finally {
     if (child.exitCode === null && child.signalCode === null) { child.kill("SIGKILL"); await exited; }
@@ -222,7 +239,7 @@ test("same-root component process owners and cancellation remain independent", {
   try {
     await until(() => existsSync(join(root, "java-ready")) && existsSync(join(root, "jadx-ready")));
     left.abort(); await assert.rejects(p); a.finish();
-    assert.equal(rightEnded, false); assert.ok(builtinPendingOperation(root, "rea", "jadx"));
+    assert.equal(rightEnded, false, "cancelling one component leaves the other running");
     const otherDirectory = join(root, "integrations", "rea", "engines", `jadx-${randomUUID()}`); mkdirSync(otherDirectory, { recursive: true });
     assert.throws(() => a.trackDirectory(otherDirectory), "one component cannot adopt another's directory");
     right.abort(); await assert.rejects(q); b.finish();

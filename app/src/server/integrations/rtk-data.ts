@@ -63,7 +63,7 @@ export function rtkDataScope(root: string, kind: RtkDataKind): RtkDataScope {
   const revision = createHash("sha256").update(JSON.stringify([kind, readRtkConfig(root).revision, identity(base).slice(0, 3), identities, count])).digest("hex");
   return { revision, paths, count, retained };
 }
-/** The worker barrier and command admission must remain held throughout this call. */
+/** Hold the short command-publication transaction for revision and file consistency, never a worker barrier. */
 export function clearRtkData(root: string, kind: RtkDataKind, revision: unknown) {
   const scope = rtkDataScope(root, kind);
   if (typeof revision !== "string" || !/^[a-f0-9]{64}$/.test(revision) || scope.revision !== revision) throw Error("数据清理范围已变化，请重新读取并确认。");

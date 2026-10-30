@@ -1,7 +1,9 @@
 import { inModelNetworkWorker, modelNetwork } from "./model-network.js";
 import { ProviderUsageService, queryProviderUsage, supportsProviderUsage } from "./provider-usage.js";
 import { credentialMetadata } from "./model-metadata.js";
+import { accountBindingRevision, accountDirectory, readAccountIndex, readModelCredential, selectedAuthPath } from "./model-account-storage.js";
 import type { UsageProvider } from "../shared/model-usage.js";
+import { openAIProviderId, providerDisplayName } from "../shared/model-providers.js";
 import { parseProviderProxy, providerProxyUrl, providerProxyView, readProviderProxy } from "./integrations/model-proxy-env.js";
 import { mkdirSync, readFileSync, realpathSync, watch } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
@@ -12,7 +14,6 @@ import {
   type ModelRuntime,
   ModelRegistry,
   CredentialSynchronizationError,
-  readStoredCredential,
 } from "@earendil-works/pi-coding-agent";
 import {
   list,
@@ -82,7 +83,7 @@ export class ModelService {
     this.dir = resolve(configured === "~" ? homedir() : homeRelative ? join(homedir(), configured.slice(2)) : configured);
     this.providerUsage = new ProviderUsageService(root, this.dir, (providerId, signal) => this.network
       ? this.network(this.root, this.dir, providerId, join(this.dir, "models.json"), "usage", {}, { signal })
-      : queryProviderUsage(providerId, readStoredCredential(providerId, join(this.dir, "auth.json")), signal));
+      : queryProviderUsage(providerId, readModelCredential(providerId, join(this.dir, "auth.json")), signal));
   }
   // Independent, read-only information: never joins the config writer or auth preparation path.
   usage(provider: unknown, refresh = false, cancellation?: AbortSignal) {
@@ -101,26 +102,34 @@ export class ModelService {
       if (!config || typeof config !== "object" || Array.isArray(config) || config.providers && (typeof config.providers !== "object" || Array.isArray(config.providers))) throw Error();
     } catch { throw new AppError("CONFIG_READ_FAILED", "本地模型配置无法读取；原文件未修改。"); }
     const credentials = new Map((await credentialMetadata(join(this.dir, "auth.json")).list()).map(item => [item.providerId, item.type]));
-    const names = new Map([["openai", "OpenAI"], ["openai-codex", "Codex"], ["anthropic", "Anthropic"], ["google", "Google"], ...nativeProviderTemplates().map(item => [item.id, item.name] as [string, string])]);
-    const revision = digest(raw + "\0" + auth), providers = config.providers ?? {};
+    const names = new Map([["openai", "OpenAI"], ["openai-codex", "OpenAI"], ["anthropic", "Anthropic"], ["google", "Google"], ...nativeProviderTemplates().map(item => [item.id, item.name] as [string, string])]);
+    const revision = digest(raw + "\0" + auth + accountBindingRevision(this.dir)), providers = config.providers ?? {};
     return [...new Set([...Object.keys(providers), ...credentials.keys()])].map(providerId => {
       const entry = providers[providerId], type = credentials.get(providerId);
       return { id: providerId, name: typeof entry?.name === "string" && entry.name.trim() ? entry.name : names.get(providerId) ?? providerId,
         configured: !!type || typeof entry?.apiKey === "string" && !!entry.apiKey.trim(), revision,
-        query: providerId === "openai-codex" ? "codex" : type === "oauth" && supportsProviderUsage(providerId) ? "shared" : "unsupported" } satisfies UsageProvider;
+        query: type === "oauth" && supportsProviderUsage(providerId) ? "shared" : "unsupported" } satisfies UsageProvider;
     });
   }
   // Optional model-metadata invalidation only. Execution never depends on this watcher.
   watchConfiguration(changed: () => void): () => void {
     mkdirSync(this.dir, { recursive: true, mode: 0o700 });
-    const revision = () => ["models.json", "auth.json", "models-store.json"].map(name => {
+    const revision = () => ["models.json", "auth.json", "models-store.json", "model-accounts/index.json"].map(name => {
       try { return digest(readFileSync(join(this.dir, name), "utf8")); } catch { return "unreadable"; }
-    }).join(":");
+    }).join(":") + (() => {
+      try { return (readAccountIndex(this.dir).accounts).map(account => {
+        if (account.legacy) return "";
+        const folder = accountDirectory(this.dir, account.id);
+        return ["auth.json", "models-store.json"].map(file => {
+          try { return digest(readFileSync(join(folder, file), "utf8")); } catch { return "unreadable"; }
+        }).join(":");
+      }).join(":"); } catch { return "unreadable-accounts"; }
+    })();
     let previous = revision();
     try {
       // Short Windows aliases can abort libuv before a JS error is emitted.
-      const watcher = watch(realpathSync.native(this.dir), { persistent: false }, (_event, name) => {
-        if (name && !["models.json", "auth.json", "models-store.json"].includes(String(name))) return;
+      const watcher = watch(realpathSync.native(this.dir), { persistent: false, recursive: true }, (_event, name) => {
+        if (name && !["models.json", "auth.json", "models-store.json", "index.json"].includes(String(name).split(/[\\/]/).pop()!)) return;
         const next = revision();
         if (next !== previous) { previous = next; changed(); }
       });
@@ -177,7 +186,7 @@ export class ModelService {
   /** Explicit credential preparation for model operations; never a resource-admission gate. */
   async prepareAuth(selection: { provider: string; id: string }, modelsPath: string, signal: AbortSignal) {
     signal.throwIfAborted();
-    const credential = readStoredCredential(selection.provider, join(this.dir, "auth.json"));
+    const credential = readModelCredential(selection.provider, join(this.dir, "auth.json"));
     // API keys and fresh OAuth need no network operation. Keep checkAuth read-only.
     // Leave a 30s binding margin beyond Pi's five-minute refresh window.
     if (credential?.type !== "oauth" || credential.expires > Date.now() + 330_000) return;
@@ -242,7 +251,7 @@ export class ModelService {
   }
   private async storeApiKey(runtime: ModelRuntime, providerId: string, key: string, migrating = false) {
     if (this.network) {
-      if (migrating && readStoredCredential(providerId, join(this.dir, "auth.json")))
+      if (migrating && readModelCredential(providerId, join(this.dir, "auth.json")))
         throw new AppError("REVISION_CONFLICT", "认证在迁移期间已改变；原密钥已保留，请重新读取。");
       return this.network<void>(this.root, this.dir, providerId, join(this.dir, "models.json"), "storeKey", { key }, { signal: AbortSignal.timeout(15000) });
     }
@@ -253,7 +262,7 @@ export class ModelService {
       prompt: async (prompt) => {
         if (prompt.type !== "secret" || supplied)
           throw new AppError("AUTH_INTERACTION_REQUIRED", "该供应商需要额外认证步骤，请使用单独登录流程。");
-        if (migrating && readStoredCredential(providerId, join(this.dir, "auth.json")))
+        if (migrating && readModelCredential(providerId, join(this.dir, "auth.json")))
           throw new AppError("REVISION_CONFLICT", "认证在迁移期间已改变；原密钥已保留，请重新读取。");
         supplied = true;
         return key;
@@ -288,7 +297,7 @@ export class ModelService {
             if (error instanceof AppError && error.code === "PROXY_UNAVAILABLE") continue;
             throw error;
           }
-          const persisted = readStoredCredential(providerId, join(this.dir, "auth.json"));
+          const persisted = readModelCredential(providerId, join(this.dir, "auth.json"));
           if (persisted?.type !== "api_key" || persisted.key !== provider.apiKey)
             throw new AppError("CREDENTIAL_NOT_PERSISTED", "未能确认密钥已保存到 auth.json；models.json 中的密钥已保留。");
         }
@@ -297,7 +306,11 @@ export class ModelService {
       }
       if (!removed.length) return state;
       // Compare credential bytes too: a concurrent logout must not discard the source.
-      const authRevision = digest(await readFile(join(this.dir, "auth.json"), "utf8"));
+      const credentialRevision = async () => digest(JSON.stringify(await Promise.all(removed.map(async provider => {
+        const file = selectedAuthPath(provider, join(this.dir, "auth.json"));
+        return [file, await readFile(file, "utf8")];
+      }))));
+      const authRevision = await credentialRevision();
       const stored = await (await this.runtime()).listCredentials({ signal });
       if (removed.some((providerId) => !stored.some((item) => item.providerId === providerId)))
         throw new AppError("CREDENTIAL_NOT_PERSISTED", "未能确认密钥已保存到 auth.json；models.json 中的密钥已保留。");
@@ -309,7 +322,7 @@ export class ModelService {
       const checked = await this.runtime(path);
       if (checked.getError()) throw new AppError("INVALID_CONFIG", "密钥迁移后的配置未通过校验；models.json 中的密钥已保留。");
       if (digest(await this.raw()) !== state.revision ||
-          digest(await readFile(join(this.dir, "auth.json"), "utf8")) !== authRevision)
+          await credentialRevision() !== authRevision)
         throw new AppError("REVISION_CONFLICT", "密钥迁移期间配置或认证已改变；原配置未覆盖，请重新读取。");
       if (this.authActive) throw new AppError("AUTH_BUSY", "请先完成或取消正在进行的认证");
       await rename(path, join(this.dir, "models.json"));
@@ -402,7 +415,9 @@ export class ModelService {
         ...nativeProviderTemplates().map((p): [string, ModelConfiguration["templates"][number]] => [p.id, p]),
         ...runtime.getProviders().map((p): [string, ModelConfiguration["templates"][number]] => [p.id, {
         id: p.id,
-        name: p.name,
+        // A cold configuration keeps native providers unregistered. Preserve
+        // OpenAI's app-facing name even when Pi's builtin template wins here.
+        name: p.id === openAIProviderId ? providerDisplayName(p.id) : p.name,
         api: p.getModels()[0]?.api ?? (p.id === "kiro" ? "kiro-chat" : "openai-completions"),
         url: urlView(p.baseUrl ?? p.getModels()[0]?.baseUrl ?? "").url,
         methods: [
@@ -520,7 +535,7 @@ export class ModelService {
                   : "OAuth 模型目录刷新未完成，请检查网络和认证后重试。");
               if (kiroCatalog) {
                 const after = kiroNative?.catalogState();
-                const current = kiroCatalogScope(readStoredCredential("kiro", join(this.dir, "auth.json")));
+                const current = kiroCatalogScope(readModelCredential("kiro", join(this.dir, "auth.json")));
                 if (before === undefined || !after || after.generation <= before || !current || after.scope !== current)
                   throw new AppError("MODEL_DISCOVERY_FAILED", "Kiro 目录未完成本次实时拉取，或认证在刷新期间已改变；请重新读取认证状态后重试。");
               }

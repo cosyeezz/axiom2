@@ -6,7 +6,7 @@ import { isAbsolute, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { readRtkConfig, rtkConfigPath, rtkDirectory, rtkExecutable } from "../src/server/integrations/rtk-config.js";
 import { rtkRemovalDirectories } from "../src/server/integrations/rtk-removal.js";
-import type { RtkJob, RtkState } from "../src/shared/rtk.js";
+import type { RtkState } from "../src/shared/rtk.js";
 
 const offlineRemovalReason = "缺少历史工作进程退出证明，RTK 离线卸载暂不可用；仅列出范围，未修改工具或配置。";
 type Input = { op: "rtk.get"; requestId: string; params: Record<string, never> };
@@ -86,7 +86,7 @@ function barrier(root: string) {
   if (present(join(root, "setup/service-owner.json")) || present(join(root, "updates/transaction.json"))) throw Error("安装或恢复事务尚未解除，暂不能离线清理工具。");
   for (const folder of ["integrations", "integrations/rtk", "integrations/rtk/versions"]) ordinaryDirectory(join(root, folder));
   names(join(root, "integrations/rtk/versions"), 1024);
-  record(rtkConfigPath(root)); record(join(rtkDirectory(root), "job.json"));
+  record(rtkConfigPath(root));
 }
 function snapshot(root: string): RtkState {
   const config = readRtkConfig(root), directories = rtkRemovalDirectories(root, config);
@@ -94,11 +94,7 @@ function snapshot(root: string): RtkState {
   const identities = paths.map(path => { if (!present(path)) return [path, "missing"]; const info = lstatSync(path, { bigint: true }); return [path, String(info.dev), String(info.ino), String(info.mtimeNs)]; });
   const revision = createHash("sha256").update(JSON.stringify([config, identities])).digest("hex");
   const state: RtkState = { revision, settings: { enabled: config.enabled, level: config.level, subagents: config.subagents }, platform: `${process.platform}/${process.arch}`, supported: true, version: config.installation?.version, executable: rtkExecutable(root, config), removalPending: !!config.removalPending?.length, cleanupPaths: paths, offline: true, offlineUninstall: { allowed: false, reason: offlineRemovalReason } };
-  const job = record(join(rtkDirectory(root), "job.json")) as RtkJob | undefined;
-  if (job !== undefined) {
-    if (!job || typeof job.id !== "string" || !["check", "install", "doctor", "uninstall", "cleanupStats", "cleanupOriginals"].includes(job.kind) || typeof job.running !== "boolean" || typeof job.message !== "string") throw Error("RTK 操作记录无效，无法确认上次结果。");
-    state.job = job.running ? { ...job, running: false, error: "上次操作被退出中断，请重新核实范围；不会自动重试。" } : job;
-  }
+  // Component standard: no job history is shown.
   return state;
 }
 export function offlineToolRequest(root: string, input: unknown) {

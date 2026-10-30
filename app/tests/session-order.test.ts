@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Session } from "../src/shared/protocol.js";
-import { compareSessions, isPrioritySession, isTopSession } from "../src/client/workspaces/session-order.js";
+import { compareSessions, isPrioritySession, isTopSession, sessionFamilies } from "../src/client/workspaces/session-order.js";
 
 const session = (id: string, overrides: Partial<Session> = {}): Session => ({
   id, workspaceId: "workspace", title: id, pinned: false, unread: false, updatedAt: 1,
-  ...overrides,
+  listOrderAt: overrides.updatedAt ?? 1, ...overrides,
 });
 const order = (sessions: Session[]) => [...sessions].sort(compareSessions).map((s) => s.id);
 
-test("running and unread precede idle manual pins and share recency order", () => {
+test("automatic and manual top rows share a fixed order ahead of ordinary history", () => {
   const rows = [
     session("recent", { updatedAt: 100 }),
     session("running", { runStatus: "running", updatedAt: 2 }),
@@ -18,7 +18,7 @@ test("running and unread precede idle manual pins and share recency order", () =
     session("pin", { pinned: true }),
     session("active-pin", { pinned: true, runStatus: "starting", updatedAt: 0 }),
   ];
-  assert.deepEqual(order(rows), ["child", "unread", "running", "active-pin", "pin", "recent"]);
+  assert.deepEqual(order(rows), ["child", "unread", "running", "pin", "active-pin", "recent"]);
   assert.deepEqual(rows.filter(isTopSession).map((s) => s.id), ["running", "unread", "child", "pin", "active-pin"]);
   assert.equal(rows[0].id, "recent", "sorting cannot mutate subscription snapshots");
   assert.equal(rows[1].pinned, false, "automatic priority is not a persistent pin");
@@ -66,4 +66,45 @@ test("viewed idle pins expire, but activity overrides expired cooldowns", () => 
 
 test("equal timestamps use stable session identity", () => {
   assert.deepEqual(order([session("b"), session("a")]), ["a", "b"]);
+  assert.deepEqual(order([session("b", { pinned: true }), session("a", { pinned: true })]), ["a", "b"]);
+});
+
+test("top rows do not trade places on updates, unread, cooldown or run transitions", () => {
+  const rows = [session("manual", { pinned: true, updatedAt: 3 }),
+    session("active", { runStatus: "running", updatedAt: 2 }), session("unread", { unread: true })];
+  const expected = order(rows);
+  assert.deepEqual(expected, ["manual", "active", "unread"]);
+  for (const runStatus of ["starting", "running", "stopping", "completed", "failed"] as const) {
+    for (const row of rows) {
+      row.updatedAt += 100;
+      row.runStatus = runStatus;
+      row.unread = !row.unread;
+      row.autoPinUntil = 1000;
+      assert.deepEqual(order([...rows].reverse()), expected);
+    }
+  }
+  rows[2].activeTasks = true;
+  rows[2].autoPinUntil = 0;
+  assert.deepEqual(order(rows), expected);
+});
+
+test("the whole top family and its siblings keep their positions when a child becomes active", () => {
+  const root = session("root", { pinned: true });
+  const older = session("older", { forkParentSessionId: root.id, updatedAt: 2 });
+  const newer = session("newer", { forkParentSessionId: root.id, updatedAt: 3 });
+  const other = session("other", { pinned: true, updatedAt: 4 });
+  const rows = [root, older, newer, other];
+  const ids = () => sessionFamilies(rows).map(family => family.map(row => row.id));
+  const expected = [["other"], ["root", "newer", "older"]];
+  assert.deepEqual(ids(), expected);
+  for (const child of [older, newer]) {
+    child.updatedAt = 1000;
+    child.runStatus = "running";
+    assert.deepEqual(ids(), expected);
+    child.runStatus = "completed";
+    child.unread = true;
+    assert.deepEqual(ids(), expected);
+    child.unread = false;
+    assert.deepEqual(ids(), expected);
+  }
 });

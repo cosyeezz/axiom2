@@ -22,6 +22,7 @@ import { Store, type SessionRestorePosition } from "./storage.js";
 import { ModelService } from "./model-service.js";
 import { boundedMessage, openTranscript, toolKey } from "./transcript.js";
 import { messagePart } from "./message-part.js";
+import { windowFieldErrorReceipt } from "../shared/window-frame-budget.js";
 import {
   AppError,
   attachmentsInput,
@@ -31,6 +32,7 @@ import {
   type Command,
   type Scope,
   type Draft,
+  type Reply,
 } from "../shared/protocol.js";
 import {
   threadScope,
@@ -49,6 +51,7 @@ import { skillsInput } from "../shared/skills.js";
 import { imagesInput, imagePrompt } from "./images.js";
 import { canContinue } from "../shared/session-state.js";
 import { errorMessage } from "./error-message.js";
+import type { SessionAccountTarget } from "../shared/session-account-usage.js";
 type PendingStart = { scope: Scope; automatic?: boolean; controller: AbortController; done: Promise<void>; finish: () => void; provider?: string; lease?: ExecutionLease };
 export class Agents {
   readonly reloads: SessionReloads;
@@ -93,6 +96,32 @@ export class Agents {
   thread(scope: Scope) {
     return this.views.thread(scope);
   }
+  threadMetadata(scope: Scope) {
+    return this.views.threadMetadata(scope);
+  }
+  /** Internal task/transcript display identity coordination; never return this seed over RPC. */
+  windowIdentity(scope: Scope): string {
+    this.owner(scope);
+    if (!this.store.workspace(scope.workspaceId).authorized) throw new AppError("AUTHORIZATION_REQUIRED", "请先授权工作空间文件访问");
+    return this.views.windowIdentity(scope);
+  }
+  async window(c: Command, signal?: AbortSignal): Promise<Reply> {
+    const scope = { workspaceId: text(c.workspaceId, "工作空间标识"), sessionId: text(c.sessionId, "会话标识") };
+    this.owner(scope);
+    if (!this.store.workspace(scope.workspaceId).authorized) throw new AppError("AUTHORIZATION_REQUIRED", "请先授权工作空间文件访问");
+    if (signal?.aborted) return windowFieldErrorReceipt(c.requestId, "STALE").frame;
+    if (this.active(scope)) {
+      this.views.retireWindow(scope);
+      // Pending startup/reload is not permission to read an idle native file.
+      const frame = await this.runs.window(scope, c.requestId, c.params?.query, signal);
+      this.owner(scope);
+      if (!this.store.workspace(scope.workspaceId).authorized || signal?.aborted)
+        return windowFieldErrorReceipt(c.requestId, "STALE").frame;
+      return frame;
+    }
+    return this.views.window(scope, c.requestId, c.params?.query, () => !this.active(scope) &&
+      this.store.workspace(scope.workspaceId).authorized);
+  }
   messageCount(scope: Scope, options: { cachedOnly?: boolean } = {}) {
     return this.views.messageCount(scope, options);
   }
@@ -105,10 +134,16 @@ export class Agents {
   refresh(scope: Scope) {
     this.views.refresh(scope);
   }
-  // Global maintenance must also wait for background commands before a run exists.
-  get maintenancePending() { return this.commands.size > 0 || this.starts.size > 0 || this.continuations.busy || this.compressions.busy; }
   active(scope: Scope, exclude?: PendingStart) {
     return this.reloads.active(scope) || this.runs.active(scope) || Boolean(this.starts.get(scope.sessionId) && this.starts.get(scope.sessionId) !== exclude);
+  }
+  /** Idle is explicitly the next execution's default, not the account of a past call or retained worker. */
+  accountUsageTarget(scope: Scope): SessionAccountTarget | null {
+    this.owner(scope);
+    if (!this.store.workspace(scope.workspaceId).authorized) throw new AppError("AUTHORIZATION_REQUIRED", "请先授权工作空间文件访问");
+    if (this.active(scope)) return this.runs.accountUsageTarget(scope);
+    const selection = this.info(scope).selection;
+    return selection?.provider ? { providerId: selection.provider, source: "next-execution", identity: `next:${selection.provider}:${selection.id}` } : null;
   }
   executing(scope: Scope) { return this.runs.active(scope); }
   lease(scope: Scope, runId: string): LeaseRef | undefined { return this.runs.lease(scope, runId); }
@@ -125,11 +160,11 @@ export class Agents {
         this.store.db.prepare("SELECT 1 FROM task_results r JOIN tasks t ON t.id=r.taskId WHERE t.parentSessionId=? AND r.delivery NOT IN ('delivered','discarded') LIMIT 1").get(scope.sessionId))
       throw new AppError("CONTINUATION_CANCELLED", "会话状态已变化或仍有待处理工作，未自动继续");
   }
-  assertContinuation(scope: Scope, expectedRunId: unknown, queuedTask = false, exclude?: PendingStart) {
+  assertContinuation(scope: Scope, expectedRunId: unknown, queuedTask = false, exclude?: PendingStart, serviceRecovery = false) {
     if (expectedRunId === undefined) return;
     const info = this.info(scope);
     if (text(expectedRunId, "原执行标识") !== info.run?.id || !canContinue(info.run) ||
-        this.active(scope, exclude) || info.activeTaskCount || (!queuedTask && info.task?.status === "queued"))
+        this.active(scope, exclude) || (!serviceRecovery && info.activeTaskCount) || (!queuedTask && info.task?.status === "queued"))
       throw new AppError("RUN_MISMATCH", "原执行已变化或仍有活动任务；未将继续处理注入其他执行，请重新读取。");
   }
   assertRewriteIdle(scope: Scope, queuedInputs: string[] = [], exclude?: PendingStart) {
@@ -192,6 +227,7 @@ export class Agents {
     await Promise.all([this.runs.stopProviders(providers, confirmed), ...starts.map(start => start.done)]);
   }
   async close() {
+    this.views.closeWindows();
     const starts = [...this.starts.values()];
     for (const start of starts) start.controller.abort();
     await Promise.all([this.titles.close(), this.reloads.close(), this.runs.close(), this.compressions.close(), this.memories.close(), this.continuations.close()]);
@@ -282,6 +318,7 @@ export class Agents {
       memoryContinuation?: { expectedRunId: string; validate: () => void };
       compressionPreparation?: { id: string; validate: () => void; signal: AbortSignal };
       admission?: { turn: TaskAdmissionTurn; reserve: () => TaskAdmissionTurn };
+      serviceRecovery?: boolean;
       beforeStart?: () => void;
       onCommit?: (run: Run) => void;
       onStart?: (run: Run) => void;
@@ -374,8 +411,9 @@ export class Agents {
       return this.views.image(scope, text(p.messageId, "消息标识"), p.imageId);
     }
     if (c.op === "agent.recall") {
-      if (Object.keys(p).length) throw new AppError("INVALID_INPUT", "撤回不接受额外参数");
-      return this.store.external(c, () => this.runs.recall(scope));
+      if (Object.keys(p).some((key) => key !== "inputId")) throw new AppError("INVALID_INPUT", "撤回只接受待执行输入标识");
+      const inputId = p.inputId === undefined ? undefined : text(p.inputId, "待执行输入标识");
+      return this.store.external(c, () => this.runs.recall(scope, inputId));
     }
     if (!["prompt", "agent.resume", "agent.model", "agent.stop"].includes(c.op))
       throw new AppError("UNKNOWN_OPERATION", "不支持的 Agent 操作");
@@ -398,7 +436,7 @@ export class Agents {
         if (internal.memoryContinuation) {
           this.assertMemoryContinuation(scope, internal.memoryContinuation.expectedRunId, ownStart);
           internal.memoryContinuation.validate();
-        } else this.assertContinuation(scope, p.expectedRunId, resuming && !!internal.task, ownStart);
+        } else this.assertContinuation(scope, p.expectedRunId, resuming && !!internal.task, ownStart, internal.serviceRecovery);
         internal.compressionPreparation?.validate();
       }
       if (this.runs.closing) throw new AppError("SHUTTING_DOWN", "服务正在退出，未接受新操作");
@@ -664,6 +702,8 @@ export class Agents {
             memoryTopics: internal.task ? undefined : this.memories.topicSnapshot(scope.workspaceId),
             memoryPath: internal.task ? undefined : join(memoryDirectory(this.store.root, scope.sessionId), "MEMORY.md"),
             runId: id,
+            canonicalOrigins: this.views.windowOrigins(scope),
+            canonicalIdentity: this.views.windowIdentity(scope),
             requestId: c.requestId,
             selection: selection!,
             prompt: content,
@@ -721,6 +761,7 @@ export class Agents {
         validate();
         ownStart!.provider = start.selection.provider;
         const acquiring = this.pool.acquire({ environment, kind: "agent", bindingGate: true, requestStartedAtMonoMs,
+          wait: internal.serviceRecovery ? false : undefined,
           onBindingRejected: start.onBindingRejected,
           beforeExecute: internal.memoryContinuation ? () => {
             this.assertMemoryContinuation(scope, internal.memoryContinuation!.expectedRunId, ownStart, false, continuationRunId);

@@ -68,7 +68,6 @@ for (const kind of ["skill", "mcp"] as const) test(`${kind} uninstall deletes it
     assert.match(state.job?.error ?? "", /请先停止本机 Agent/);
     // Keep execution, reload and background-work admission occupied throughout removal.
     t.mock.method(app.agents.reloads, "active", (scope: Scope) => scope.sessionId === session.id);
-    t.mock.getter(app.agents, "maintenancePending", () => true);
     const invalidated = t.mock.method(app.agents.pool, "invalidate", async () => { throw Error("Resource removal must not retire workers"); });
     let managedId: string | undefined, managedDirectory: string | undefined;
     if (kind === "skill") {

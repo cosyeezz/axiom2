@@ -35,12 +35,12 @@ svg.cost-usage-icon .cost-bar[data-pulse="true"]{animation:cost-bar-pulse 1.8s e
 .memory-progress-bars[data-state="失败"] .memory-progress-state{color:var(--danger-icon,#d99595);opacity:1}
 .memory-progress-bars[data-state="已完成"] .memory-progress-state{color:var(--fg-2);opacity:1}
 .usage [data-od-id="context-capacity"] svg,.usage [data-od-id="cache-tokens"]>svg,.usage [data-od-id="estimated-cost"]>svg{color:inherit}
-:root .usage[data-od-id="token-usage"]>.usage-row{display:grid;grid-template-columns:repeat(4,44px);gap:0;flex:0 0 auto;width:max-content;max-width:none}
+:root .usage[data-od-id="token-usage"]>.usage-row{display:grid;grid-auto-flow:column;grid-auto-columns:calc(44px * var(--display-font-scale,1));gap:0;flex:0 0 auto;width:max-content;max-width:none}
 :root .usage[data-od-id="token-usage"]>.usage-row :is(.usage-metric,.memory-todo-toggle){display:flex;justify-content:center;align-items:center;gap:0;width:44px;min-width:44px;padding:0!important}
 :root .usage[data-od-id="token-usage"]>.usage-row :is(.usage-metric,.memory-todo-toggle)>svg{justify-self:center}
 .usage button.usage-metric{appearance:none;border:1px solid transparent;border-radius:var(--radius-sm);background:transparent;color:inherit;padding:0 4px;cursor:pointer;font:inherit;min-width:44px;min-height:44px}
 :root .usage button.usage-metric[aria-expanded=true]:not(:disabled){background:color-mix(in srgb,var(--fg) 8%,transparent)}
-.usage[data-od-id="token-usage"] :is(.usage-metric,.memory-todo-toggle,.compression-trigger)>svg.data-icon{width:20px;height:20px;flex-basis:20px;stroke-width:1.3}
+.usage[data-od-id="token-usage"] :is(.usage-metric,.memory-todo-toggle,.compression-trigger)>svg.data-icon{stroke-width:1.3}
 .metric-detail{position:fixed;z-index:50;inset:auto;margin:0;width:min(380px,calc(100vw - 24px));padding:0;border:1px solid var(--border);border-radius:var(--radius-lg,12px);color:var(--fg);background:var(--surface,#242424);box-shadow:0 12px 42px #0006;overflow:auto}
 .metric-detail header{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 0 18px;gap:12px}.metric-detail h2{font-size:15px;margin:0}.metric-detail header button{min-width:44px;min-height:44px}.metric-detail header svg{width:18px;height:18px}.metric-detail-body{padding:0 18px 16px;font-size:13px;line-height:1.6}.metric-detail-value{font-weight:600;font-variant-numeric:tabular-nums}.metric-detail dl{display:grid;grid-template-columns:1fr auto;gap:6px}.metric-detail dd{margin:0}.metric-detail p{overflow-wrap:anywhere}
 .task-batch-progress{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-variant-numeric:tabular-nums;color:var(--fg-2)}.task-batch-progress .data-icon{width:24px;height:24px}
@@ -48,7 +48,6 @@ svg.cost-usage-icon .cost-bar[data-pulse="true"]{animation:cost-bar-pulse 1.8s e
   :root .usage[data-od-id="token-usage"]>.usage-row{column-gap:0}
   .usage .usage-metric>strong,.usage .memory-todo-percent{display:none}
   .usage .usage-metric,.usage .memory-todo-toggle{width:44px;min-width:44px;justify-content:center;padding-inline:0!important}
-  .app:is(.mobile-workbench,.android-workbench) .usage :is(.usage-metric,.compression-trigger,.memory-todo-toggle)>svg.data-icon{width:20px;height:20px;flex-basis:20px}
 }
 .usage .context-memory-control{width:auto;min-width:44px;gap:6px;padding-inline:6px!important}
 .usage .context-memory-control .context-memory-value{display:inline;font-variant-numeric:tabular-nums;white-space:nowrap}

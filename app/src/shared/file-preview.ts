@@ -15,10 +15,10 @@ export interface FilePreview {
 }
 /** A local link, never a remote, device, anchor-only or executable URL. */
 export function localFileLink(href: string): { path: string; line?: number; fragment?: string } | null {
-  if (!href || href.length > 4096 || /[\x00-\x1f\x7f]/.test(href) || /^[\u200b\ufeff]*#/.test(href)) return null;
+  if (!href || href.length > 4096 || /[\x00-\x1f\x7f]/.test(href) || /^[\u200b\u200c\ufeff]*#/.test(href)) return null;
   // Generated links can carry an invisible separator before an absolute path.
   // Strip only that prefix; relative names and characters inside filenames stay literal.
-  let path = href.replace(/^[\u200b\ufeff]+(?=[\\/]|[a-z]:[\\/]|file:\/\/)/i, "");
+  let path = href.replace(/^[\u200b\u200c\ufeff]+(?=[\\/]|[a-z]:[\\/]|file:\/\/)/i, "");
   if (/^file:\/\//i.test(path)) {
     try { const url = new URL(path); if ((url.hostname && url.hostname !== "localhost") || url.search) return null; path = url.pathname + url.hash; } catch { return null; }
     if (/^\/[a-z]:\//i.test(path)) path = path.slice(1);

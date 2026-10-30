@@ -2,6 +2,7 @@ import "./pi-settings-storage.js";
 import { getAgentDir, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { AppError } from "../shared/protocol.js";
 import { executionModelsRaw } from "./execution-model-config.js";
+import { accountBindings } from "./model-account-storage.js";
 import { capabilityFileDigest, type CapabilityRuntime } from "./capability-resources.js";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -127,7 +128,8 @@ export class ExecutionProfiles {
     try { localResources(); resourceVersion = captured?.version ?? resources(); verifiable = captured?.verifiable ?? true; }
     catch { resourceVersion = randomUUID(); verifiable = false; }
     const provider = input.selection?.provider;
-    const env = { ...process.env, AXIOM_PI_DIR: input.modelDir, AXIOM_MODEL_PROVIDER: provider ?? "" };
+    const env = { ...process.env, AXIOM_PI_DIR: input.modelDir, AXIOM_MODEL_PROVIDER: provider ?? "",
+      AXIOM_MODEL_ACCOUNT_BINDINGS: JSON.stringify(accountBindings(input.modelDir)) };
     const execArgv = source ? ["--import", import.meta.resolve("tsx")] : [];
     const reuse: ReuseMode = input.entry === "agent" ? (verifiable && ready ? "same-session" : "single-use") : input.entry === "memory" && input.mode === "D" ? "cross-binding" : "single-use";
     const profileHash = digest(stable({ schema: 1, adapter: 1, build: contentRevision(workerPath), sdk: sdkVersions, node: process.version,

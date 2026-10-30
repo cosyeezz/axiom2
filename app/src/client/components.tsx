@@ -74,7 +74,7 @@ export function Dialog({
     </dialog>
   );
 }
-export function SettingsSidebar({ page }: { page: "overview" | "display" | "models" | "usage" | "tools" | "resources" }) {
+export function SettingsSidebar({ page }: { page: "overview" | "display" | "models" | "accounts" | "usage" | "tools" | "resources" }) {
   return (
     <aside className="settings-sidebar" aria-label="配置导航">
       <a className="btn btn-ghost back-link" href="/">
@@ -100,6 +100,7 @@ export function SettingsSidebar({ page }: { page: "overview" | "display" | "mode
         >
           模型服务
         </a>
+        <a href="/model-accounts.html" className="settings-nav" aria-current={page === "accounts" ? "page" : undefined}>多账号管理</a>
         <a href="/model-usage.html" className="settings-nav" aria-current={page === "usage" ? "page" : undefined}>模型用量与统计</a>
         <a
           href="/tools.html"

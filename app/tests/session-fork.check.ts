@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { chromium, type Page } from "playwright";
-import { rewriteFixture } from "./rewrite-fixture.js";
+import { rewriteFixture, until } from "./rewrite-fixture.js";
 
 const f = await rewriteFixture(!process.env.AXIOM_TEST_PRODUCTION);
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
@@ -20,7 +20,7 @@ try {
     assert.equal(await page.locator(".composer .fork-action").count(), 0);
     return page;
   };
-  const artifacts = resolve("test-results/session-fork"); mkdirSync(artifacts, { recursive: true });
+  const artifacts = resolve(process.env.AXIOM_TEST_ARTIFACTS ?? "test-results/session-fork"); mkdirSync(artifacts, { recursive: true });
   const page = await openSource();
   await page.locator("#prompt").fill("源会话独立草稿");
   const assertLayout = async (page: Page, width: number) => {
@@ -119,7 +119,7 @@ try {
   const count = () => Number(f.app.store.db.prepare("SELECT count(*) AS n FROM sessions").get()!.n);
   // Both dialog actions create one branch; only the primary action navigates.
   const createOnly = async (page: Page, selector: string, artifact: string) => {
-    const before = count();
+    const before = count(), requests = f.requests.length;
     const draft = await page.locator("#prompt").inputValue();
     const button = page.locator(selector).first();
     if (await page.evaluate(() => matchMedia("(pointer: coarse)").matches)) {
@@ -140,7 +140,7 @@ try {
       const rows = [...document.querySelectorAll("#history [data-session-id]")].map(node => node.getAttribute("data-session-id"));
       return rows.indexOf(parent) >= 0 && rows.indexOf(child) === rows.indexOf(parent) + 1;
     }, { parent: f.scope.sessionId, child: String(latest.id) });
-    assert.equal(f.requests.length, 2, "only-create does not send");
+    assert.equal(f.requests.length, requests, "only-create does not send");
   };
   await page.setViewportSize({ width: 1440, height: 900 });
   await createOnly(page, ".reply-actions .fork-action", "dual-action-desktop.png");
@@ -183,9 +183,38 @@ try {
   await replyPage.getByText("REWRITE_ANSWER_1", { exact: true }).waitFor();
   await assertAdjacent();
   await replyPage.screenshot({ path: join(artifacts, "reply-branch-adjacent.png") });
-  f.stall(true); await f.call("prompt", { text: "BUSY_UI" });
-  await page.waitForFunction(() => [...document.querySelectorAll<HTMLButtonElement>(".fork-action")].every(button => button.disabled));
-  await f.app.tasks.stopParent(f.scope); await f.idle();
+  // Historical reply and current user actions remain usable during a real stream.
+  f.stall(true, "STREAMING_UI_");
+  const accepted = await f.call("prompt", { text: "BUSY_UI" }) as { runId: string };
+  await until(() => f.app.agents.messages(f.scope).some(m => m.streaming && m.text === "STREAMING_UI_"), "source did not stream");
+  await page.getByRole("button", { name: "停止执行", exact: true }).waitFor();
+  await page.waitForFunction(() => {
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>(".fork-action")];
+    return buttons.length >= 5 && buttons.every(button => !button.disabled);
+  });
+  await createOnly(page, ".reply-actions .fork-action", "running-create-only-desktop.png");
+  assert.equal(f.app.agents.info(f.scope).run?.id, accepted.runId);
+  assert.equal(f.app.agents.active(f.scope), true);
+  const runningMobile = await openSource(390, 844, true);
+  await runningMobile.getByRole("button", { name: "停止执行", exact: true }).waitFor();
+  const currentInput = runningMobile.locator(".editable-user-message").last();
+  await currentInput.tap();
+  const runningFork = currentInput.locator(".fork-action");
+  assert.equal(await runningFork.isEnabled(), true);
+  assert.equal(await runningFork.getAttribute("data-tooltip"), "从此处创建分支（Fork）");
+  await runningFork.tap(); await confirm(runningMobile);
+  await runningMobile.waitForFunction(() => (document.querySelector("#prompt") as HTMLTextAreaElement)?.value === "BUSY_UI");
+  assert.equal(await runningMobile.getByText("STREAMING_UI_", { exact: true }).count(), 0);
+  await runningMobile.screenshot({ path: join(artifacts, "running-create-open-touch.png") });
+  assert.equal(f.app.agents.info(f.scope).run?.id, accepted.runId);
+  assert.equal(f.app.agents.active(f.scope), true);
+  f.stall(false); f.release(); await f.idle();
+  assert.equal(f.app.agents.info(f.scope).run?.id, accepted.runId);
+  assert.equal(f.app.agents.info(f.scope).run?.status, "completed");
+  await page.getByText("STREAMING_UI_REWRITE_ANSWER_3", { exact: true }).waitFor();
+  assert.equal(await page.locator("#prompt").inputValue(), "源会话独立草稿");
+  assert.equal(f.requests.length, 3, "running Fork does not restart or send any model request");
+  await page.screenshot({ path: join(artifacts, "source-completed-after-fork.png") });
   assert.deepEqual(errors, []);
-  console.log("PASS: two message entries; compact left/adjacent actions; real-touch hidden/tap-reveal/outside-dismiss; 24px icon centers and 44px-tall hit targets; responsive hit targets; confirmation/cancel; create-only retains source and draft; navigate after confirm; pinned source adjacency and reload; original draft; attachments; no auto-send; answer cutoff; busy guards");
+  console.log("PASS: two message entries; compact left/adjacent actions; real-touch hidden/tap-reveal/outside-dismiss; 24px icon centers and 44px-tall hit targets; responsive hit targets; confirmation/cancel; create-only retains source and draft; navigate after confirm; pinned source adjacency and reload; original draft; attachments; no auto-send; answer cutoff; running desktop/touch Fork; source stream completes without interruption");
 } finally { await browser.close(); await f.close(); }

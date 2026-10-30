@@ -45,6 +45,7 @@ export function reaFixture() {
       calls.push(args);
       if (args[1] === "view") return JSON.stringify(latest);
       if (args[1] !== "install") throw Error("Unexpected npm command");
+      options.signal.throwIfAborted();
       if (gate) await new Promise<void>((resolve, reject) => {
         const abort = () => reject(Error("aborted"));
         options.signal.addEventListener("abort", abort, { once: true });

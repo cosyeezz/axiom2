@@ -8,8 +8,8 @@ import {
 import {
   agentScope,
   emptyAgent,
-  threadScope,
-  emptyThread,
+  threadMetadataScope,
+  type ThreadMetadata,
 } from "../../shared/agent.js";
 import {
   compressionScope,
@@ -29,7 +29,10 @@ export function Compression({ scope }: { scope?: Scope }) {
     null,
   );
   const info = useScope(scope ? agentScope(scope) : null, emptyAgent);
-  const thread = useScope(scope ? threadScope(scope) : null, emptyThread);
+  const metadata = useScope<ThreadMetadata | null>(
+    scope ? threadMetadataScope(scope) : null,
+    null,
+  );
   const session = useScope<Session | null>(
     scope ? scopeKey(scope) : null,
     null,
@@ -56,9 +59,12 @@ export function Compression({ scope }: { scope?: Scope }) {
     }
   };
   const state = job?.state ?? "idle";
+  const presence = metadata?.hasMessages;
+  const metadataUnavailable = !!metadata?.error || presence !== true && presence !== false;
   const startUnavailable = connection !== "已连接本地服务"
     ? "尚未连接本地服务，请连接后操作。"
-    : !thread.ids.length ? "此会话尚无消息可压缩。"
+    : metadataUnavailable ? "此会话的消息信息暂不可用，请重新打开会话后重试。"
+    : presence === false ? "此会话尚无消息可压缩。"
     : !selection ? "请先为当前会话选择模型。" : "";
   const id = `compression-${scope?.sessionId ?? "empty"}`;
   const run = async (op: "compression.start" | "compression.cancel") => {

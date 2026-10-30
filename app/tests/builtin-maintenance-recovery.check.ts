@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { reaPackageRoot, readReaConfig } from "../src/server/integrations/rea-runtime.js";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import WebSocket from "ws";
@@ -14,9 +16,11 @@ cli.install("1.8.7");
 for (const tool of ["rea", "opencli"] as const) {
   const operation = beginBuiltinOperation(cli.root, tool); operation.close();
 }
-const app = await startServer({ root: cli.root, port: 0, rea: rea.dependencies, openCli: { execute: cli.execute, runtime: cli.runtime, locateNpm: cli.locateNpm } });
-let browser: Browser | undefined, socket: WebSocket | undefined, blocked = false;
-Object.defineProperty(app.agents, "maintenancePending", { configurable: true, get: () => blocked });
+const oldPi = process.env.AXIOM_PI_DIR;
+process.env.AXIOM_PI_DIR = join(cli.root, "pi"); mkdirSync(process.env.AXIOM_PI_DIR);
+const app = await startServer({ root: cli.root, port: 0, dev: true, rea: rea.dependencies, openCli: { execute: cli.execute, runtime: cli.runtime, locateNpm: cli.locateNpm } });
+let browser: Browser | undefined, socket: WebSocket | undefined;
+assert.equal("maintenance" in app.agents.pool, false);
 try {
   browser = await chromium.launch({ headless: true, executablePath: process.env.AXIOM_TEST_BROWSER });
   const page = await browser.newPage(), errors: string[] = [];
@@ -39,7 +43,13 @@ try {
   await recovery.waitFor({ state: "detached" });
   assert.equal(builtinPendingOperation(cli.root, "rea"), undefined);
   await panel.getByRole("button", { name: "安装 REA", exact: true }).click();
-  await panel.getByText("REA 与技能已接入；已有会话请重新加载技能与 MCP。", { exact: true }).waitFor();
+  // Completed task messages are not rendered; observe the installed state instead.
+  await panel.getByRole("button", { name: "卸载 REA", exact: true }).click({ trial: true });
+  const installedConfig = readReaConfig(cli.root);
+  assert.ok(installedConfig.installation);
+  // Omitted installation choices mean enabled, just as in ReaService.load().
+  assert.notEqual(installedConfig.skillInstalled, false);
+  assert.notEqual(installedConfig.mcpInstalled, false);
 
   await page.goto(`${app.origin}/tools.html#opencli`);
   const open = page.locator("#opencli"), openRecovery = open.getByRole("group", { name: "核实 OpenCLI 中断任务", exact: true });
@@ -49,14 +59,14 @@ try {
   await openRecovery.waitFor({ state: "detached" });
   assert.equal(builtinPendingOperation(cli.root, "opencli"), undefined);
 
-  // Reserve removal behind an already-admitted operation. New external work
-  // must not extend that drain indefinitely; cancellation must release it.
-  blocked = true;
+  // Removal has no application-wide reservation or worker barrier.
+  const installed = reaPackageRoot(cli.root, readReaConfig(cli.root))!;
   await page.goto(`${app.origin}/tools.html#rea`);
   await panel.getByRole("button", { name: "卸载 REA", exact: true }).click();
   await panel.getByRole("group", { name: "确认卸载 REA", exact: true }).getByRole("button", { name: "确认卸载", exact: true }).click();
-  const maintenance = panel.getByRole("region", { name: "REA维护", exact: true });
-  await maintenance.getByRole("button", { name: "取消任务", exact: true }).waitFor();
+  await panel.getByRole("button", { name: "安装 REA", exact: true }).click({ trial: true });
+  assert.equal(readReaConfig(cli.root).installation, undefined);
+  assert.equal(existsSync(installed), false, "confirmed component files are removed immediately");
   const ws = socket = new WebSocket(app.origin.replace("http", "ws") + "/ws", { origin: app.origin });
   await once(ws, "open");
   const requestId = randomUUID();
@@ -67,11 +77,10 @@ try {
       if (value.type === "receipt" && value.requestId === requestId) { clearTimeout(timer); resolve(value); }
     });
   });
-  ws.send(JSON.stringify({ op: "task.append", requestId, params: { id: "not-admitted", text: "new work" } }));
-  assert.deepEqual(await denied, { type: "receipt", requestId, ok: false, error: { code: "MAINTENANCE_BUSY", message: "组件维护已预约；现有任务继续执行，维护完成或取消等待后可开始新操作。" } });
-  await maintenance.getByRole("button", { name: "取消任务", exact: true }).click();
-  blocked = false;
-  await page.waitForFunction(() => [...document.querySelectorAll("#rea button")].some(button => button.textContent === "卸载 REA" && !(button as HTMLButtonElement).disabled));
+  ws.send(JSON.stringify({ op: "task.append", requestId, params: { taskId: "not-admitted", text: "new work" } }));
+  const receipt = await denied;
+  assert.equal(receipt.ok, false);
+  assert.notEqual(receipt.error?.code, "MAINTENANCE_BUSY", "normal task scope validation is not a component-maintenance gate");
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ passed: true, checks: ["stale pending keeps actions enabled", "explicit controlled recovery", "REA install after recovery", "OpenCLI normal recovery", "queued removal blocks new task.append", "queued removal can be cancelled"] }));
-} finally { blocked = false; socket?.close(); await browser?.close(); await app.close(); rmSync(cli.root, { recursive: true, force: true }); }
+  console.log(JSON.stringify({ passed: true, checks: ["stale pending keeps actions enabled", "explicit controlled recovery", "REA install after recovery", "OpenCLI normal recovery", "confirmed removal physically deletes files", "task.append has no maintenance gate"] }));
+} finally { socket?.close(); await browser?.close(); await app.close(); rmSync(cli.root, { recursive: true, force: true }); if (oldPi === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = oldPi; }

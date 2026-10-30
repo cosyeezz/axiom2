@@ -1,3 +1,7 @@
+Session quota usage: Lucide chart-pie, original paths in icons.svg, viewport tightened to align toolbar glyphs. ISC notice below applies.
+Source: https://lucide.dev/icons/chart-pie
+License: https://lucide.dev/license
+
 Third-party icon notices retained with the distribution. Bootstrap Icons (MIT).
 Source: https://icon-sets.iconify.design/bi/filetype-raw/
 The MIT License (MIT)

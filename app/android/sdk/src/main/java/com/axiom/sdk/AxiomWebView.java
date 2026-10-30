@@ -18,6 +18,9 @@ import java.util.concurrent.Future;
 public class AxiomWebView extends WebView {
     public interface Listener {
         void onReady(); void onError(String message); void onExternalLink(Uri uri);
+        /** Main-document navigation, including pages opened after initial readiness. */
+        default void onDocumentLoading() {}
+        default void onDocumentLoaded() {}
         /** The owner must remove, destroy and replace this WebView after this callback. */
         default void onRendererGone() { onError("页面进程已退出，请重新创建工作台。"); }
     }
@@ -78,15 +81,24 @@ public class AxiomWebView extends WebView {
                 if (listener != null && ("https".equals(uri.getScheme()) || "http".equals(uri.getScheme()))) listener.onExternalLink(uri);
                 return true;
             }
-            @Override public void onPageFinished(WebView view, String url) { if (navigation.equals(url) && owns(owned)) checkReady(0); }
+            @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
+                if (owns(owned) && sameOrigin(url) && listener != null) listener.onDocumentLoading();
+            }
+            @Override public void onPageFinished(WebView view, String url) {
+                if (!owns(owned) || failed || !sameOrigin(url)) return;
+                if (listener != null) listener.onDocumentLoaded();
+                if (navigation.equals(url)) checkReady(0);
+            }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                if (request.isForMainFrame()) pageError("页面暂时无法打开。请确认 Tailscale 已连接、电脑后台仍在运行，然后重试。");
+                if (request.isForMainFrame() && sameOrigin(request.getUrl().toString())) pageError("页面暂时无法打开。请确认 Tailscale 已连接、电脑后台仍在运行，然后重试。");
             }
             @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
-                if (request.isForMainFrame()) pageError("服务返回 HTTP " + response.getStatusCode() + "，请确认电脑后台运行后重试。");
+                if (request.isForMainFrame() && sameOrigin(request.getUrl().toString())) pageError("服务返回 HTTP " + response.getStatusCode() + "，请确认电脑后台运行后重试。");
             }
-            @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) { handler.cancel(); pageError("连接证书无法验证，请检查服务器地址和设备时间。"); }
-            @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) { if (owns(owned) && listener != null) listener.onRendererGone(); return true; }
+            @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) { handler.cancel(); if (sameOrigin(error.getUrl())) pageError("连接证书无法验证，请检查服务器地址和设备时间。"); }
+            // Renderer loss belongs to the WebView instance, even while an old
+            // client's connection generation has been superseded by a new probe.
+            @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) { if (!disposed && listener != null) listener.onRendererGone(); return true; }
         });
         loadUrl(navigation);
     }

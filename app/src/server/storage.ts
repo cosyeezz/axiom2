@@ -100,6 +100,14 @@ export class Store {
     // Read versions migrate once; the boolean remains a derived compatibility column.
     this.db.exec("BEGIN IMMEDIATE");
     try {
+      // A fixed sidebar order, not a creation timestamp: old sessions retain
+      // their migration-time recency; new sessions capture it exactly once.
+      if (!this.db.prepare("PRAGMA table_info(sessions)").all().some((c) => c.name === "listOrderAt"))
+        this.db.exec(`ALTER TABLE sessions ADD COLUMN listOrderAt INTEGER;
+          UPDATE sessions SET listOrderAt=updatedAt;`);
+      this.db.exec(`CREATE TRIGGER IF NOT EXISTS sessions_list_order_insert AFTER INSERT ON sessions
+        WHEN NEW.listOrderAt IS NULL
+        BEGIN UPDATE sessions SET listOrderAt=NEW.updatedAt WHERE id=NEW.id; END;`);
       if (!this.db.prepare("PRAGMA table_info(sessions)").all().some((c) => c.name === "resultVersion"))
         this.db.exec(`ALTER TABLE sessions ADD COLUMN resultVersion INTEGER NOT NULL DEFAULT 0;
           ALTER TABLE sessions ADD COLUMN readVersion INTEGER NOT NULL DEFAULT 0;
@@ -312,12 +320,16 @@ export class Store {
     const row = this.db.prepare("SELECT body FROM run_binding_rejections WHERE runId=?").get(runId);
     return row ? safeExecutionRejection(JSON.parse(String(row.body))) : undefined;
   }
-  finishRun(id: string, status: Run["status"], error: string | null, reasonCode: string | null = null, retry?: Run["retry"]) {
+  finishRun(id: string, status: Run["status"], error: string | null, reasonCode: string | null = null, retry?: Run["retry"], recoverInterruption = false) {
     this.db.exec("SAVEPOINT finish_run");
     try {
       const row = this.db.prepare("UPDATE runs SET status=?,endedAt=?,error=?,reasonCode=?,phase=NULL,retry=COALESCE(?,retry) WHERE id=? AND status IN ('starting','running','stopping') RETURNING sessionId")
         .get(status, Date.now(), error, reasonCode, retry ? JSON.stringify(retry) : null, id);
-      if (row) this.recordResult(String(row.sessionId), id, "run");
+      if (row) {
+        this.recordResult(String(row.sessionId), id, "run");
+        // Persist the recovery intention before the interrupted run can become visible.
+        if (recoverInterruption) this.recoveries.interrupted(String(row.sessionId), id);
+      }
       this.db.exec("RELEASE finish_run");
       return !!row;
     } catch (failure) { this.db.exec("ROLLBACK TO finish_run; RELEASE finish_run"); throw failure; }

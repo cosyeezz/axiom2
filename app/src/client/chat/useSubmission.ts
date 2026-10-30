@@ -115,7 +115,7 @@ export function useSubmission(
       setBusy(false);
     }
   }
-  async function recall() {
+  async function recall(inputId?: string) {
     if (inFlight.current || !state.connected) return false;
     if (pendingRecall(scope)) {
       setError("撤回结果尚未确认，正在读取原回执；不会再次撤回或重发。");
@@ -128,7 +128,7 @@ export function useSubmission(
     const requestId = crypto.randomUUID();
     beginRecall(scope, requestId);
     try {
-      const data = await command<{ drafts: Draft[]; ids?: string[] }>("agent.recall", {}, scope, requestId);
+      const data = await command<{ drafts: Draft[]; ids?: string[] }>("agent.recall", inputId === undefined ? {} : { inputId }, scope, requestId);
       finishRecall(scope, requestId, data);
       const { drafts } = data;
       if (!drafts.length) setError("没有可撤回的排队内容；已执行的输入不会撤回。");

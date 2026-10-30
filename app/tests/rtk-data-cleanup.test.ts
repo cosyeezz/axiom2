@@ -10,6 +10,8 @@ import { readRtkConfig, rtkConfigPath, atomicRtkJson } from "../src/server/integ
 import { filterRtkResult } from "../src/server/integrations/rtk-runtime.js";
 import { rtkDataScope, clearRtkData } from "../src/server/integrations/rtk-data.js";
 import { withCommandAdmission } from "../src/server/command-admission.js";
+import { createProcessOwner } from "../src/server/process-owner-record.js";
+import { assertToolProcessesStopped } from "../src/server/integrations/tool-process.js";
 import { cleanupRows, cleanupProgress } from "../src/client/pages/desktop-cleanup.js";
 
 function fixture() {
@@ -26,15 +28,15 @@ async function settle(service: RtkService) {
   return service.snapshot();
 }
 for (const kind of ["stats", "originals"] as const) test(`independent RTK ${kind} cleanup confirms exact data and preserves settings and other data`, async () => {
-  const f = fixture(); let barriers = 0;
-  const service = new RtkService(f.root, () => {}, { removal: async work => { barriers++; return work(); } });
+  const f = fixture(); let executions = 0;
+  const service = new RtkService(f.root, () => {}, { removal: async work => { executions++; return work(); } });
   try {
     const before = service.snapshot(), row = cleanupRows({ rtk: before }).find(row => row.id === `rtk:${kind}`)!;
     assert.equal(row.available, true);
     await service.command({ requestId: randomUUID(), op: row.op, params: { ...row.params, confirm: true, revision: row.revision } });
     const after = await settle(service);
     assert.equal(after.job?.error, undefined); assert.equal(after.dataCleanup?.[kind]?.count, 0);
-    assert.equal(barriers, 1); assert.equal(readRtkConfig(f.root).enabled, false);
+    assert.equal(executions, 1); assert.equal(readRtkConfig(f.root).enabled, false);
     assert.equal(cleanupProgress(row, after, after.job?.id).state, "verified");
     assert.equal(existsSync(f.original), kind === "stats");
     assert.equal(rtkStats(f.root).count, kind === "stats" ? 0 : 1);
@@ -43,7 +45,7 @@ for (const kind of ["stats", "originals"] as const) test(`independent RTK ${kind
   } finally { await service.close(); f.cleanup(); }
 });
 
-test("new originals inside the worker barrier invalidate confirmation before changing config", async () => {
+test("new originals before deletion invalidate confirmation before changing config", async () => {
   const f = fixture();
   const service = new RtkService(f.root, () => {}, { removal: async work => { saveRtkOriginal(f.root, randomUUID(), "arrived"); return work(); } });
   try {
@@ -52,6 +54,32 @@ test("new originals inside the worker barrier invalidate confirmation before cha
     const after = await settle(service);
     assert.match(after.job!.error!, /范围已变化/); assert.equal(readRtkConfig(f.root).revision, "initial"); assert.equal(existsSync(f.original), true);
   } finally { await service.close(); f.cleanup(); }
+});
+
+for (const kind of ["stats", "originals"] as const) test(`explicit RTK ${kind} cleanup runs while a filter and tool owner are active`, async () => {
+  const f = fixture(), directory = `v1.0.0-${randomUUID()}`, bin = join(f.root, "integrations/rtk/versions", directory);
+  mkdirSync(bin, { recursive: true }); writeFileSync(join(bin, process.platform === "win32" ? "rtk.exe" : "rtk"), "fixture");
+  atomicRtkJson(rtkConfigPath(f.root), { ...readRtkConfig(f.root), enabled: true, installation: { version: "1.0.0", directory } });
+  const service = new RtkService(f.root, () => {});
+  const path = join(f.root, `.axiom-command-${randomUUID()}.json`), owner = createProcessOwner(path);
+  let release!: () => void, entered = false;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const text = Array.from({ length: 100 }, (_, i) => `src/long-directory/file-${i}.ts`).join("\n");
+  const pending = filterRtkResult(f.root, "main", { type: "tool_result", toolName: "bash", toolCallId: "active-filter", input: { command: "rg --files" }, content: [{ type: "text", text }], isError: false, details: undefined, structuredContent: { output: text, exit_code: 0, truncated: false } }, undefined, async () => {
+    entered = true; await gate; return Buffer.from("100 files\n");
+  });
+  try {
+    const deadline = Date.now() + 5000;
+    while (!entered) { assert.ok(Date.now() < deadline); await new Promise(resolve => setImmediate(resolve)); }
+    assert.throws(() => assertToolProcessesStopped(f.root), { code: "stop-unconfirmed" });
+    const before = service.snapshot();
+    await service.command({ requestId: randomUUID(), op: kind === "stats" ? "rtk.cleanupStats" : "rtk.cleanupOriginals", params: { confirm: true, revision: before.revision, cleanupRevision: before.dataCleanup![kind]!.revision } });
+    const after = await settle(service);
+    assert.equal(after.job?.error, undefined); assert.equal(after.dataCleanup![kind]!.count, 0);
+    assert.equal(existsSync(path), true, "cleanup cannot stop or remove the active tool owner");
+    release(); assert.equal(await pending, undefined, "old filter handles the removed resource revision without republishing data");
+    assert.equal(service.snapshot().dataCleanup![kind]!.count, 0);
+  } finally { release(); await pending; owner.stopped("not-started"); owner.confirmed(); await service.close(); f.cleanup(); }
 });
 
 test("original cleanup preserves unrecognized files, symlinks and hardlinks", () => {

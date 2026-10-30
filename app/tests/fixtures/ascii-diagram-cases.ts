@@ -1,4 +1,4 @@
-export interface DiagramCase { id: string; title: string; source: string; fallback?: boolean }
+export interface DiagramCase { id: string; title: string; source: string; fallback?: boolean; panel?: boolean }
 const box = (rows: string[], width = 28) => `┌${"─".repeat(width)}┐\n${rows.map(row => `│${row}${" ".repeat(Math.max(0, width - displayWidth(row)))}│`).join("\n")}\n└${"─".repeat(width)}┘`;
 // Deliberately independent of the parser, for the fixture's terminal grid.
 const displayWidth = (s: string) => Array.from(s).reduce((n, c) => n + (/[^\u0000-\u00ff]/u.test(c) ? 2 : 1), 0);
@@ -32,7 +32,7 @@ export const diagramCases: DiagramCase[] = [
   { id: "dashed", title: "虚线与粗线不能变实细线", source: "┏━━━━━━━━━━━━┓\n┃   重要     ┃\n┗━━━━━━━━━━━━┛\n      │\n      ↓\n┌╌╌╌╌╌╌╌╌╌╌╌╌┐\n╎   可选     ╎\n└╌╌╌╌╌╌╌╌╌╌╌╌┘", fallback: true },
   { id: "diagonal", title: "斜线分支不可散落为文字", source: "    ┌────┐\n    │判断│\n    └────┘\n     /  \\\n    v    v\n   Yes   No", fallback: true },
   { id: "bracket", title: "方括号节点和左右分叉", source: "[入口]\n   │\n   ├──→ [成功]\n   └──→ [失败]" },
-  { id: "emoji", title: "emoji/组合字素混排", source: "┌────────────────────┐\n│ 👩‍💻 开发 é API    │\n│ 🇨🇳 中文 ✅ done   │\n└────────────────────┘", fallback: true },
+  { id: "emoji", title: "emoji/组合字素混排", source: "┌────────────────────┐\n│ 👩‍💻 开发 é API    │\n│ 🇨🇳 中文 ✅ done   │\n└────────────────────┘", fallback: true, panel: true },
   { id: "fullwidth", title: "全角标点、全角空格与缩进", source: box([" 状态：成功；待处理！", " A　B  C", " key = value"]) },
   { id: "tab", title: "Tab缩进（4列）", source: "A ──┐\n\t├→ B\nC ──┘" },
   { id: "misaligned", title: "错误缩进导致断线保留原文", source: "A ─┐\n\t├→ B\nC ─┘", fallback: true },

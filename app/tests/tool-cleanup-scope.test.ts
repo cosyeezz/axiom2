@@ -7,13 +7,13 @@ import { tmpdir } from "./temporary.js";
 import { cleanupScope, assertCleanupScope } from "../src/server/integrations/cleanup-scope.js";
 import { OpenCliService } from "../src/server/integrations/opencli.js";
 import { openCliFixture } from "./fixtures/opencli.js";
-import { openCliConfigPath } from "../src/server/integrations/opencli-runtime.js";
+import { openCliConfigPath, readOpenCliConfig } from "../src/server/integrations/opencli-runtime.js";
 import { ReaService } from "../src/server/integrations/rea.js";
-import { atomicReaJson, reaConfigPath, reaDirectory, type ReaConfig } from "../src/server/integrations/rea-runtime.js";
+import { atomicReaJson, readReaConfig, reaConfigPath, reaDirectory, type ReaConfig } from "../src/server/integrations/rea-runtime.js";
 import { removeRea } from "../src/server/integrations/rea-removal.js";
 import { ModelProxyService } from "../src/server/integrations/model-proxy.js";
 import { beginBuiltinOperation } from "../src/server/integrations/builtin-operation.js";
-import { atomicProxyJson, proxyConfigPath, proxyDirectory, type ProxyConfig } from "../src/server/integrations/model-proxy-config.js";
+import { atomicProxyJson, readProxyConfig, proxyConfigPath, proxyDirectory, type ProxyConfig } from "../src/server/integrations/model-proxy-config.js";
 
 const turn = () => new Promise<void>(resolve => setImmediate(resolve));
 async function settle(service: { snapshot(): { job?: { running: boolean; error?: string } } }) {
@@ -40,7 +40,7 @@ test("cleanup confirmation binds candidate set and directory identity, while ord
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test("OpenCLI orphan preview is read-only and stale candidates cannot authorize uninstall", async () => {
+test("OpenCLI orphan preview is read-only and a stale preview does not block forced uninstall", async () => {
   const f = openCliFixture();
   const parent = join(f.root, "integrations", "opencli", "versions");
   const first = directory(parent, `v1.8.8-${randomUUID()}`);
@@ -55,24 +55,15 @@ test("OpenCLI orphan preview is read-only and stale candidates cannot authorize 
     assert.equal(fs.existsSync(openCliConfigPath(f.root)), false);
     const second = directory(parent, `v1.8.9-${randomUUID()}`); own(second);
     await s.command({ requestId: randomUUID(), op: "opencli.uninstall", params: { confirm: true, revision: before.revision, cleanupRevision: before.cleanup!.revision } });
-    await settle(s); assert.match(s.snapshot().job!.error!, /范围已变化/);
-    assert.equal(barriers, 0, "stale paths must not stop workers");
-    assert.ok(fs.existsSync(first)); assert.ok(fs.existsSync(second));
-    assert.equal(fs.existsSync(openCliConfigPath(f.root)), false);
-    const gatePreview = s.snapshot();
-    mutateGate = () => { fs.writeFileSync(join(first, 'created-while-workers-stop'), 'fixture'); };
-    await s.command({ requestId: randomUUID(), op: "opencli.uninstall", params: { confirm: true, revision: gatePreview.revision, cleanupRevision: gatePreview.cleanup!.revision } });
-    await settle(s); assert.match(s.snapshot().job!.error!, /范围已变化/);
-    assert.equal(barriers, 1); assert.equal(fs.existsSync(openCliConfigPath(f.root)), false);
-    assert.ok(fs.existsSync(first)); assert.ok(fs.existsSync(second));
-    const fresh = s.snapshot();
-    await s.command({ requestId: randomUUID(), op: "opencli.uninstall", params: { confirm: true, revision: fresh.revision, cleanupRevision: fresh.cleanup!.revision } });
-    await settle(s); assert.equal(s.snapshot().job?.error, undefined);
+    await settle(s); assert.equal(s.snapshot().job?.error, undefined, "component standard: no scope check");
+    assert.equal(barriers, 1); void mutateGate;
+    assert.equal(fs.existsSync(first), false); assert.equal(fs.existsSync(second), false);
+    assert.equal(readOpenCliConfig(f.root)!.detached, true);
     assert.deepEqual(s.snapshot().cleanup?.paths, []);
   } finally { await s.close(); fs.rmSync(f.root, { recursive: true, force: true }); }
 });
 
-for (const engine of [undefined, "java"] as const) test(`REA ${engine || "program"} preview lists only owned scope and rejects replacement before config changes`, async () => {
+for (const engine of [undefined, "java"] as const) test(`REA ${engine || "program"} preview lists only owned scope; a replaced directory does not block forced uninstall`, async () => {
   const root = fs.mkdtempSync(join(tmpdir(), "rea-scope-"));
   const programName = `v6.7.0-${randomUUID()}`, engineName = `java-${randomUUID()}`;
   const program = directory(join(reaDirectory(root), "versions"), programName);
@@ -92,14 +83,15 @@ for (const engine of [undefined, "java"] as const) test(`REA ${engine || "progra
     const target = scope.paths[0]; fs.renameSync(target, join(root, "original")); fs.mkdirSync(target);
     assert.throws(() => removeRea(root, config.revision, engine, scope.revision), /范围已变化/);
     await s.command({ op: engine ? 'rea.engine-uninstall' : 'rea.uninstall', requestId: randomUUID(), params: { confirm: true, revision: engine ? state.engines!.find(item => item.id === engine)!.revision : state.revision, cleanupRevision: scope.revision, ...(engine ? { engine } : {}) } });
-    await settle(s); assert.match(s.snapshot().job!.error!, /范围已变化/);
-    assert.equal(barriers, 0, 'stale scope must not stop workers');
-    assert.equal(fs.readFileSync(reaConfigPath(root), "utf8"), bytes);
-    assert.ok(fs.existsSync(target)); assert.ok(fs.existsSync(external)); assert.ok(fs.existsSync(unknown));
+    await settle(s); assert.equal(s.snapshot().job?.error, undefined);
+    assert.equal(fs.existsSync(target), false); assert.ok(fs.existsSync(external), "external files are kept");
+    const after = readReaConfig(root);
+    if (engine) { assert.equal(after.engines?.java, undefined); assert.equal(fs.existsSync(unknown), false); assert.equal(after.installation?.directory, programName); }
+    else { assert.equal(after.installation, undefined); assert.ok(fs.existsSync(java), "program uninstall keeps engine directories"); }
   } finally { await s.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-for (const importer of [false, true]) test(`Xray preview rejects changes to ${importer ? "importer" : "core"} versions`, async () => {
+for (const importer of [false, true]) test(`Xray ${importer ? "importer" : "core"} changes after preview do not block forced uninstall`, async () => {
   const root = fs.mkdtempSync(join(tmpdir(), "proxy-scope-"));
   const parent = join(proxyDirectory(root), importer ? "importer" : "versions");
   const name = importer ? "xray-knife-11.4.1-win32-x64" : `xray-1.0.0-${randomUUID()}`;
@@ -116,8 +108,8 @@ for (const importer of [false, true]) test(`Xray preview rejects changes to ${im
     const added = directory(parent, importer ? "xray-knife-11.4.0-win32-x64" : `xray-0.9.0-${randomUUID()}`);
     await s.command({ requestId: randomUUID(), op: "modelProxy.uninstall", params: { revision: before.revision, confirm: true, cleanupRevision: scope.revision, kernel: "xray" } });
     await settle(s);
-    assert.match(s.snapshot().job!.error!, /范围已变化/);
-    assert.equal(fs.readFileSync(proxyConfigPath(root), "utf8"), bytes);
-    assert.ok(fs.existsSync(first)); assert.ok(fs.existsSync(added));
+    assert.equal(s.snapshot().job?.error, undefined);
+    assert.equal(fs.existsSync(first), false); assert.equal(fs.existsSync(added), false);
+    assert.equal(readProxyConfig(root).installations.xray, undefined);
   } finally { await s.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });

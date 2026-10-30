@@ -1,4 +1,3 @@
-.usage[data-od-id="token-usage"] .usage-metric.session-reload-trigger>svg{width:20px;height:20px;flex-basis:20px}
 .usage-metric:has(.reload-indicator){position:relative}
 .reload-indicator{position:absolute;right:10px;top:10px;width:4px;height:4px;border-radius:50%;background:currentColor}
 dialog.toolbar-detail-panel.session-reload{width:min(480px,calc(100vw - 24px))}

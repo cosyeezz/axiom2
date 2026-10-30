@@ -1,4 +1,5 @@
-import { asciiDiagramBlocks, parseAsciiDiagram, type AsciiDiagram, type DiagramBlock } from "../../shared/ascii-diagram.js";
+import { asciiDiagramBlocks, asciiPanelBlocks, parseAsciiDiagram, type AsciiDiagram, type DiagramBlock } from "../../shared/ascii-diagram.js";
+import { parseAsciiForm } from "../../shared/ascii-form.js";
 import type { DerivedCache } from "./derived-cache.js";
 
 /** Cache failed recognition too: ordinary logs can contain diagram-like punctuation. */
@@ -15,4 +16,20 @@ export function cachedAsciiDiagramBlocks(cache: DerivedCache | null, source: str
     try { return asciiDiagramBlocks(source); } catch { return []; }
   };
   return cache ? cache.get(`ascii-blocks:v1:${source}`, parse) : parse();
+}
+
+/** Separate from flow recognition so paragraphs never become form previews. */
+export function cachedAsciiForm(cache: DerivedCache | null, source: string): AsciiDiagram | undefined {
+  const parse = () => {
+    try { return parseAsciiForm(source) ?? null; } catch { return null; }
+  };
+  return (cache ? cache.get(`ascii-form:v1:${source}`, parse) : parse()) ?? undefined;
+}
+
+/** Fence-only fallback; keep failed panel scans cached as well. */
+export function cachedAsciiPanels(cache: DerivedCache | null, source: string): DiagramBlock[] {
+  const parse = () => {
+    try { return asciiPanelBlocks(source); } catch { return []; }
+  };
+  return cache ? cache.get(`ascii-panels:v1:${source}`, parse) : parse();
 }

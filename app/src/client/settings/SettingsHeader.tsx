@@ -1,7 +1,6 @@
-import { BackendMaintenanceLauncher } from "../maintenance/BackendMaintenance.js";
 import { Icon } from "../Icon.js";
-type Page = "overview" | "display" | "models" | "usage" | "tools" | "resources";
-const labels: Record<Page, string> = { overview: "概览", display: "显示与阅读", models: "模型服务", usage: "模型用量与统计", tools: "内置工具", resources: "技能与 MCP" };
+type Page = "overview" | "display" | "models" | "accounts" | "usage" | "tools" | "resources";
+const labels: Record<Page, string> = { overview: "概览", display: "显示与阅读", models: "模型服务", accounts: "多账号管理", usage: "模型用量与统计", tools: "内置工具", resources: "技能与 MCP" };
 
 /** The breadcrumb and mobile navigation have identical geometry on every settings page. */
 export function SettingsHeader({ page }: { page: Page }) {
@@ -16,7 +15,6 @@ export function SettingsHeader({ page }: { page: Page }) {
         <span aria-hidden="true">/</span>
         <strong>{labels[page]}</strong>
       </div>
-      <BackendMaintenanceLauncher />
     </header>
   );
 }

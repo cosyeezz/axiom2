@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CredentialSynchronizationError, readStoredCredential } from "@earendil-works/pi-coding-agent";
+import { readModelCredential } from "./model-account-storage.js";
 import { queryProviderUsage } from "./provider-usage.js";
 import { ensureModelProvider } from "./model-runtime.js";
 import { ModelService } from "./model-service.js";
@@ -26,9 +27,9 @@ process.on("message", (message: any) => {
 async function run(message: any, signal: AbortSignal) {
   const { root, provider, modelsPath, payload, op, id } = message;
   configureModelNetwork(root, modelsPath, provider);
-  const models = new ModelService(root);
+  const models = new ModelService(root, null, message.dir);
   if (op === "catalog") return models.catalog(provider, payload.revision, signal);
-  if (op === "usage") return queryProviderUsage(provider, readStoredCredential(provider, join(models.dir, "auth.json")), signal);
+  if (op === "usage") return queryProviderUsage(provider, (payload.accountDirect === true ? readStoredCredential : readModelCredential)(provider, join(models.dir, "auth.json")), signal);
   const runtime = await models.runtime(modelsPath);
   await ensureModelProvider(runtime, provider);
   if (runtime.getError()) throw new AppError("CONFIG_READ_FAILED", "模型配置未通过校验。");
@@ -42,7 +43,7 @@ async function run(message: any, signal: AbortSignal) {
   if (op === "available") return runtime.getAvailable(provider, { signal });
   if (op === "logout") { await runtime.logout(provider); await runtime.removeRuntimeApiKey(provider); return; }
   let supplied = false;
-  const result = await runtime.login(provider, op === "storeKey" ? "api_key" : payload.type, {
+  await runtime.login(provider, op === "storeKey" ? "api_key" : payload.type, {
     signal,
     notify: event => { if (op === "login") send({ type: "notify", id, event }); },
     prompt: async prompt => {
@@ -66,5 +67,6 @@ async function run(message: any, signal: AbortSignal) {
     try { return readFileSync(file, "utf8"); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; const value = randomUUID(); writeFileSync(file, value, { flag: "wx", mode: 0o600 }); return value; }
   } });
-  return result;
+  // Login results contain credentials. They stay in the worker's private store, never in an IPC response.
+  return { saved: true };
 }

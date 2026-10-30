@@ -11,7 +11,7 @@ import {
   running,
   type Selection,
 } from "../../shared/agent.js";
-import { tasksScope, emptyTasks } from "../../shared/tasks.js";
+import { taskPreferencesScope, type TaskPreferences } from "../../shared/tasks.js";
 import type { Configuration, Scope } from "../../shared/protocol.js";
 const emptyConfig: Configuration = {
   revision: "",
@@ -34,7 +34,7 @@ export function ModelPicker({
   onSelect,
   value,
   inheritLabel,
-  disabled = false,
+  disabled: externallyDisabled = false,
 }: {
   value?: Selection | null;
   inheritLabel?: string;
@@ -50,11 +50,11 @@ export function ModelPicker({
   const favorite = (m: { provider: string; id: string }) => favoriteKeys.has(JSON.stringify([m.provider, m.id]));
   const config = useScope("configuration", emptyConfig),
     info = useScope(scope ? agentScope(scope) : null, emptyAgent),
-    tasks = useScope(
-      childDefault && scope ? tasksScope(scope) : null,
-      emptyTasks,
-    );
-  const selection = value !== undefined ? value : childDefault ? tasks.defaultModel : info.selection;
+    preferences = useScope<TaskPreferences | null>(childDefault && value === undefined ? taskPreferencesScope : null, null);
+  const pendingLabel = childDefault && value === undefined && !preferences ? "默认子模型待同步" : undefined;
+  const disabled = externallyDisabled || !!pendingLabel;
+  const selection = value !== undefined ? value : childDefault ? preferences?.selection ?? null : info.selection;
+  const display = selection ? modelDisplay(config.available, selection) : null;
   const [query, setQuery] = useState(""),
     [draft, setDraft] = useState<Selection | null>(null),
     [busy, setBusy] = useState(false),
@@ -151,6 +151,7 @@ export function ModelPicker({
       }}
     >
       <summary
+        title={selection && display ? `${display.label} · ${selection.thinking}` : pendingLabel ?? inheritLabel ?? (childDefault ? "继承主会话选择" : "未选择模型")}
         aria-disabled={disabled || undefined}
         onClick={(e) => { if (disabled) e.preventDefault(); }}
         aria-label={
@@ -159,9 +160,9 @@ export function ModelPicker({
       >
         <span>
           {childDefault ? "默认子模型 · " : ""}
-          {selection
-            ? `${modelDisplay(config.available, selection).model} · ${selection.thinking}`
-            : inheritLabel ?? (childDefault
+          {selection && display
+            ? <><span className="model-selection-provider">{display.provider} / </span>{display.model} · {selection.thinking}</>
+            : pendingLabel ?? inheritLabel ?? (childDefault
               ? "继承主会话选择"
               : "未选择模型")}
         </span>
@@ -297,7 +298,7 @@ export function ModelPicker({
                     await onSelect(draft);
                   } else if (scope) {
                     await command(
-                      childDefault ? "task.default-model" : "agent.model",
+                      childDefault ? "task.preferences" : "agent.model",
                       { selection: draft },
                       scope,
                     );

@@ -8,6 +8,8 @@ import { syncBuiltinESMExports } from "node:module";
 import { RtkService } from "../src/server/integrations/rtk.js";
 import { atomicRtkJson, readRtkConfig, rtkConfigPath, rtkDirectory } from "../src/server/integrations/rtk-config.js";
 import { cleanRtkVersions } from "../src/server/integrations/rtk-versions.js";
+import { createProcessOwner } from "../src/server/process-owner-record.js";
+import { assertToolProcessesStopped } from "../src/server/integrations/tool-process.js";
 const turn = () => new Promise<void>(resolve => setImmediate(resolve));
 const name = () => `v1.0.0-${randomUUID()}`;
 function fixture() {
@@ -41,14 +43,14 @@ for (const depth of [0, 1, 2, 3]) test(`RTK pruning refuses junction at managed 
     assert.ok(fs.existsSync(newer));
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
-test("RTK startup cleanup runs after the application's removal gate is initialized", async () => {
+test("RTK startup cleanup defers injected execution until initialization completes", async () => {
   const f = fixture(); let ready = false, calls = 0;
   const old = join(rtkDirectory(f.root), "versions", name()); fs.mkdirSync(old); fs.utimesSync(old, 0, 0);
   const s = new RtkService(f.root, () => {}, { removal: async work => { calls++; assert.ok(ready); return work(); } });
   try { ready = true; await turn(); assert.equal(calls, 1); assert.equal(fs.existsSync(old), false); }
   finally { await s.close(); f.cleanup(); }
 });
-test("RTK stale path confirmation is rejected before the worker removal gate", async () => {
+test("RTK stale path confirmation does not block forced uninstall", async () => {
   const f = fixture(); let calls = 0;
   const s = new RtkService(f.root, () => {}, { removal: async work => { calls++; return work(); } });
   try {
@@ -59,33 +61,48 @@ test("RTK stale path confirmation is rejected before the worker removal gate", a
     await s.command({ op: 'rtk.uninstall', requestId: randomUUID(), params: { confirm: true, revision: before.revision, cleanupRevision: before.cleanup!.revision } });
     const deadline = Date.now() + 5000;
     while (s.snapshot().job?.running) { assert.ok(Date.now() < deadline); await turn(); }
-    assert.match(s.snapshot().job!.error!, /范围已变化/);
-    assert.equal(calls, 0); assert.equal(fs.readFileSync(rtkConfigPath(f.root), 'utf8'), bytes);
-    assert.ok(fs.existsSync(extra));
+    assert.equal(s.snapshot().job?.error, undefined); void bytes;
+    assert.equal(readRtkConfig(f.root).installation, undefined);
+    assert.equal(fs.existsSync(extra), false, "component standard: every managed version is removed");
   } finally { await s.close(); f.cleanup(); }
 });
-test("RTK uninstall revokes before deletion and retries partial failure after service restart", async t => {
+test("RTK explicit removal does not wait for an application-root tool owner", async () => {
+  const f = fixture(), s = new RtkService(f.root, () => {});
+  const path = join(f.root, `.axiom-command-${randomUUID()}.json`), owner = createProcessOwner(path);
+  try {
+    assert.throws(() => assertToolProcessesStopped(f.root), { code: "stop-unconfirmed" });
+    const before = s.snapshot();
+    await s.command({ op: "rtk.uninstall", requestId: randomUUID(), params: { confirm: true, revision: before.revision, cleanupRevision: before.cleanup!.revision } });
+    const deadline = Date.now() + 5000;
+    while (s.snapshot().job?.running) { assert.ok(Date.now() < deadline); await turn(); }
+    assert.equal(s.snapshot().job?.error, undefined);
+    for (const name of f.names) assert.equal(fs.existsSync(join(rtkDirectory(f.root), "versions", name)), false);
+    assert.equal(fs.existsSync(path), true, "removal must not stop or clear the tool owner");
+  } finally { owner.stopped("not-started"); owner.confirmed(); await s.close(); f.cleanup(); }
+});
+test("RTK uninstall revokes before deletion, retries a busy file and recovers persistent failure on the next uninstall", async t => {
   const f = fixture(); let s = new RtkService(f.root, () => {});
   const originalRm = fs.rmSync;
   fs.mkdirSync(join(rtkDirectory(f.root), "originals")); fs.writeFileSync(join(rtkDirectory(f.root), "originals", "keep.txt"), "original");
   fs.writeFileSync(join(rtkDirectory(f.root), "effects.sqlite"), "statistics");
-  let deletes = 0;
+  let deletes = 0, persistent = true;
   const mock = t.mock.method(fs, "rmSync", ((path, options) => {
     if (f.names.some(item => String(path).endsWith(item))) {
       assert.equal(readRtkConfig(f.root).installation, undefined);
-      assert.equal(readRtkConfig(f.root).removalPending?.length, 2);
       if (++deletes === 2) throw Object.assign(Error("busy"), { code: "EBUSY" });
+      if (persistent && String(path).endsWith(f.names[1])) throw Object.assign(Error("busy"), { code: "EBUSY" });
     }
     return originalRm(path, options);
   }) as typeof fs.rmSync); syncBuiltinESMExports();
   try {
-    assert.match((await uninstall(s)).job!.error!, /部分程序文件/);
-    mock.mock.restore(); syncBuiltinESMExports();
+    assert.match((await uninstall(s)).job!.error!, /部分文件/);
+    assert.ok(fs.existsSync(join(rtkDirectory(f.root), "versions", f.names[1])));
+    persistent = false; deletes = 0;
     await s.close(); s = new RtkService(f.root, () => {});
-    assert.equal(s.snapshot().removalPending, true);
-    assert.equal((await uninstall(s)).job!.error, undefined);
+    assert.equal((await uninstall(s)).job!.error, undefined, "a single busy delete is retried automatically");
+    mock.mock.restore(); syncBuiltinESMExports();
     assert.equal(readRtkConfig(f.root).removalPending, undefined);
-    assert.deepEqual(s.snapshot().settings, { enabled: true, level: "aggressive", subagents: false });
+    assert.deepEqual(s.snapshot().settings, { enabled: false, level: "aggressive", subagents: false }, "uninstall disables RTK and keeps other settings");
     assert.equal(fs.readFileSync(join(rtkDirectory(f.root), "effects.sqlite"), "utf8"), "statistics");
     assert.equal(fs.readFileSync(join(rtkDirectory(f.root), "originals", "keep.txt"), "utf8"), "original");
     for (const item of f.names) assert.equal(fs.existsSync(join(rtkDirectory(f.root), "versions", item)), false);
@@ -99,11 +116,12 @@ for (const failedWrite of [1, 2]) test(`RTK uninstall safely recovers configurat
     return rename(source, target);
   }) as typeof fs.renameSync); syncBuiltinESMExports();
   try {
-    assert.ok((await uninstall(s)).job!.error);
+    const first = await uninstall(s);
     if (failedWrite === 1) {
+      assert.ok(first.job!.error);
       assert.equal(readRtkConfig(f.root).installation?.directory, f.names[0]);
       for (const item of f.names) assert.ok(fs.existsSync(join(rtkDirectory(f.root), "versions", item)));
-    } else { assert.equal(readRtkConfig(f.root).installation, undefined); assert.equal(readRtkConfig(f.root).removalPending?.length, 2); }
+    } else { assert.equal(first.job!.error, undefined, "forced uninstall publishes configuration once"); assert.equal(writes, 1); }
     mock.mock.restore(); syncBuiltinESMExports();
     assert.equal((await uninstall(s)).job!.error, undefined);
     assert.equal(readRtkConfig(f.root).installation, undefined); assert.equal(readRtkConfig(f.root).removalPending, undefined);

@@ -87,7 +87,12 @@ export function Composer({
   return (
     <section className="composer-area">
       <div className="container">
-        <SteeringQueue scope={scope} nested={nested} />
+        <SteeringQueue scope={scope} nested={nested} disabled={busy || reading || !connected || !!editing}
+          onRecall={(inputId) => {
+            lastEscape.current = null;
+            input.current?.focus({ preventScroll: true });
+            void recall(inputId);
+          }} />
         <SubmissionFeedback scope={scope} nested={nested} />
         <AnnotationTray scope={scope} disabled={busy || !connected || (!active && !selected)}
           send={(items, text, supplement) => void submit(active ? "append" : "prompt", {
@@ -121,7 +126,7 @@ export function Composer({
             id={promptId}
             maxLength={messageTextLimit}
             placeholder="Ask axiom…"
-            data-tooltip={`${active ? "Enter 追加 Steering" : "Enter 发送"} · Shift+Enter 换行 · 双击 Esc 撤回排队内容`}
+            aria-description={`${active ? "Enter 追加 Steering" : "Enter 发送"} · Shift+Enter 换行 · 双击 Esc 撤回排队内容`}
             lang="en"
             data-od-id="message-input"
             value={draft.text}

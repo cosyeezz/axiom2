@@ -10,7 +10,8 @@ import type { Run } from "../src/shared/agent.js";
 
 function fixture(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), "axiom-start-delivery-"));
-  mkdirSync(join(root, "pi")); mkdirSync(join(root, "execution-models"));
+  mkdirSync(join(root, "pi"));
+  mkdirSync(join(root, "execution-models"));
   const scope = { workspaceId: "workspace", sessionId: "session" };
   const selection = { provider: "fixture", id: "fixture", thinking: "off" as const };
   const cached = { root, cwd: root, file: join(root, "session.jsonl"), modelsFile: join(root, "cached.json"), selection };
@@ -47,6 +48,25 @@ function fixture(t: TestContext) {
   });
   return { runs, child, scope, run, input, cached, saved, settlements, sent, receipts, close, killed: () => killed };
 }
+
+test("IPC disconnect retires the old owner before a single interrupted settlement", async t => {
+  const f = fixture(t);
+  await f.runs.launch(f.scope, f.run, f.input);
+  f.run.status = "running";
+  f.child.connected = false;
+  f.child.emit("disconnect");
+  assert.equal(f.killed(), 1, "the old process is retired before another owner can start");
+  assert.equal(f.saved.length, 0, "disconnection alone must not settle a still-live owner");
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.runs.active(f.scope), false);
+  assert.equal(f.settlements.length, 1);
+  assert.equal(f.settlements[0].status, "interrupted");
+  assert.equal(f.settlements[0].reasonCode, "WORKER_INTERRUPTED");
+  assert.equal(f.saved[0][5], true, "runtime settlement atomically records recovery");
+  f.close(); f.child.emit("disconnect");
+  assert.equal(f.saved.length, 1, "late close/disconnect events cannot settle twice");
+  assert.deepEqual(f.sent, ["start"], "unknown inputs are never replayed by transport");
+});
 
 for (const mode of ["sync-throw", "callback-error", "backpressure"] as const) {
   test(`runtime IPC ${mode} preserves uncertainty and reports every notification once`, async (t) => {

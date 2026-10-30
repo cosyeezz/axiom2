@@ -2,10 +2,11 @@ import { withCommandAdmission } from "../command-admission.js";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { ExtensionFactory, ToolResultEvent, ToolResultEventResult } from "@earendil-works/pi-coding-agent";
+import type { ExtensionFactory, ToolCallEvent, ToolCallEventResult, ToolResultEvent, ToolResultEventResult } from "@earendil-works/pi-coding-agent";
 import { rtkPolicies, type RtkEvent, type RtkLevel, type RtkReason } from "../../shared/rtk.js";
 import { readRtkConfig, rtkDirectory, rtkExecutable } from "./rtk-config.js";
-import { runRtk, type RtkRun } from "./rtk-process.js";
+import { runRtk, runRtkCommand, type RtkCommandRun, type RtkRun } from "./rtk-process.js";
+import { bindRtkRewrite, rtkRewriteEligibility } from "./rtk-rewrite.js";
 import { recordRtkEvent, saveRtkOriginal } from "./rtk-stats.js";
 
 /** Only options known to preserve newline-delimited paths are accepted. */
@@ -158,6 +159,83 @@ export async function filterRtkResult(root: string, role: "main" | "subagent", e
     });
   } catch { return skip(signal?.aborted ? "cancelled" : "failed"); }
 }
-export function rtkExtension(root: string, role: "main" | "subagent"): ExtensionFactory {
-  return pi => { pi.on("tool_result", (event, ctx) => filterRtkResult(root, role, event, ctx.signal)); };
+type RewriteOptions = {
+  /** The public Pi runner replays ALL permission hooks, not just Axiom's hooks.
+   * Register this extension LAST, after disk and other inline extensions. */
+  authorizeRewrite?: (event: ToolCallEvent) => Promise<ToolCallEventResult | undefined>;
+  /** Custom shell executables/prefixes have unverified semantics: keep original execution. */
+  rewriteAllowed?: () => boolean;
+  runRewrite?: RtkCommandRun;
+  runPostprocess?: RtkRun;
+};
+export function rtkExtension(root: string, role: "main" | "subagent", options: RewriteOptions = {}): ExtensionFactory {
+  return pi => {
+    const rechecking = new Set<string>(), adopted = new Set<string>();
+    const rewriteAllowed = () => process.platform !== "win32" && process.env.RTK_DISABLED !== "1" && !process.env.BASH_ENV && !process.env.ENV && !process.env.SHELLOPTS && !process.env.BASHOPTS && !Object.keys(process.env).some(key => key.startsWith("BASH_FUNC_")) && options.rewriteAllowed?.() !== false;
+    pi.on("tool_call", async (event, ctx) => {
+      if (rechecking.has(event.toolCallId) || !options.authorizeRewrite || event.toolName !== "bash" || event.parentToolCallId || typeof event.input.command !== "string" || !rewriteAllowed()) return;
+      let config; try { config = readRtkConfig(root); } catch { return; }
+      if (!config.enabled || config.level === "conservative" || (role === "subagent" && !config.subagents)) return;
+      const start = performance.now(), id = randomUUID(), original = event.input.command;
+      const file = rtkExecutable(root, config);
+      const current = () => {
+        try { const fresh = readRtkConfig(root); return fresh.revision === config.revision && fresh.enabled && rtkExecutable(root, fresh) === file && rewriteAllowed(); }
+        catch { return false; }
+      };
+      const recordUnlocked = (reason: RtkReason) => {
+        if (!current()) return;
+        try { recordRtkEvent(root, { id, at: Date.now(), role, level: config.level, filter: "rewrite", stage: "rewrite", reason, inputBytes: 0, outputBytes: 0, durationMs: performance.now() - start, version: config.installation?.version ?? "" }); }
+        catch { /* Statistics must never authorize, retry, or break a tool. */ }
+      };
+      const record = (reason: RtkReason) => {
+        try { withCommandAdmission(root, () => recordUnlocked(reason)); } catch { /* Cleanup owns admission. */ }
+      };
+      if (ctx.signal?.aborted) { record("cancelled"); return; }
+      const eligibility = rtkRewriteEligibility(original);
+      if (eligibility !== "eligible") { record(eligibility); return; }
+      if (!file || !existsSync(file)) { record("missing"); return; }
+      let command: string | undefined;
+      try {
+        const result = await (options.runRewrite ?? runRtkCommand)(file, ["rewrite", original], { root, signal: ctx.signal, timeout: 2000, limit: 65_536, errorLimit: 8192, admissionCheck: () => {
+          if (!current()) throw Error("RTK 配置已变化，未启动旧程序。");
+        } });
+        if (!current()) return;
+        if (ctx.signal?.aborted) { record("cancelled"); return; }
+        if (result.code === 2) { record("rewrite_denied"); return { block: true, reason: "RTK 拒绝此命令，未执行。" }; }
+        if (result.code === 1) { record("no_match"); return; }
+        if (result.code !== 0 && result.code !== 3) { record("rewrite_failed"); return; }
+        const candidate = new TextDecoder("utf-8", { fatal: true }).decode(result.stdout).trim();
+        command = bindRtkRewrite(root, original, candidate, file, config.level);
+        if (!command) { record("rewrite_policy"); return; }
+      } catch { record(ctx.signal?.aborted ? "cancelled" : "rewrite_failed"); return; }
+      // Rewrite computation can fall back. Permission rejection/exception CANNOT.
+      // Replay is validation only: the SDK executes exactly one business command.
+      const candidate: ToolCallEvent = { ...event, input: { ...event.input, command } };
+      const expected = JSON.stringify(candidate);
+      rechecking.add(event.toolCallId);
+      try {
+        const decision = await options.authorizeRewrite(candidate);
+        if (decision?.block) { record("rewrite_blocked"); return decision; }
+        if (JSON.stringify(candidate) !== expected) {
+          record("rewrite_blocked"); return { block: true, reason: "权限检查修改了 RTK 候选命令，未执行。" };
+        }
+        if (ctx.signal?.aborted) { record("cancelled"); return; }
+        withCommandAdmission(root, () => {
+          if (!current()) return;
+          event.input.command = command;
+          adopted.add(event.toolCallId);
+          recordUnlocked("rewritten");
+        });
+      } catch (error) { record("rewrite_blocked"); throw error; }
+      finally { rechecking.delete(event.toolCallId); }
+    });
+    pi.on("tool_result", (event, ctx) => {
+      if (adopted.delete(event.toolCallId)) return; // Never pipe an already compressed result, including errors.
+      return filterRtkResult(root, role, event, ctx.signal, options.runPostprocess);
+    });
+    pi.on("tool_execution_end", event => { adopted.delete(event.toolCallId); });
+    const clear = () => { adopted.clear(); rechecking.clear(); };
+    pi.on("agent_end", clear);
+    pi.on("session_shutdown", clear);
+  };
 }

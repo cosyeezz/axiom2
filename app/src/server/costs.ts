@@ -53,12 +53,16 @@ export class Costs {
     return root;
   }
   get(requested: Scope): CostReport {
-    const scope = this.owner(requested), root = this.store.session(scope.workspaceId, scope.sessionId);
+    const owner = this.owner(requested), scope = { ...requested }, root = this.store.session(scope.workspaceId, scope.sessionId);
+    // Invalidation is shared by the family, but a child read must never expose
+    // its parent's or siblings' accounting records, titles or warnings.
     // A direct read must not consume an invalidation still owed to other views.
-    const key = JSON.stringify(scope);
-    if (this.versions.get(key) === undefined) this.versions.set(key, this.sourceVersion(scope));
-    const children = this.store.db.prepare("SELECT t.id,t.sessionId,t.title,t.status FROM tasks t JOIN sessions s ON s.id=t.sessionId AND s.workspaceId=t.workspaceId WHERE t.workspaceId=? AND t.parentSessionId=? ORDER BY t.createdAt,t.id").all(scope.workspaceId, scope.sessionId);
-    const sessions: CostReport["sessions"] = [{ id: root.id, title: root.title, taskId: null, status: null },
+    const key = JSON.stringify(owner);
+    if (this.versions.get(key) === undefined) this.versions.set(key, this.sourceVersion(owner));
+    const task = this.store.db.prepare("SELECT id,title,status FROM tasks WHERE workspaceId=? AND sessionId=?").get(scope.workspaceId, scope.sessionId);
+    const children = task ? [] : this.store.db.prepare("SELECT t.id,t.sessionId,t.title,t.status FROM tasks t JOIN sessions s ON s.id=t.sessionId AND s.workspaceId=t.workspaceId WHERE t.workspaceId=? AND t.parentSessionId=? ORDER BY t.createdAt,t.id").all(scope.workspaceId, scope.sessionId);
+    const title = task ? typeof task.title === "string" && task.title.trim() ? task.title : "子任务" : root.title;
+    const sessions: CostReport["sessions"] = [{ id: root.id, title, taskId: task ? String(task.id) : null, status: task ? String(task.status) : null },
       ...children.map((row) => ({ id: String(row.sessionId), title: typeof row.title === "string" && row.title.trim() ? row.title : "子任务", taskId: String(row.id), status: String(row.status) }))];
     const rows = new Map<string, CostRow>(), warnings: string[] = [];
     for (const session of sessions) {
@@ -129,7 +133,7 @@ export class Costs {
       }
     }
     const result = [...rows.values()];
-    return { scope, requestedSessionId: requested.sessionId, title: root.title, updatedAt: Date.now(), sessions,
+    return { scope, requestedSessionId: requested.sessionId, title, updatedAt: Date.now(), sessions,
       rows: result, total: sumCosts(result), warnings };
   }
   private jobLabel(job: Compression) {

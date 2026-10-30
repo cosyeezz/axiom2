@@ -9,8 +9,11 @@
 .mermaid-preview img { display: block; max-width: 100%; height: auto; margin: auto; }
 .markdown .tok-attr { color: color-mix(in srgb, var(--accent) 60%, var(--fg)); }
 .ascii-diagram-preview { max-width: 100%; overflow: auto; padding: 4px; color: var(--fg); }
+.markdown .ascii-diagram-parts pre.ascii-diagram-source { padding: 8px 16px; }
 .ascii-diagram-preview:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
 .ascii-diagram-preview > .ascii-diagram-svg { display: block; max-width: none; flex-shrink: 0; margin: auto; }
+.ascii-diagram-parts .ascii-diagram-preview > .ascii-diagram-svg { margin: 0; }
 .ascii-diagram-svg .ascii-diagram-lines { color: color-mix(in srgb, var(--accent) 60%, var(--fg)); }
+.ascii-diagram-svg .ascii-diagram-fields { color: color-mix(in srgb, var(--fg) 35%, transparent); fill: color-mix(in srgb, var(--fg) 3%, transparent); }
 .ascii-diagram-svg .ascii-diagram-labels { font-family: var(--font-mono, monospace); }
 .markdown .code-card pre.ascii-diagram-source { white-space: pre; overflow-wrap: normal; overflow-x: auto; tab-size: 4; }

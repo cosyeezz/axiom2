@@ -1,7 +1,8 @@
-import { closeSync, fstatSync, openSync, readSync, readFileSync, statSync, realpathSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync, statSync, realpathSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { extname, resolve } from "node:path";
-import { SessionManager, buildSessionProjection, parseSessionEntries } from "@earendil-works/pi-coding-agent";
+import { SessionManager, buildSessionProjection } from "@earendil-works/pi-coding-agent";
+import { readTranscriptSource } from "./transcript-source.js";
 import { AppError, attachmentDisplay, type ImageAttachment } from "../shared/protocol.js";
 import { persistedSkillInput } from "../shared/skills.js";
 import { imageDisplayText, imagesInput } from "./images.js";
@@ -213,6 +214,7 @@ export function transcriptHeader(file: string) {
   } finally { closeSync(fd); }
 }
 export function openTranscript(file: string, cwd: string, options: { readOnly?: boolean } = {}): SessionManager {
+  if (options.readOnly) return readTranscriptSource(file, cwd).manager;
   try {
     // Validate ownership, then let pi handle its native JSONL recovery (including a partial tail).
     const { header, identity } = transcriptHeader(file);
@@ -220,12 +222,7 @@ export function openTranscript(file: string, cwd: string, options: { readOnly?: 
     // Resolve OS aliases natively: Windows short names and macOS /var aliases
     // must identify the same real workspace, without case-folding path strings.
     if (resolve(header.cwd) !== resolve(cwd) && realpathSync.native(header.cwd) !== realpathSync.native(cwd)) throw Error();
-    // setSessionFile/loadEntriesFromFile repair a missing final newline even on
-    // an in-memory manager. Parse through Pi's public API and hydrate entries
-    // directly so read-only views cannot rewrite recovery/migration to disk.
-    const manager = options.readOnly
-      ? SessionManager.inMemory(cwd, undefined, parseSessionEntries(readFileSync(file, "utf8")))
-      : SessionManager.open(file);
+    const manager = SessionManager.open(file);
     const current = statSync(file);
     if (current.dev !== identity.dev || current.ino !== identity.ino || current.birthtimeMs !== identity.birthtimeMs) throw Error("Session replaced during read");
     return manager;

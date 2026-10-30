@@ -23,13 +23,15 @@ let received = 0;
 const listeners = new Map<string, Set<() => void>>();
 const sessionLru = new Map<string, true>();
 const remote = new Map<string, number>();
+// Detached cached facts cannot confirm a newly activated subscription.
+const authoritySince = new Map<string, number>();
 const wireScope = (scope: string) => scope.startsWith("message:")
   ? scope.split(":").slice(0, 3).join(":").replace(/^message:/, "messages:") : scope;
 const sessionSubscriptions = new Map<string, number>();
 const pinned = (key: string) => sessionSubscriptions.has(key);
 function sessionKey(scope: string) {
   const parts = scope.split(":");
-  return ["agent", "thread", "message", "messages", "session", "compression", "tasks", "costs", "memory", "reload"].includes(parts[0]) && parts.length >= 3
+  return ["agent", "thread", "thread-meta", "message", "messages", "session", "compression", "tasks", "task-window", "costs", "memory", "reload"].includes(parts[0]) && parts.length >= 3
     ? `${parts[1]}:${parts[2]}` : null;
 }
 // Returning to a recently viewed session must not wait on a busy backend; 2.6 MB of
@@ -172,7 +174,7 @@ function finishVisual(action: VisualAction, error?: Error) {
       // Do not overwrite a newer same-field edit from another window on late ack.
       if ((snapshot.received ?? 0) > (visualStarted.get(action.id) ?? -1)) continue;
       const data = projectVisualAction(scope, snapshot.data, action);
-      if (data !== snapshot.data) cache.set(scope, { ...snapshot, data });
+      if (data !== snapshot.data) cache.set(scope, { ...snapshot, data, synthetic: true });
     }
   }
   visualStarted.delete(action.id);
@@ -245,7 +247,7 @@ function sendCommand<T>(
     );
   const sendingSocket = socket;
   const cancelRead = () => {
-    if (!["agent.history.index", "agent.history.read", "agent.original", "agent.editable", "message.get", "message.part", "message.image", "files.document", "git.branch"].includes(op) ||
+    if (!["agent.window", "task.window", "agent.history.index", "agent.history.read", "agent.original", "agent.editable", "message.get", "message.part", "message.image", "files.document", "git.branch", "session-list.page", "session-list.initial", "session-list.first", "session-list.counts"].includes(op) ||
       socket !== sendingSocket || sendingSocket?.readyState !== WebSocket.OPEN) return;
     try { sendingSocket.send(JSON.stringify({ op: "read.cancel", requestId: crypto.randomUUID(), params: { requestId } })); } catch { /* Connection already closed. */ }
   };
@@ -308,7 +310,10 @@ export function acceptSnapshot(event: Snapshot, receivedAt = performance.now(), 
   }
   const previous = cache.get(event.scope);
   const sameStream = previous?.streamId === event.streamId;
-  if (sameStream && (previous.seq > event.seq || previous.seq === event.seq && previous.generation === connection.generation && !previous.synthetic)) return;
+  // A new subscription may replay the unchanged server seq. Renew its evidence
+  // once; duplicates within the same active lease remain ignored.
+  if (sameStream && (previous.seq > event.seq || previous.seq === event.seq && previous.generation === connection.generation && !previous.synthetic &&
+    (previous.received ?? 0) > (authoritySince.get(wireScope(event.scope)) ?? -1))) return;
   // UTF-16 strings in the parsed snapshot are roughly twice the wire length.
   sizeScope(event.scope, 2 * wireLength);
   touchSession(event.scope);
@@ -316,7 +321,10 @@ export function acceptSnapshot(event: Snapshot, receivedAt = performance.now(), 
   const put = (scope: string, data: unknown, share = false) => {
     const old = cache.get(scope);
     if (old?.streamId === event.streamId && old.seq > event.seq) return;
-    const duplicate = old?.streamId === event.streamId && old.seq === event.seq && !old.synthetic;
+    // Read-derived metadata can change without a new seq. A renewed lease or
+    // connection must keep the newly delivered data, not just renew its stamp.
+    const duplicate = old?.streamId === event.streamId && old.seq === event.seq && !old.synthetic && old.generation === connection.generation &&
+      (old.received ?? 0) > (authoritySince.get(wireScope(scope)) ?? -1);
     const unchanged = share && old?.streamId === event.streamId && !old.synthetic && equalSnapshotData(old.data, data);
     // Only data is shared: accepted delivery still advances freshness and notifies.
     cache.set(scope, { streamId: event.streamId, seq: event.seq, data: duplicate || unchanged ? old!.data : data,
@@ -340,7 +348,7 @@ export function acceptSnapshot(event: Snapshot, receivedAt = performance.now(), 
     reconcileOptimistic({ workspaceId, sessionId }, messages);
   } else {
     // Single-message deliveries retain their incoming object for latency commits.
-    put(event.scope, event.data, event.scope.startsWith("thread:"));
+    put(event.scope, event.data, event.scope.startsWith("thread:") || event.scope.startsWith("thread-meta:"));
     if (event.scope.startsWith("message:") && event.data) {
       const [, workspaceId, sessionId] = event.scope.split(":");
       reconcileOptimistic({ workspaceId, sessionId }, [event.data as ChatMessage]);
@@ -385,9 +393,12 @@ export function subscribeScope(scope: string, fn: () => void) {
     const wire = wireScope(scope), count = remote.get(wire) ?? 0;
     remote.set(wire, count + 1);
     const current = socket;
-    if (!count) void command("subscribe", { scope: wire }).catch((error) => {
-      if (socket === current && current?.readyState === WebSocket.OPEN && remote.has(wire) && !optionalMemorySubscription(wire)) setStatus(`订阅读取失败：${error.message}；请重新连接或打开会话。`);
-    });
+    if (!count) {
+      authoritySince.set(wire, received);
+      void command("subscribe", { scope: wire }).catch((error) => {
+        if (socket === current && current?.readyState === WebSocket.OPEN && remote.has(wire) && !optionalMemorySubscription(wire)) setStatus(`订阅读取失败：${error.message}；请重新连接或打开会话。`);
+      });
+    }
   }
   const listener = () => fn();
   group.add(listener);
@@ -404,7 +415,7 @@ export function subscribeScope(scope: string, fn: () => void) {
       }
       const wire = wireScope(scope), count = (remote.get(wire) ?? 1) - 1;
       if (count) remote.set(wire, count);
-      else { remote.delete(wire); void command("unsubscribe", { scope: wire }).catch(() => {}); }
+      else { remote.delete(wire); authoritySince.delete(wire); void command("unsubscribe", { scope: wire }).catch(() => {}); }
     }
   };
 }
@@ -426,6 +437,13 @@ export function renderedContextReady(scope: { workspaceId: string; sessionId: st
   });
 }
 export function scopeSnapshot<T>(scope: string): T | undefined { return visualActions.project(scope, cache.get(scope)?.data) as T | undefined; }
+/** Latest server fact from this connection and uninterrupted subscription lease,
+ * before visual overlays. Receipt-only cache merges are not authority; null is. */
+export function scopeAuthority<T>(scope: string): T | undefined {
+  const snapshot = cache.get(scope), since = authoritySince.get(wireScope(scope));
+  return connection.connected && snapshot?.generation === connection.generation && !snapshot.synthetic &&
+    since !== undefined && (snapshot.received ?? 0) > since ? snapshot.data as T : undefined;
+}
 /** Old cached facts cannot confirm current authorization or state after a reconnect. */
 export function scopeCurrent(scope: string) { return connection.connected && cache.get(scope)?.generation === connection.generation; }
 export function useScope<T>(scope: string | null, fallback: T): T {
@@ -450,13 +468,15 @@ export async function connect() {
     const response = await fetch("/api/status", { signal: AbortSignal.timeout(10_000), cache: "no-store" });
     if (!response.ok) throw Error(response.status === 401 ? "设备授权已失效，请重新连接。" : "后台服务尚未就绪");
     const current = new WebSocket(location.origin.replace(/^http/, "ws") + "/ws");
-    const handshake = setTimeout(() => { if (current.readyState === WebSocket.CONNECTING) current.close(); }, 10000);
+    let handshake = setTimeout(() => { if (current.readyState === WebSocket.CONNECTING) current.close(); }, 10000);
     socket = current;
     lastResponse = 0;
     const owns = () => socket === current;
     current.onopen = () => {
       if (!owns()) return;
       clearTimeout(handshake);
+      // OPEN alone is not evidence of a working service. A silent socket must also reconnect.
+      handshake = setTimeout(() => { if (owns() && current.readyState === WebSocket.OPEN && !lastResponse) current.close(); }, 10000);
       phase = "checking";
       connection = { connected: true, generation: connection.generation + 1 };
       setStatus("已连接本地服务");
@@ -484,6 +504,7 @@ export async function connect() {
       if (value.type === "hello" && typeof value.streamId === "string" ||
           value.type === "snapshot" && typeof value.scope === "string" && typeof value.streamId === "string" && Number.isFinite(value.seq) ||
           value.type === "receipt" && typeof value.requestId === "string" && typeof value.ok === "boolean") {
+        clearTimeout(handshake);
         lastResponse = Date.now(); phase = "connected";
       } else return;
       if (value.type === "snapshot") acceptSnapshot(value, receivedAt, performance.now() - receivedAt, e.data.length);

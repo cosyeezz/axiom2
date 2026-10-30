@@ -7,6 +7,7 @@
   --control-text: #eef1f2;
   --control-muted: #a8b2b9;
   --control-accent: #d4bb8d;
+  --control-on-accent: #202117;
   --control-icon-bg: #c8ac790d;
   --control-shadow: 0 8px 28px #00000012;
   padding: 32px max(28px, calc((100% - 1040px) / 2));
@@ -20,6 +21,7 @@ html[data-theme="light"] .connect-page.connect-refined {
   --control-text: #292f2b;
   --control-muted: #657068;
   --control-accent: #876731;
+  --control-on-accent: #fff;
   --control-icon-bg: #8767310a;
   --control-shadow: 0 6px 24px #252d2506;
   color-scheme: light;
@@ -82,6 +84,10 @@ html[data-theme="light"] .connect-page.connect-refined {
   border-radius: 7px;
   font-size: 13px !important;
 }
+.connect-page.connect-refined .connect-primary.startup-connect-button { background: var(--control-accent); border-color: var(--control-accent); color: var(--control-on-accent); }
+.connect-page.connect-refined .connect-primary.startup-connect-button:hover:not(:disabled) { background: color-mix(in srgb, var(--control-accent) 88%, var(--control-text)); border-color: var(--control-accent); }
+.connect-refined .connect-primary.connection-primary-button.is-service-stop { background: transparent; border-color: var(--control-line); color: var(--control-muted); }
+.connect-refined .connect-primary.connection-primary-button.is-service-stop:hover:not(:disabled) { background: var(--control-inset); border-color: var(--control-muted); color: var(--control-text); }
 .connect-refined .connection-primary-meta { grid-column: 1; grid-row: 1; padding: 0; min-width: 0; }
 .connect-refined .connection-service-overview { min-width: 0; }
 .connect-refined .connection-service-heading { gap: 10px; margin-bottom: 5px; }
@@ -90,14 +96,31 @@ html[data-theme="light"] .connect-page.connect-refined {
 .connect-refined .connection-status-tag { font-size: 10px; padding: 1px 7px; border-radius: 4px; }
 .connect-refined .connection-primary-area > :is(.connect-error, .connect-message) { grid-column: 1 / -1; margin: 0; }
 .connect-refined .startup-update-section { padding: 22px 24px 4px; }
-.connect-refined .updates-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 8px; }
+.connect-refined .connect-updates.updates-simple { padding: 0; }
+.connect-refined .updates-section-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 12px; padding-bottom: 0; }
+.connect-refined .updates-section-heading > div { display: contents; }
+.connect-refined .updates-section-heading h2 { grid-column: 1; grid-row: 1; }
+.connect-refined .updates-section-heading p { grid-column: 1 / -1; grid-row: 2; }
 .connect-refined .updates-section-heading h2,
 .connect-refined .startup-tools-heading h2 { color: var(--control-text); font-size: 14px; font-weight: 550; margin: 0; }
 .connect-refined .updates-section-heading p,
 .connect-refined .startup-tools-heading p { color: var(--control-muted); font-size: 11px; margin: 4px 0 0; }
-.connect-refined .updates-section-heading > svg { width: 17px; height: 17px; color: var(--control-muted); }
-.connect-refined .update-component { padding: 17px 0; }
-.connect-refined .update-component + .update-component { border-color: var(--control-soft-line); }
+.connect-refined .updates-section-heading p { margin: 0; }
+.connect-refined .startup-tools-heading h2 { display: flex; align-items: center; min-height: 32px; }
+.connect-refined .startup-tools-heading p { margin-top: 2px; }
+.connect-refined .updates-section-heading .updates-check-button { grid-column: 2; grid-row: 1; display: inline-flex; align-items: center; gap: 6px; width: auto; height: auto; min-width: 0; min-height: 32px; padding: 5px 9px; border: 1px solid var(--control-line); border-radius: 6px; background: transparent; color: var(--control-text); font-size: 12px; line-height: 1.5; white-space: nowrap; }
+.connect-refined .updates-check-button .component-action-label { display: inline; }
+.connect-refined .updates-check-button > svg { width: 14px; height: 14px; }
+.connect-refined .updates-check-button[aria-disabled="true"] { color: var(--control-muted); cursor: not-allowed; }
+.connect-refined .updates-check-button:not([aria-disabled="true"]):is(:hover, :focus-visible) { background: var(--control-inset); border-color: var(--control-muted); }
+.connect-refined .updates-check-button:focus-visible { outline: 2px solid var(--control-accent); outline-offset: 3px; }
+/* This overview is lighter than the primary connection panel; recursive cards elsewhere retain their frame. */
+.connect-refined .updates-simple > .component-card { margin: 6px 0 0; padding: 12px 16px; border: 1px solid var(--control-line); border-radius: 8px; background: transparent; }
+.connect-refined .updates-simple > .component-card > .component-card-summary:empty { display: none; }
+.connect-refined .updates-simple > .component-card > .component-secondary { margin-top: 4px; }
+.connect-refined .updates-simple > .component-card > .component-secondary > summary { min-height: 28px; }
+.connect-refined .update-component:not(.component-card) { padding: 17px 0; }
+.connect-refined .update-component:not(.component-card) + .update-component:not(.component-card) { border-color: var(--control-soft-line); }
 .connect-refined .update-component-row { gap: 12px; }
 .connect-refined .update-component-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .connect-refined .update-component-icon { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 36px; border: 1px solid var(--control-soft-line); border-radius: 8px; background: var(--control-icon-bg); color: var(--control-muted); }
@@ -159,10 +182,32 @@ html[data-theme="light"] .connect-page.connect-refined {
   .connect-refined .connect-primary.connection-primary-button { min-width: 92px; padding-inline: 13px; max-width: 150px; }
   .connect-refined .connection-primary-meta { flex-wrap: wrap; }
   .connect-refined .startup-update-section { padding: 20px 18px 4px; }
+  .connect-refined .updates-simple > .component-card > .component-secondary > summary { min-height: 32px; }
   .connect-refined .update-component-row { flex-wrap: wrap; }
   .connect-refined .update-component-row > .connect-actions { flex: 1 1 100%; padding-left: 0; }
   .connect-refined .update-component-row .connect-secondary { min-height: 44px; flex: 1 1 auto; }
   .connect-refined .connect-footer { flex-direction: column; gap: 4px; }
+}
+/* Real, separated touch targets. Do not count overlapping pseudo-elements as hit areas. */
+@media (hover: none), (pointer: coarse) {
+  .connect-refined .startup-tools-heading h2,
+  .connect-refined .updates-section-heading .updates-check-button,
+  .connect-refined .updates-simple > .component-card > .component-secondary > summary { min-height: 44px; }
+  .connect-page.connect-refined .component-card .maintenance-panel-heading .component-action,
+  .connect-page.connect-refined .component-card .component-card-location .local-path > .path-actions > .icon-btn { width: 44px; min-width: 44px; height: 44px; min-height: 44px; display: inline-grid; place-items: center; }
+  .connect-page.connect-refined .component-card .maintenance-panel-heading .component-action::before,
+  .connect-page.connect-refined .component-card .component-card-location .path-actions > .icon-btn::before { content: none; }
+  .connect-page.connect-refined .component-card .component-actions,
+  .connect-page.connect-refined .component-card .component-card-location .local-path > .path-actions { gap: 0; }
+  @container (max-width: 280px) {
+    /* Keep readable identity and path above the real-size actions, versions last. */
+    .connect-refined .updates-simple > .component-card .component-card-identity { display: grid; grid-template-columns: minmax(0, 1fr); }
+    .connect-refined .updates-simple > .component-card .component-card-name-row { display: contents; }
+    .connect-refined .updates-simple > .component-card .component-card-name-row > h3 { grid-row: 1; }
+    .connect-refined .updates-simple > .component-card .component-card-location { grid-row: 2; }
+    .connect-refined .updates-simple > .component-card .component-actions { grid-row: 3; margin-top: 2px; }
+    .connect-refined .updates-simple > .component-card .component-actions:not(:has(button)) { display: none; }
+  }
 }
 @media (max-height: 700px) and (min-width: 821px) {
   .connect-page.connect-refined { padding-block: 20px; }

@@ -3,15 +3,26 @@ import { Select } from "../Select.js";
 import { Dialog } from "../components.js";
 import { command, useConnectionState, useScope } from "../transport.js";
 import type { AuthState, ProviderProxy } from "../../shared/models.js";
-import { usageAuthScope } from "../../shared/model-usage.js";
+import type { AddModelAccount } from "../../shared/model-accounts.js";
+import { providerDisplayName } from "../../shared/model-providers.js";
+
+async function acceptedLogin(start: Promise<{ id: string }> | null, requestId: string) {
+  return start?.catch(async (error) => {
+    if (error.code !== "UNCERTAIN") return null;
+    const receipt = await command<{ status: string; data?: { id?: string } }>("request.get", { requestId });
+    if (receipt.status === "committed" && receipt.data?.id) return { id: receipt.data.id };
+    if (["not_found", "failed"].includes(receipt.status)) return null;
+    throw Error("登录受理状态待核实；请稍后再次取消，不会重新登录。");
+  });
+}
 
 export function ModelLogin({
   providerId,
   type,
   revision,
   proxy,
+  account,
   inline = false,
-  context = "models",
   onComplete,
   close,
 }: {
@@ -19,15 +30,15 @@ export function ModelLogin({
   type: "api_key" | "oauth";
   revision: string;
   proxy?: ProviderProxy;
+  account?: AddModelAccount;
   inline?: boolean;
-  context?: "models" | "usage";
   onComplete: () => void;
   close: () => void;
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { if (inline) heading.current?.focus(); }, [inline]);
-  const prefix = context === "usage" ? "usage.auth" : "auth";
-  const event = useScope<AuthState | null>(context === "usage" ? usageAuthScope : "authentication", null),
+  const prefix = "auth";
+  const event = useScope<AuthState | null>("authentication", null),
     connection = useConnectionState();
   const initialGeneration = useRef(connection.generation);
   const [id, setId] = useState(""),
@@ -37,7 +48,7 @@ export function ModelLogin({
   const [opening, setOpening] = useState(false);
   const [browserMessage, setBrowserMessage] = useState("");
   const opened = useRef(new Set<string>());
-  const completed = useRef(false);
+  const completed = useRef(false), cancelling = useRef(false), cancelPending = useRef(false);
   const completion = useRef(onComplete);
   completion.current = onComplete;
   const [lostConnection, setLostConnection] = useState(false);
@@ -51,29 +62,28 @@ export function ModelLogin({
   const state = event?.id === id ? event : null;
   useEffect(() => {
     active.current = true;
-    let flow = "";
     started.current = command<{ id: string }>(
       `${prefix}.start`,
-      { providerId, type, revision, ...(proxy ? { proxy } : {}) },
+      { providerId, type, revision, ...(proxy ? { proxy } : {}), ...(account ? { account } : {}) },
       {},
       startRequest.current,
     );
-    void started.current
+    const start = started.current;
+    void start
       .then((result) => {
-        flow = result.id;
-        if (active.current) setId(flow);
-        else void command(`${prefix}.cancel`, { id: flow }).catch(() => {});
+        if (active.current) setId(result.id);
       })
       .catch((e) => {
         if (active.current) setError(e.message);
       });
     return () => {
       active.current = false;
-      if (flow) void command(`${prefix}.cancel`, { id: flow }).catch(() => {});
+      // Tab switches must resolve an uncertain start just like explicit cancellation.
+      void acceptedLogin(start, startRequest.current).then(flow => flow && command(`${prefix}.cancel`, { id: flow.id })).catch(() => {});
     };
   }, []);
   useEffect(() => {
-    setAnswer("");
+    setAnswer(state?.prompt?.defaultValue ?? "");
     setBusy(false);
   }, [state?.prompt?.id]);
   const disconnected = lostConnection || !connection.connected || connection.generation !== initialGeneration.current;
@@ -96,28 +106,22 @@ export function ModelLogin({
     void openBrowser();
   }, [state?.url, state?.status, disconnected, closing, id, type]);
   useEffect(() => {
-    if (state?.status !== "completed" || completed.current) return;
+    if (state?.status !== "completed" || completed.current || cancelling.current || disconnected) return;
     completed.current = true;
     setAnswer("");
     setError("");
     completion.current();
-  }, [state?.status]);
+  }, [state?.status, disconnected]);
   const dismiss = async () => {
-    if (closing) return;
+    if (cancelPending.current) return;
+    // Cancellation intent is sticky even if its receipt fails; retrying cancellation
+    // must never re-enable automatic completion/navigation for this login flow.
+    cancelling.current = true;
+    cancelPending.current = true;
     setClosing(true);
     try {
       if (!disconnected) {
-        const flow = await started.current?.catch(async (error) => {
-          if (error.code !== "UNCERTAIN") return null;
-          const receipt = await command<{
-            status: string;
-            data?: { id?: string };
-          }>("request.get", { requestId: startRequest.current });
-          if (receipt.status === "committed" && receipt.data?.id)
-            return { id: receipt.data.id };
-          if (["not_found", "failed"].includes(receipt.status)) return null;
-          throw Error("登录受理状态待核实；请稍后再次取消，不会重新登录。");
-        });
+        const flow = await acceptedLogin(started.current, startRequest.current);
         if (flow) await command(`${prefix}.cancel`, { id: flow.id });
       }
       close();
@@ -125,12 +129,13 @@ export function ModelLogin({
       setError((e as Error).message);
       if (disconnected) close();
     } finally {
+      cancelPending.current = false;
       setClosing(false);
     }
   };
   const authFailed = !!error || disconnected || state?.status === "failed";
   const canInteract = state?.status === "running" && !disconnected && !closing;
-  const title = context === "usage" ? "独立用量授权 · Codex" : `${type === "oauth" ? "OAuth" : "API Key"} 登录 · ${providerId}`;
+  const title = `${account ? "添加账号 · " : ""}${type === "oauth" ? "OAuth" : "API Key"} 登录 · ${providerDisplayName(providerId)}`;
   const content = (
     <>
       <p role={authFailed ? "alert" : "status"} className={`auth-status${authFailed ? " auth-error" : ""}`} data-state={authFailed ? "failed" : state?.status || "starting"}>

@@ -6,13 +6,16 @@ import type { ChildProcess } from "node:child_process";
 import { ExecutionPool, type ExecutionLease } from "../execution-pool.js";
 import { fileRevision } from "../execution-profile.js";
 import { sameLease, ExecutionPermitDeniedError } from "../execution-protocol.js";
-import { AppError, type Scope, type Draft } from "../../shared/protocol.js";
+import { AppError, type Scope, type Draft, type Reply } from "../../shared/protocol.js";
+import { CanonicalWindowRequests } from "../canonical-window-requests.js";
+import { windowFieldErrorReceipt } from "../../shared/window-frame-budget.js";
 import { agentScope, threadScope, type Run, type Selection } from "../../shared/agent.js";
 import type { Store } from "../storage.js";
 import type { StopSource } from "../../shared/tasks.js";
 import type { WorkerInput } from "../agent-worker.js";
 import { AgentViews } from "./views.js";
 import { errorMessage } from "../error-message.js";
+import type { SessionAccountTarget } from "../../shared/session-account-usage.js";
 type Live = {
   scope: Scope;
   task: boolean;
@@ -31,7 +34,12 @@ type Live = {
   modelSelection?: Selection;
   modelChanged?: boolean;
   provider?: string;
+  quotaSelection?: Selection;
+  quotaApi?: string;
+  quotaCredentialKey?: string;
+  quotaRequestId?: string;
   receive?: (event: any) => void;
+  window?: CanonicalWindowRequests;
   timer?: NodeJS.Timeout;
   inputs: Map<string, { draft: Draft; mode: "steer" | "followUp"; pending: boolean; failed?: boolean }>;
   recalls: Map<string, { resolve: (ids: string[]) => void; reject: (error: Error) => void }>;
@@ -62,12 +70,41 @@ export class AgentRuns {
     const live = this.live.get(scope.sessionId);
     return live?.run.id === runId && this.pool.isActive(live.lease.ref) ? live.lease.ref : undefined;
   }
+  /** Only an acknowledged request from this live lease can identify its fixed stored-account binding. */
+  accountUsageTarget(scope: Scope): SessionAccountTarget | null {
+    this.store.session(scope.workspaceId, scope.sessionId);
+    const live = this.live.get(scope.sessionId), selection = live?.quotaSelection;
+    if (!live || live.scope.workspaceId !== scope.workspaceId || live.run.status !== "running" || live.finish || live.closed || live.terminating ||
+        !this.pool.isActive(live.lease.ref) || !selection || live.provider !== selection.provider || !/^[a-f0-9]{64}$/.test(live.quotaCredentialKey ?? "")) return null;
+    const api = selection.provider === "openai-codex" ? ["openai-codex-responses"] : selection.provider === "openai" ? ["openai-responses", "openai-completions"] : [];
+    if (!api.includes(live.quotaApi ?? "")) return null;
+    try {
+      const bindings = JSON.parse(live.lease.environment.env.AXIOM_MODEL_ACCOUNT_BINDINGS ?? "null");
+      if (!bindings || typeof bindings !== "object" || Array.isArray(bindings)) return null;
+      const accountId = Object.hasOwn(bindings, selection.provider) ? bindings[selection.provider] : null;
+      if (accountId !== null && (typeof accountId !== "string" || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(accountId))) return null;
+      return { providerId: selection.provider, accountId, credentialKey: live.quotaCredentialKey, source: "execution", identity: `${live.run.id}:${live.modelRevision ?? 0}:${selection.provider}:${selection.id}` };
+    } catch { return null; }
+  }
   closing = false;
   onEvent?: (scope: Scope, run: Run, event: any) => void;
   onSettled?: (scope: Scope, run: Run) => void;
   active(scope: Scope) {
     this.store.session(scope.workspaceId, scope.sessionId);
     return this.live.has(scope.sessionId) || this.pending.has(scope.sessionId);
+  }
+  private windowCurrent(live: Live) {
+    return this.live.get(live.scope.sessionId) === live && !this.closing && !live.closed && !live.finish &&
+      !live.terminating && live.run.status !== "stopping" && live.child.connected && this.pool.isActive(live.lease.ref);
+  }
+  async window(scope: Scope, requestId: string, query: unknown, signal?: AbortSignal): Promise<Reply> {
+    this.store.session(scope.workspaceId, scope.sessionId);
+    const live = this.live.get(scope.sessionId);
+    if (!live?.window || live.scope.workspaceId !== scope.workspaceId || !this.windowCurrent(live))
+      return windowFieldErrorReceipt(requestId, "UNAVAILABLE").frame;
+    const reply = await live.window.read(requestId, query, signal);
+    // A done/close/stop can arrive between IPC delivery and this continuation.
+    return this.windowCurrent(live) && !signal?.aborted ? reply : windowFieldErrorReceipt(requestId, "STALE").frame;
   }
   preemptAutomatic(scope: Scope) {
     const stopping = this.automaticStops.get(scope.sessionId);
@@ -86,6 +123,10 @@ export class AgentRuns {
     const live = this.live.get(scope.sessionId);
     if (!live || live.closed || live.finish || live.run.status === "stopping") return;
     live.modelSelection = { ...selection };
+    live.quotaSelection = undefined;
+    live.quotaApi = undefined;
+    live.quotaCredentialKey = undefined;
+    live.quotaRequestId = undefined;
     const revision = live.modelRevision = (live.modelRevision ?? 0) + 1;
     this.signal(scope, live.run.id, { type: "model", revision, selection, modelsRaw });
   }
@@ -187,11 +228,11 @@ export class AgentRuns {
       }
     });
   }
-  async recall(scope: Scope) {
+  async recall(scope: Scope, inputId?: string) {
     this.store.session(scope.workspaceId, scope.sessionId);
     const live = this.live.get(scope.sessionId);
     if (!live) return { drafts: [] };
-    const snapshot = new Map(live.inputs);
+    const snapshot = new Map([...live.inputs].filter(([id]) => inputId === undefined || id === inputId));
     const failed = [...snapshot].filter(([, input]) => input.failed).map(([id]) => id);
     const ids = [...failed, ...await this.recallIds(scope,
       [...snapshot].filter(([, input]) => !input.failed).map(([id]) => id))];
@@ -267,9 +308,18 @@ export class AgentRuns {
       }),
     };
     this.live.set(scope.sessionId, live);
+    live.window = new CanonicalWindowRequests(request => {
+      if (!this.windowCurrent(live)) throw new Error("Window owner retired");
+      child.send({ ...request, runId: run.id, lease: lease.ref }, error => { if (error) live.window?.close(); });
+    }, () => this.windowCurrent(live));
     const onMessage = async (event: any) => {
       if (this.live.get(scope.sessionId) !== live || live.run.status === "stopping" || event.runId !== run.id || !sameLease(event.lease, lease.ref)) return;
       try {
+        if (event.type === "window-result") {
+          if (this.windowCurrent(live)) live.window?.accept(event.queryId, event.frame);
+          else live.window?.close();
+          return;
+        }
         if (event.type === "idle" && live.finish && !live.storageFailed && !live.terminating && !live.modelChanged && !this.closing) {
           if (live.validatingIdle) return;
           live.validatingIdle = true;
@@ -293,11 +343,27 @@ export class AgentRuns {
         }
         if (event.type === "model-request") {
           live.provider = event.provider;
+          live.quotaCredentialKey = undefined;
+          live.quotaRequestId = undefined;
+          if (event.modelRevision === (live.modelRevision ?? 0) && typeof event.requestId === "string" &&
+              (!live.modelSelection || live.modelSelection.provider === event.selection.provider && live.modelSelection.id === event.selection.id)) {
+            live.quotaSelection = { ...event.selection };
+            live.quotaApi = event.api;
+            live.quotaRequestId = event.requestId;
+          } else {
+            live.quotaSelection = undefined;
+            live.quotaApi = undefined;
+          }
           if (JSON.stringify(live.run.selection) !== JSON.stringify(event.selection)) {
             live.run.selection = event.selection;
             this.store.db.prepare("UPDATE runs SET selection=? WHERE id=?").run(JSON.stringify(event.selection), run.id);
             this.views.changed(scope);
           }
+        }
+        if (event.type === "model-account-proof" && live.quotaRequestId === event.requestId && event.modelRevision === (live.modelRevision ?? 0) &&
+            live.quotaSelection?.provider === event.selection.provider && live.quotaSelection?.id === event.selection.id &&
+            live.provider === event.provider && live.quotaApi === event.api) {
+          live.quotaCredentialKey = event.credentialKey;
         }
         if (event.type === "input-accepted") {
           const input = live.inputs.get(event.id);
@@ -337,6 +403,7 @@ export class AgentRuns {
           recall?.resolve(event.ids);
         }
         if (event.type === "closed") live.closed = true;
+        if (event.type === "closed" || event.type === "done") live.window?.close();
         if (event.type === "done" && !live.validatingIdle) this.escalate(live, 2000);
         if (event.type === "ready")
           this.store.db
@@ -425,21 +492,28 @@ export class AgentRuns {
       }
     };
     let dispatched = false, startAcknowledged = false;
-    const onError = (error: Error) => { live.finish = { status: "failed", error: errorMessage(error, "工作进程启动失败：未收到具体错误原因。") }; };
+    const onError = (error: Error) => { live.window?.close(); live.finish = { status: "failed", error: errorMessage(error, "工作进程启动失败：未收到具体错误原因。") }; };
     const onClose = () => {
       if (dispatched && !startAcknowledged && !live.finish)
         live.finish = { status: "interrupted", error: "工作进程在启动消息发送确认前退出。", reasonCode: "UNCERTAIN" };
       settle(false);
+    };
+    const onDisconnect = () => {
+      if (!live.finish) live.finish = { status: "interrupted", error: "工作进程连接已断开；等待自动续接。", reasonCode: "WORKER_INTERRUPTED" };
+      // Retire the old owner before close/settlement can admit a replacement.
+      this.kill(live);
     };
     let settled = false;
     const settle = (keepAlive: boolean) => {
       if (settled) return;
       settled = true;
       startup.settled = true;
+      live.window?.close();
       live.receive = undefined;
       child.removeListener("message", onMessage);
       child.removeListener("error", onError);
       child.removeListener("close", onClose);
+      child.removeListener("disconnect", onDisconnect);
       clearTimeout(live.timer);
       let terminal: Run | undefined;
       try {
@@ -456,7 +530,7 @@ export class AgentRuns {
         const retry = live.run.retry && ["waiting", "retrying"].includes(live.run.retry.state)
           ? { ...live.run.retry, state: "cancelled" as const, nextRetryAt: undefined } : live.run.retry;
         if (!keepAlive) this.views.recoverRequestUsage(scope);
-        this.store.finishRun(run.id, status, error, reasonCode, retry);
+        this.store.finishRun(run.id, status, error, reasonCode, retry, true);
         this.views.settled(scope);
         this.views.queues.delete(scope.sessionId);
         this.views.refresh(scope);
@@ -503,6 +577,7 @@ export class AgentRuns {
     child.on("message", onMessage);
     child.once("error", onError);
     child.once("close", onClose);
+    child.once("disconnect", onDisconnect);
     try {
       if (!child.connected) throw new AppError("WORKER_START_FAILED", "工作进程连接已关闭；消息未发送。");
       await new Promise<void>((resolve, reject) => {
@@ -555,6 +630,7 @@ export class AgentRuns {
     await live.exit;
   }
   private stopLive(live: Live, source: StopSource = "user") {
+    live.window?.close();
     if (live.run.status === "stopping") return;
     live.run.status = "stopping";
     live.finish = { status: "cancelled", reasonCode: `${source.toUpperCase()}_STOPPED` };
@@ -570,6 +646,7 @@ export class AgentRuns {
   }
   // The pool revokes reuse before terminating the owned process tree.
   private kill(live: Live) {
+    live.window?.close();
     clearTimeout(live.timer);
     if (live.terminating) return;
     live.terminating = true;
@@ -601,6 +678,7 @@ export class AgentRuns {
   }
   async close() {
     this.closing = true;
+    for (const live of this.live.values()) live.window?.close();
     await Promise.all([...this.pending.values()].map((entry) => this.stop(entry.scope, "shutdown")));
     await this.pool.trim();
     await Promise.allSettled(

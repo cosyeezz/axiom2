@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtempSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { compact, convertToLlm, SessionManager, type SessionBeforeCompactEvent } from "@earendil-works/pi-coding-agent";
@@ -176,21 +176,24 @@ test("private prefix survives restart losslessly, omits credentials and preserve
     saveCompressionPrefix(file, f.prefix);
     const restored = readCompressionPrefix(file);
     assert.deepEqual(restored, f.prefix);
+    assert.ok(restored);
     if (process.platform !== "win32") assert.equal(statSync(`${file}.request-prefix.json`).mode & 0o777, 0o600);
     assert.doesNotMatch(JSON.stringify(restored), /DO_NOT_PERSIST|apiKey|authorization|SECRET/);
     assert.deepEqual(restored.options, { sessionId: f.manager.getSessionId(), cacheRetention: "long", reasoning: "low", transport: "sse" });
-    assertCompressionPrefix(restored, f.manager.getSessionId(), selection);
-    assert.throws(() => assertCompressionPrefix(restored, "foreign", selection), /无法复用/);
-    assert.throws(() => assertCompressionPrefix(restored, f.manager.getSessionId(), { ...selection, thinking: "high" }), /无法复用/);
-    assert.throws(() => assertCompressionPrefix({ ...restored, options: { ...restored.options, cacheRetention: "none" } }, f.manager.getSessionId(), selection), /关闭提示词缓存/);
+    const uncached = { ...restored, options: { ...restored.options, cacheRetention: "none" as const } };
+    assert.equal(compressionRequestOptions(uncached).cacheRetention, "none");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test("a changed projection fails before request dispatch instead of replaying revoked content", async () => {
+test("a changed projection continues native summary without replaying revoked content", async () => {
   const f = fixture();
   const first = f.manager.getBranch()[0];
   f.manager.appendContextEdit(first.id, null);
-  await assert.rejects(runNative(f, prepare(f.manager.buildSessionProjection().messages)), /改变了已发送内容/);
+  const { requests } = await runNative(f, prepare(f.manager.buildSessionProjection().messages));
+  assert.equal(requests.length, 1);
+  assert.match(JSON.stringify(requests), /Axiom native compaction request/);
+  assert.match(JSON.stringify(requests), /ORIGINAL_ANSWER/);
+  assert.doesNotMatch(JSON.stringify(requests), /UNIQUE_HISTORY/);
 });
 
 test("cache environment defaults are frozen and source mutation cannot corrupt captured prefix", () => {
@@ -214,16 +217,102 @@ test("explicit thinking off survives JSON and overrides native defaults without 
   assert.equal(Object.hasOwn(compressionRequestOptions(bare), "reasoning"), false);
 });
 
-test("obvious full-prefix overflow fails without trimming and configured input rewrites are refused", () => {
-  const f = fixture(), before = JSON.stringify(f.context);
-  assert.throws(() => assertCompressionBudget({ ...model, contextWindow: 1 }, f.context, { maxTokens: 100 }), /不会截断历史/);
-  assert.equal(JSON.stringify(f.context), before);
-  assertCompressionBudget(model, f.context, { maxTokens: 100 });
-  for (const samplingParams of [{ truncation: "auto" }, { input: [] }, { prompt_cache_key: "different" }, { previous_response_id: "old" }]) {
-    const prefix = captureCompressionPrefix(f.manager, selection, { ...model, samplingParams }, f.context, { sessionId: f.manager.getSessionId() });
-    assert.throws(() => assertCompressionPrefix(prefix, f.manager.getSessionId(), selection), /覆盖输入|自动裁剪/);
+test("cache compatibility checks preserve configuration and never permit input rewrites", () => {
+  const f = fixture();
+  for (const samplingParams of [
+    { service_tier: "ultrafast" }, { service_tier: "unverified-custom-tier" }, { service_tier: { custom: true } },
+    { unknown_generation_field: "custom" }, { truncation: "auto" }, { input: [] },
+    { prompt_cache_key: "custom-cache", prompt_cache_retention: "custom-retention" }, { previous_response_id: "old" },
+  ]) {
+    const configured = { ...model, contextWindow: 1, samplingParams };
+    const before = JSON.stringify(configured);
+    const prefix = captureCompressionPrefix(f.manager, selection, configured, f.context, { sessionId: f.manager.getSessionId() });
+    assert.throws(() => assertCompressionPrefix(prefix, f.manager.getSessionId(), selection), /无法复用/);
+    assert.equal(JSON.stringify(configured), before, "cache validation does not rewrite user configuration");
   }
+  assert.throws(() => assertCompressionBudget({ ...model, contextWindow: 1 }, f.context, { maxTokens: 100 }), /不会截断历史/);
+  assert.throws(() => assertCompressionBudget(model, f.context, { samplingParams: { max_output_tokens: 64000 } }), /不会截断历史/);
+  assertCompressionBudget(model, f.context, { maxTokens: 100 });
   assert.notEqual(compressionModelIdentity(model), compressionModelIdentity({ ...model, samplingParamsByThinkingLevel: { low: { top_p: 0.5 } } }));
+});
+
+test("dynamic request sampling survives capture losslessly but requires native fallback", () => {
+  const f = fixture(), samplingParams = { service_tier: "custom-tier", metadata: { trace: "fixture" }, top_p: 0.42 };
+  const prefix = captureCompressionPrefix(f.manager, selection, model, f.context,
+    { sessionId: f.manager.getSessionId(), reasoning: "low", samplingParams });
+  const frozen = structuredClone(samplingParams);
+  samplingParams.metadata.trace = "mutated";
+  assert.deepEqual(compressionRequestOptions(prefix, {}, model).samplingParams, frozen);
+  assert.throws(() => assertCompressionPrefix(prefix, f.manager.getSessionId(), selection), /动态请求采样/);
+});
+
+test("a new model configuration keeps its current generation options rather than old dynamic overrides", () => {
+  const f = fixture();
+  const prefix = captureCompressionPrefix(f.manager, selection, model, f.context,
+    { sessionId: f.manager.getSessionId(), reasoning: "low", samplingParams: { service_tier: "priority" } });
+  const configured = { ...model, samplingParams: { service_tier: "ultrafast" } };
+  const options = compressionRequestOptions(prefix, { reasoning: "high", samplingParams: { top_p: 0.7 } }, configured);
+  assert.equal(options.sessionId, f.manager.getSessionId());
+  assert.equal(options.reasoning, "high");
+  assert.deepEqual(options.samplingParams, { top_p: 0.7 });
+  assert.equal(configured.samplingParams.service_tier, "ultrafast");
+});
+
+test("missing, malformed and unsupported sidecars are optional cache misses", () => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-prefix-missing-")), file = join(root, "session.jsonl");
+  try {
+    assert.equal(readCompressionPrefix(file), undefined);
+    writeFileSync(`${file}.request-prefix.json`, "not json");
+    assert.equal(readCompressionPrefix(file), undefined);
+    writeFileSync(`${file}.request-prefix.json`, JSON.stringify({ version: 999 }));
+    assert.equal(readCompressionPrefix(file), undefined);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("damaged optional cache messages fall back to the native request without blocking it", async () => {
+  const f = fixture(), preparation = prepare(f.manager.buildSessionProjection().messages);
+  f.prefix.context.messages = JSON.parse("[null]");
+  const { requests } = await runNative(f, preparation);
+  assert.equal(requests.length, 1);
+  assert.match(JSON.stringify(requests), /Axiom native compaction request/);
+  assert.match(JSON.stringify(requests), /UNIQUE_HISTORY/);
+  assert.match(JSON.stringify(requests), /ORIGINAL_ANSWER/);
+});
+
+test("missing or stale prefixes and changed native protocols still dispatch native summary content", async () => {
+  const f = fixture(), preparation = prepare(f.manager.buildSessionProjection().messages);
+  const native = normalizeContext({ systemPrompt: "NATIVE_SUMMARY_SYSTEM", messages: [
+    { role: "user", content: "NEW_NATIVE_PROTOCOL with CURRENT_VALID_HISTORY", timestamp: 1 },
+  ] });
+  for (const prefix of [undefined, { ...f.prefix, leafId: "removed-branch" }, f.prefix]) {
+    const request = compressionPrefixRequest(prefix, f.manager.getBranch(), preparation, native);
+    assert.match(JSON.stringify(request), /CURRENT_VALID_HISTORY/);
+    assert.match(JSON.stringify(request), /Axiom native compaction request/);
+    assert.doesNotMatch(JSON.stringify(request), /UNIQUE_HISTORY/);
+  }
+  const original = structuredClone(native);
+  compressionPrefixRequest(undefined, [], undefined, native);
+  assert.deepEqual(native, original, "fallback does not mutate the native request");
+  f.prefix.unavailableReason = "legacy sampling or provider hook rejection";
+  const { requests } = await runNative(f, preparation);
+  assert.deepEqual(requests[0].messages.slice(0, f.context.messages.length), f.context.messages,
+    "a legacy rejection reason does not disable usable prefix reuse");
+});
+
+test("later system updates fall back to the native summary instead of reusing an unverified prefix", async () => {
+  const f = fixture();
+  f.manager.appendMessage({ role: "system", content: [{ type: "text", text: "UPDATED_SYSTEM" }], timestamp: 3 });
+  f.manager.appendMessage({ role: "user", content: "LATEST_TASK", timestamp: 4 });
+  const { requests } = await runNative(f, prepare(f.manager.buildSessionProjection().messages));
+  assert.notDeepEqual(requests[0].messages.slice(0, f.context.messages.length), f.context.messages);
+  assert.match(JSON.stringify(requests), /LATEST_TASK/);
+});
+
+test("forced tool choice becomes a text checkpoint rather than blocking compression", () => {
+  const f = fixture();
+  Object.assign(f.prefix.options, { toolChoice: "required" });
+  assert.equal(compressionRequestOptions(f.prefix).toolChoice, "none");
+  assert.equal(compressionRequestOptions(undefined, { toolChoice: "auto" }).toolChoice, "auto");
 });
 
 test("OpenAI service tiers preserve frozen generation routing without being mistaken for input rewrites", () => {

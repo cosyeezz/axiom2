@@ -36,7 +36,9 @@ const reply = (res: ServerResponse, text: string, cached: boolean) => {
   res.end();
 };
 
-test("Responses priority+xhigh native compression preserves the real provider prefix instead of rejecting the service tier", { timeout: 90000 }, async () => {
+for (const mode of ["cached", "custom-tier", "missing-prefix", "foreign-prefix", "cache-disabled", "legacy-rejection", "changed-tier"]) test(
+  `Responses compression maximizes cache reuse without preflight rejection: ${mode}`, { timeout: 90000 }, async () => {
+  const tier = mode === "custom-tier" ? "provider-custom-tier" : "priority";
   const root = mkdtempSync(join(tmpdir(), "axiom-compression-service-tier-")), project = join(root, "project");
   const previous = process.env.AXIOM_PI_DIR;
   process.env.AXIOM_PI_DIR = join(root, "pi");
@@ -47,7 +49,8 @@ test("Responses priority+xhigh native compression preserves the real provider pr
     for await (const chunk of req) raw += chunk;
     const body = JSON.parse(raw);
     requests.push(body);
-    reply(res, isSummary(body) ? "## Goal\nPriority native handoff\n## Progress\nRetain the complete task state." : "Priority chat completed.", isSummary(body));
+    reply(res, isSummary(body) ? "## Goal\nPriority native handoff\n## Progress\nRetain the complete task state." : "Priority chat completed.",
+      isSummary(body) && !["missing-prefix", "foreign-prefix", "cache-disabled"].includes(mode));
   });
   let app: Awaited<ReturnType<typeof startServer>> | undefined;
   try {
@@ -55,7 +58,7 @@ test("Responses priority+xhigh native compression preserves the real provider pr
     writeFileSync(join(root, "pi/models.json"), JSON.stringify({ providers: { fixture: {
       api: "openai-responses", baseUrl: `http://127.0.0.1:${(fixture.address() as any).port}/v1`,
       models: [{ id: "gpt-5.2", reasoning: true, thinkingLevelMap: { xhigh: "xhigh" }, contextWindow: 64000, maxTokens: 1000,
-        samplingParams: { service_tier: "priority" } }],
+        samplingParams: { service_tier: tier } }],
     } } }));
     const modelsFile = join(root, "pi/models.json"), originalModels = readFileSync(modelsFile, "utf8");
     writeFileSync(join(root, "pi/auth.json"), JSON.stringify({ fixture: { type: "api_key", key: "loopback-only" } }));
@@ -72,6 +75,25 @@ test("Responses priority+xhigh native compression preserves the real provider pr
     await wait(() => !server.agents.active(scope), "real Responses chat did not settle");
     await server.agents.releaseIdle(scope);
     const file = String(server.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId)!.file);
+    const sidecar = `${file}.request-prefix.json`;
+    let expectedModels = originalModels;
+    if (mode === "missing-prefix") rmSync(sidecar, { force: true });
+    if (["foreign-prefix", "cache-disabled", "legacy-rejection"].includes(mode)) {
+      const prefix = JSON.parse(readFileSync(sidecar, "utf8"));
+      if (mode === "foreign-prefix") {
+        prefix.sessionId = prefix.options.sessionId = "foreign-session";
+        prefix.context.messages = [{ role: "user", content: "FOREIGN_PRIVATE_CONTENT", timestamp: 1 }];
+      }
+      if (mode === "cache-disabled") prefix.options.cacheRetention = "none";
+      if (mode === "legacy-rejection") prefix.unavailableReason = "legacy service_tier or provider hook rejection";
+      writeFileSync(sidecar, JSON.stringify(prefix));
+    }
+    if (mode === "changed-tier") {
+      const configuration = JSON.parse(originalModels);
+      configuration.providers.fixture.models[0].samplingParams.service_tier = "ultrafast";
+      expectedModels = JSON.stringify(configuration);
+      writeFileSync(modelsFile, expectedModels);
+    }
     await server.agents.compressions.command({ ...scope, requestId: randomUUID(), op: "compression.start", params: {} });
     await wait(() => !!server.agents.compressions.info(scope) && server.agents.compressions.info(scope)!.state !== "running", "priority compaction did not settle");
     const job = server.agents.compressions.info(scope)!;
@@ -82,22 +104,31 @@ test("Responses priority+xhigh native compression preserves the real provider pr
     for (const summary of summaries) {
       const prefix = requests.slice(0, requests.indexOf(summary)).findLast(body => !isSummary(body) && body.tools?.length);
       assert.ok(prefix, "a real tool-bearing chat request preceded compaction");
-      assert.equal(prefix.service_tier, "priority");
-      assert.equal(summary.service_tier, prefix.service_tier, "never delete or downgrade the user's tier to make compression pass");
+      assert.equal(prefix.service_tier, tier);
+      assert.equal(summary.service_tier, mode === "changed-tier" ? "ultrafast" : tier,
+        "never delete a custom tier or overwrite a newer configuration with the old tier");
       assert.equal(summary.reasoning.effort, "xhigh");
-      assert.deepEqual(summary.reasoning, prefix.reasoning);
       assert.equal(summary.model, prefix.model);
-      assert.equal(summary.instructions, prefix.instructions);
-      assert.deepEqual(summary.input.slice(0, prefix.input.length), prefix.input);
-      assert.deepEqual(summary.tools, prefix.tools);
-      assert.ok(prefix.prompt_cache_key);
-      assert.equal(summary.prompt_cache_key, prefix.prompt_cache_key);
+      assert.doesNotMatch(JSON.stringify(summary), /FOREIGN_PRIVATE_CONTENT/);
+      if (["missing-prefix", "foreign-prefix"].includes(mode)) {
+        assert.match(JSON.stringify(summary), /Keep this real priority request/);
+        assert.match(JSON.stringify(summary), /Priority chat completed/);
+      } else {
+        assert.deepEqual(summary.reasoning, prefix.reasoning);
+        assert.equal(summary.instructions, prefix.instructions);
+        assert.deepEqual(summary.input.slice(0, prefix.input.length), prefix.input);
+        assert.deepEqual(summary.tools, prefix.tools);
+        assert.ok(prefix.prompt_cache_key);
+        assert.equal(summary.prompt_cache_key, mode === "cache-disabled" ? undefined : prefix.prompt_cache_key);
+      }
     }
-    assert.ok(job.usage!.cacheRead! >= 80, "simulated provider cache reads survive native aggregation");
+    if (["missing-prefix", "foreign-prefix", "cache-disabled"].includes(mode))
+      assert.equal(job.usage!.cacheRead, 0, "a successful summary does not require a cache hit");
+    else assert.ok(job.usage!.cacheRead! >= 80, "simulated provider cache reads survive native aggregation");
     const branch = SessionManager.open(file).getBranch();
     assert.equal(branch.filter(entry => entry.type === "compaction").length, 1);
     assert.ok(!branch.some(entry => entry.type === "message" && entry.message.role === "assistant" && entry.message.content.some(part => part.type === "toolCall")));
-    assert.equal(readFileSync(modelsFile, "utf8"), originalModels, "the fix does not rewrite model configuration");
+    assert.equal(readFileSync(modelsFile, "utf8"), expectedModels, "compression does not rewrite model configuration");
   } finally {
     await app?.close();
     fixture.closeAllConnections();

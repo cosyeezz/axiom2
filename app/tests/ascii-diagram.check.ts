@@ -41,6 +41,28 @@ try {
   await assistant.getByRole('button', { name: '美化', exact: true }).click();
   await assistant.getByRole('button', { name: '复制代码', exact: true }).click();
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), assistantSource);
+  const usage = page.locator('#usage-panel');
+  const usageSource = await page.evaluate(() => (window as any).asciiFixture.usagePanel as string);
+  assert.equal(await usage.locator('svg.ascii-diagram-svg').count(), 3);
+  assert.match(await usage.locator('.code-language').innerText(), /已对齐/);
+  assert.match(await usage.innerText(), /更多筛选/);
+  assert.match(await usage.innerText(), /调用明细/);
+  await usage.getByRole('button', { name: '原文', exact: true }).click();
+  assert.equal(await usage.locator('pre code').textContent(), usageSource);
+  await usage.getByRole('button', { name: '美化', exact: true }).click();
+  await usage.getByRole('button', { name: '复制代码', exact: true }).click();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), usageSource);
+  for (const [id, key] of [["form-wide", "wideForm"], ["form-medium", "mediumForm"], ["form-narrow", "narrowForm"]]) {
+    const form = page.locator(`#${id}`);
+    const source = await page.evaluate(key => (window as any).asciiFixture[key] as string, key);
+    assert.equal(await form.locator('.ascii-diagram-fields rect').count(), 5);
+    assert.equal(await form.locator('input, select, textarea, foreignObject').count(), 0);
+    await form.getByRole('button', { name: '原文', exact: true }).click();
+    assert.equal(await form.locator('pre code').textContent(), source);
+    await form.getByRole('button', { name: '美化', exact: true }).click();
+    await form.getByRole('button', { name: '复制代码', exact: true }).click();
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), source);
+  }
   const original = await page.evaluate(() => (window as any).asciiFixture.original as string);
   for (const section of [plain, fenced]) {
     await section.getByRole("button", { name: "复制代码", exact: true }).click();
@@ -101,6 +123,45 @@ try {
       await fenced.locator("pre code").waitFor();
       await fenced.getByRole("button", { name: "美化", exact: true }).click();
       await fenced.locator("svg.ascii-diagram-svg").waitFor();
+      const panelGeometry = await usage.locator('svg.ascii-diagram-svg').evaluateAll(elements => elements.map(el => {
+        const paths = [...el.querySelectorAll('path')].map(p => p.getBBox());
+        const labels = [...el.querySelectorAll('text')].map(t => ({text: t.textContent, box: t.getBBox()}));
+        return labels.flatMap(label => paths.filter(line => !(label.box.x >= line.x + line.width + .2 || line.x >= label.box.x + label.box.width + .2 || label.box.y >= line.y + line.height + .2 || line.y >= label.box.y + label.box.height + .2)).map(() => label.text));
+      }));
+      assert.deepEqual(panelGeometry, [[], [], []], 'panel strokes must not cross labels');
+      const panelLefts = await usage.locator('svg.ascii-diagram-svg').evaluateAll(elements => elements.map(el => el.getBoundingClientRect().left));
+      assert.ok(Math.max(...panelLefts) - Math.min(...panelLefts) < 1, 'mixed panels share the same left anchor rather than centering separately');
+      if (width < 450) {
+        for (const scroll of await usage.locator('.ascii-diagram-preview').all()) {
+          assert.ok(await scroll.evaluate(el => {
+            el.scrollLeft = el.scrollWidth;
+            const rect = el.getBoundingClientRect(), svg = el.querySelector('svg')!.getBoundingClientRect();
+            const reachable = svg.right <= rect.right + 1;
+            el.scrollLeft = 0;
+            return reachable;
+          }), 'panel right edge is reachable by internal scrolling');
+        }
+      }
+      for (const id of ['form-wide', 'form-medium', 'form-narrow']) {
+        const form = page.locator(`#${id}`);
+        const geometry = await form.locator('svg.ascii-diagram-svg').evaluate(el => {
+          const fields = [...el.querySelectorAll('rect')].map(field => field.getBBox());
+          const labels = [...el.querySelectorAll('text')].map(label => label.getBBox());
+          const collisions = labels.some(label => fields.some(field => label.x < field.x + field.width && label.x + label.width > field.x && label.y < field.y + field.height && label.y + label.height > field.y));
+          return { collisions, fill: getComputedStyle(el.querySelector('rect')!).fill, stroke: getComputedStyle(el.querySelector('rect')!).stroke };
+        });
+        assert.equal(geometry.collisions, false, `${id}: field borders do not cross labels`);
+        assert.notEqual(geometry.fill, 'none');
+        assert.notEqual(geometry.stroke, 'none');
+        assert.ok(await form.locator('.ascii-diagram-preview').evaluate(el => {
+          el.scrollLeft = el.scrollWidth;
+          const reachable = el.querySelector('svg.ascii-diagram-svg')!.getBoundingClientRect().right <= el.getBoundingClientRect().right + 1;
+          el.scrollLeft = 0;
+          return reachable;
+        }), `${id}: right edge reachable`);
+        await form.screenshot({ path: join(artifacts, `${id}-${theme}-${width}.png`) });
+      }
+      await usage.screenshot({ path: join(artifacts, `usage-panel-${theme}-${width}.png`) });
       await page.screenshot({ path: join(artifacts, `${theme}-${width}.png`), fullPage: true });
     }
   }
@@ -109,11 +170,16 @@ try {
   assert.equal(await page.locator("#references a").getAttribute("href"), "https://example.com");
   assert.equal(await plain.locator("svg.ascii-diagram-svg").count(), 0);
   assert.equal(await fenced.getByRole("button", { name: "原文", exact: true }).count(), 0);
+  assert.equal(await usage.locator('svg.ascii-diagram-svg').count(), 0);
+  for (const id of ['form-wide', 'form-medium', 'form-narrow']) assert.equal(await page.locator(`#${id} .ascii-diagram-fields`).count(), 0);
+  assert.equal(await usage.locator('pre code').textContent(), usageSource);
   assert.equal(await assistant.locator('svg.ascii-diagram-svg').count(), 0);
   assert.equal(await assistant.locator('pre code').textContent(), assistantSource);
   await page.evaluate(() => (window as any).asciiFixture.setStreaming(false));
   await fenced.locator("svg.ascii-diagram-svg").waitFor();
   await assistant.locator('svg.ascii-diagram-svg').waitFor();
+  assert.equal(await usage.locator('svg.ascii-diagram-svg').count(), 3);
+  for (const id of ['form-wide', 'form-medium', 'form-narrow']) assert.equal(await page.locator(`#${id} .ascii-diagram-fields rect`).count(), 5);
   assert.equal(await page.evaluate(() => (window as any).asciiFixture.assistantMessage), assistantMessage);
   assert.equal(await page.locator("#references a").getAttribute("href"), "https://example.com");
   await page.evaluate(() => (window as any).asciiFixture.setSource("┌──\n│尚未完成"));

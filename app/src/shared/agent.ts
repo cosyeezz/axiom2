@@ -34,6 +34,8 @@ export interface RetrySettings {
   maxRetries: number;
   baseDelayMs: number;
   maxAgentDelayMs: number;
+  /** Exact session schedule; absent for legacy/custom exponential settings. */
+  delaysMs?: number[];
   provider: { maxRetries?: number; maxRetryDelayMs: number; timeoutMs?: number };
 }
 export const runOriginLabels = {
@@ -125,8 +127,10 @@ export interface AgentInfo {
       tokens: number | null;
       window: number;
       percent: number | null;
-      /** Content-based pi estimate while post-compaction provider usage is unavailable. */
+      /** Content-based estimate while a trustworthy provider baseline is unavailable. */
       estimated?: boolean;
+      /** Absent on legacy readings; never infer a precise measurement from missing metadata. */
+      source?: import("./context-usage.js").ContextMeasurementSource;
     } | null;
   } | null;
 }
@@ -185,6 +189,15 @@ export interface MessagePart {
   totalLength: number;
   revision: string;
 }
+/** Narrow context facts, not a layout version or proof that the rendered tail is ready. */
+export interface ThreadMetadata {
+  /** Same rebuild/delivery epoch as ThreadIndex; not incremented for every layout or token. */
+  contextRevision: number;
+  /** Equivalent to the complete current context having IDs; null means unavailable, not empty. */
+  hasMessages: boolean | null;
+  /** At most 512 UTF-16 code units; no transcript bodies or unbounded diagnostics. */
+  error?: string;
+}
 export interface ThreadIndex {
   ids: string[];
   groups?: {
@@ -223,6 +236,8 @@ export interface ThreadIndex {
 export const agentScope = (s: Scope) => `agent:${s.workspaceId}:${s.sessionId}`;
 export const threadScope = (s: Scope) =>
   `thread:${s.workspaceId}:${s.sessionId}`;
+export const threadMetadataScope = (s: Scope) =>
+  `thread-meta:${s.workspaceId}:${s.sessionId}`;
 export const messageScope = (s: Scope, id: string) =>
   `message:${s.workspaceId}:${s.sessionId}:${id}`;
 export const emptyAgent: AgentInfo = {

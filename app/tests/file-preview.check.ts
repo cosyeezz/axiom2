@@ -16,6 +16,8 @@ try {
   const markdown = "# 文件预览，让阅读留在会话里\n\n这是一份真实的 **中文 Markdown 文档**。源码与排版可以并排查看，拖动中间分隔线，调整适合自己的阅读宽度。\n\n## 一处打开，专注阅读\n\n- 左侧保留对话线索\n- 底部输入框始终可用\n- 保存前校验文件修订，随时重新加载\n\n> 好的阅读体验，应该让内容本身成为主角。\n\n| 文件类型 | 预览方式 |\n| --- | --- |\n| Markdown | 源码 / 对比 / 阅读 |\n| TypeScript | 代码与行号 |\n| 图片 | 适应与缩放 |\n\n```typescript\nconst preview = { mode: 'reading', editable: true };\n```\n\n<script>window.previewUnsafe = true</script>\n\n[文档内部文件](secret.txt)\n\n[内部锚点](#section) · [其他文档片段](secret.md#section)\n\n" + Array.from({ length: 25 }, (_, i) => `### 细节 ${i + 1}\n\n持续输入与阅读互不干扰，文档内容保持独立滚动。\n`).join("\n");
   writeFileSync(join(root, "设计说明.md"), markdown);
   writeFileSync(join(root, "large.txt"), "x".repeat(250000));
+  const oversizedText = "x".repeat(5 * 1024 * 1024) + "完整预览结尾";
+  writeFileSync(join(root, "oversized.txt"), oversizedText);
   writeFileSync(join(root, "spec#1.md"), "# 带井号的文件名");
   const pdfStream = "BT /F1 18 Tf 40 430 Td (Axiom PDF file preview) Tj ET\n";
   const pdfObjects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 500] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>", `<< /Length ${Buffer.byteLength(pdfStream)} >>\nstream\n${pdfStream}endstream`, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
@@ -63,7 +65,7 @@ try {
   // does not turn the navigation assertion into a selection of the same session.
   app.store.execute({ requestId: crypto.randomUUID(), op: "session.rename", ...scope, params: { title: "文件预览回归" } });
   const views = (app.agents as unknown as { views: AgentViews }).views;
-  const source = `已整理以下文件，点击即可查看：\n\n[设计说明](<${join(root, "设计说明.md").replace(/\\/g, "/")}>) · [大文本](large.txt) · [示例代码](example.ts:12) · [中文文本](legacy.txt) · [Office 文件](report.docx) · [HTML 文件](unsafe.html) · [缺失文件](missing.md) · [图片文件](picture.png) · [特殊文件名](spec%231.md) · [PDF 文件](preview.pdf) · [实际页面](connection-draft.html) · [表格文件](data.xlsx) · [演示文件](slides.pptx) · [音频文件](sound.wav) · [视频文件](movie.webm) · [压缩包文件](files.zip) · [模块网页](runtime/index.html) · [临时项目](project)`;
+  const source = `已整理以下文件，点击即可查看：\n\n[设计说明](<${join(root, "设计说明.md").replace(/\\/g, "/")}>) · [大文本](large.txt) · [超限文本](oversized.txt) · [示例代码](example.ts:12) · [中文文本](legacy.txt) · [Office 文件](report.docx) · [HTML 文件](unsafe.html) · [缺失文件](missing.md) · [图片文件](picture.png) · [特殊文件名](spec%231.md) · [PDF 文件](preview.pdf) · [实际页面](connection-draft.html) · [表格文件](data.xlsx) · [演示文件](slides.pptx) · [音频文件](sound.wav) · [视频文件](movie.webm) · [压缩包文件](files.zip) · [模块网页](runtime/index.html) · [临时项目](project)`;
   views.messageChanged(scope, { id: "file-reply", role: "assistant", text: source }); views.flush(scope);
   browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
@@ -155,6 +157,11 @@ try {
   assert.equal(await page.getByRole("button", { name:"设计说明", exact:true }).evaluate(n => n === document.activeElement), true);
   assert.equal(await page.locator("#prompt").inputValue(), "输入框在预览期间依然可用。");
   await open("示例代码"); assert.ok(await page.locator(".file-source-scroll").evaluate(n => n.scrollTop > 100)); await close();
+  await open("超限文本");
+  assert.equal(await page.locator(".file-source-code pre").textContent(), oversizedText, "5 MiB preview traverses server, WebSocket and renderer without truncation");
+  assert.equal(await page.getByRole("button", { name: "编辑", exact: true }).count(), 0);
+  await page.getByText("文件超过 1 MiB 编辑上限，仅供只读预览。", { exact: true }).waitFor();
+  await close();
   await open("大文本");
   await page.getByRole("button", { name: "编辑", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "编辑文件内容", exact: true });
@@ -348,7 +355,8 @@ try {
   await open("图片文件"); await page.locator(".file-image-scroll img").evaluate((n:HTMLImageElement) => n.decode());
   await page.waitForFunction(() => { const img = document.querySelector<HTMLImageElement>(".file-image-scroll img")!; const scroll = document.querySelector(".file-image-scroll")!; return img.width > 0 && img.height <= scroll.clientHeight && img.width <= scroll.clientWidth; });
   await page.screenshot({path:join(artifacts,"image-fit-1440.png")});
-  await page.getByRole("button", {name:"放大图片", exact:true}).click(); assert.equal(await page.locator(".file-zoom").innerText(), "125%");
+  const imageFitPercent = await page.locator(".file-image-scroll img").evaluate((n:HTMLImageElement) => n.getBoundingClientRect().width / n.naturalWidth * 100);
+  await page.getByRole("button", {name:"放大图片", exact:true}).click(); assert.equal(await page.locator(".file-zoom").innerText(), `${Math.round(imageFitPercent + 5)}%`);
   assert.ok(await page.locator(".file-image-scroll").evaluate(n => n.querySelector("img")!.getBoundingClientRect().left >= n.getBoundingClientRect().left));
   await page.locator(".file-image-scroll").evaluate(n => { n.scrollLeft = n.scrollWidth; n.scrollTop = n.scrollHeight; });
   assert.ok(await page.locator(".file-image-scroll").evaluate(n => { const img = n.querySelector("img")!.getBoundingClientRect(); const viewport = n.getBoundingClientRect(); return img.right <= viewport.right + 1 && img.bottom <= viewport.bottom + 1; }));

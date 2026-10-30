@@ -38,7 +38,7 @@ try {
           await section.screenshot({ path: join(artifacts, `${theme}-${width}-${test.id}.png`) });
         }
         if (phase !== "before") {
-          assert.equal(rendered, !test.fallback, `${test.id}: expected ${test.fallback ? "literal fallback" : "SVG"}`);
+          assert.equal(rendered, !test.fallback || !!test.panel, `${test.id}: expected ${test.fallback ? "literal fallback" : "SVG"}`);
           assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${test.id}/${width}: no page overflow`);
           if (rendered) {
             const svg = preview;

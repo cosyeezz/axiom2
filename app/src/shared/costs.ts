@@ -43,6 +43,7 @@ export interface CostSession {
   status: string | null;
 }
 export interface CostReport {
+  /** Main-session reports include their family; child reports contain only that child. */
   scope: Scope;
   requestedSessionId: string;
   title: string;

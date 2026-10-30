@@ -102,7 +102,7 @@ test("checking one component avoids unrelated probes and reports incompatible lo
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test("install uses the checked release and rejects forged, expired and unadapted selections", async () => {
+test("install needs no prior check or token, fetches the latest release itself and still rejects unadapted REA", async () => {
   const root = temporary(), initial = config(root); let releases = 0, preparations = 0;
   const service = new ReaService(root, () => {}, {
     engineRelease: async id => { releases++; return fixtureEngineRelease(id); },
@@ -114,27 +114,20 @@ test("install uses the checked release and rejects forged, expired and unadapted
     },
   });
   try {
-    await assert.rejects(call(service, "rea.engine-install", { engine: "java", revision: initial.revision }), /先检查/);
-    await call(service, "rea.engine-check", { engine: "java" });
-    const selected = (await settle(service)).engines![0].available!;
-    assert.ok(selected); assert.equal(selected.mode, "install"); assert.equal(preparations, 0);
-    await assert.rejects(call(service, "rea.engine-install", { engine: "java", revision: initial.revision, token: "forged", version: selected.version }), /先检查/);
-    await assert.rejects(call(service, "rea.engine-install", { engine: "java", revision: initial.revision, token: selected.token, version: "21.0.99" }), /先检查/);
-    await call(service, "rea.refresh"); assert.equal(releases, 1);
-    await call(service, "rea.engine-install", { engine: "java", revision: initial.revision, token: selected.token, version: selected.version });
+    // Component standard: install works without a check, token or current revision.
+    await call(service, "rea.engine-install", { engine: "java", revision: "stale", token: "forged" });
     assert.equal((await settle(service)).job?.error, undefined); assert.equal(releases, 1); assert.equal(preparations, 1);
-    await assert.rejects(call(service, "rea.engine-install", { engine: "java", revision: service.snapshot().revision, token: selected.token, version: selected.version }), /先检查/);
-    await call(service, "rea.engine-check", { engine: "java" });
-    const next = (await settle(service)).engines![0].available!;
+    // Reinstalling after the path was cleared needs no check either.
     await call(service, "rea.engineSave", { engine: "java", revision: service.snapshot().revision, path: "" });
-    await assert.rejects(call(service, "rea.engine-install", { engine: "java", revision: service.snapshot().revision, token: next.token, version: next.version }), /先检查/);
+    await call(service, "rea.engine-install", { engine: "java" });
+    assert.equal((await settle(service)).job?.error, undefined); assert.equal(preparations, 2);
     const current = readReaConfig(root);
     atomicReaJson(reaConfigPath(root), { ...current, revision: randomUUID(), installation: { ...current.installation, version: "6.9.0" } });
     await assert.rejects(call(service, "rea.engine-check", { engine: "java" }), /尚未适配/);
   } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
-test("manual download service persists a verified package without switching engines, and rolls back failed attempts", { skip: process.platform !== "darwin" }, async () => {
+test("manual download service persists a verified package without switching engines, merges concurrent edits and rolls back failed attempts", { skip: process.platform !== "darwin" }, async () => {
   for (const mode of ["success", "checksum", "cancel", "conflict"] as const) {
     const root = temporary(), initial = config(root), original = join(root, "existing-hopper");
     initial.engines = { hopper: original }; atomicReaJson(reaConfigPath(root), initial);
@@ -162,22 +155,25 @@ test("manual download service persists a verified package without switching engi
       }
       const state = await settle(service), saved = readReaConfig(root);
       assert.equal(saved.engines!.hopper, mode === "conflict" ? join(root, "external-change") : original); assert.equal(saved.enabled, false); assert.equal(saved.managedEngines, undefined);
-      assert.equal(!!saved.downloads?.hopper, mode === "success");
-      assert.equal(readdirSync(join(root, "integrations", "rea", "downloads")).length, mode === "success" ? 1 : 0);
-      const tasks = JSON.parse(readFileSync(join(root, "maintenance", "tasks.json"), "utf8")).tasks;
-      assert.equal(tasks.at(-1).resource, "rea:hopper");
-      assert.equal(tasks.at(-1).status, mode === "success" ? "succeeded" : mode === "cancel" ? "cancelled" : "failed");
+      const kept = mode === "success" || mode === "conflict";
+      assert.equal(!!saved.downloads?.hopper, kept);
+      assert.equal(readdirSync(join(root, "integrations", "rea", "downloads")).length, kept ? 1 : 0);
+      const history = join(root, "maintenance", "tasks.json");
+      if (existsSync(history)) assert.deepEqual(JSON.parse(readFileSync(history, "utf8")).tasks, [], "no task history is persisted");
       assert.equal(state.pendingOperation, undefined);
       if (mode === "success") {
         assert.equal(state.job?.error, undefined); assert.match(state.job!.message, /待安装/);
         const downloaded = state.engines!.find(item => item.id === "hopper")!.download!;
         assert.deepEqual(readFileSync(downloaded.path), dmg);
         await call(service, "rea.refresh");
-        const restarted = new ReaService(root, () => {});
+        const restarted = new ReaService(root, () => {}, { engineRelease: async () => hopper, checkEngines: async (_root, value) => listEngines(value) });
         assert.deepEqual(restarted.snapshot().engines!.find(item => item.id === "hopper")!.download, downloaded);
-        await assert.rejects(call(restarted, "rea.engine-download", { engine: "hopper", revision: saved.revision, token: selected.token, version: selected.version }), /先检查/);
+        await call(restarted, "rea.engine-download", { engine: "hopper" });
+        const again = await settle(restarted);
+        assert.equal(again.job?.error, undefined); assert.match(again.job!.message, /复用/, "a verified package is reused without a check or token");
         await restarted.close();
-      } else if (mode !== "cancel") assert.ok(state.job?.error);
+      } else if (mode === "conflict") assert.equal(state.job?.error, undefined);
+      else if (mode !== "cancel") assert.ok(state.job?.error);
     } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
   }
 });

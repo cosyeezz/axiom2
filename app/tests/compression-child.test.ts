@@ -20,7 +20,7 @@ const wait = async (check: () => boolean, message: string) => {
 };
 
 for (const overflow of [false, true]) test(overflow
-  ? "obvious prefix overflow dispatches no summary, creates no physical charge and never applies"
+  ? "a coarse prefix overflow estimate does not prevent the child summary provider request"
   : "real scheduled child compression uses its own model, thinking and cache route, not its parent's", { timeout: 60000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-compression-child-")), project = join(root, "project");
   const previous = process.env.AXIOM_PI_DIR;
@@ -73,18 +73,13 @@ for (const overflow of [false, true]) test(overflow
     assert.equal(dispatched.reasoning_effort, "low");
     const file = String(server.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(child.sessionId)!.file);
     const before = readFileSync(file, "utf8");
+    await wait(() => server.agents.pool.requests.snapshot().providers.every(row => row.current === 0), "chat concurrency did not settle");
+    const chatStats = server.agents.pool.requests.snapshot().providers.find(row => row.providerId === "fixture")!;
+    assert.equal(chatStats.rpm, requests.length, "real parent and scheduled child HTTP attempts each count once");
+    assert.equal(chatStats.callLevel, false);
     await server.agents.compressions.command({ ...child, requestId: randomUUID(), op: "compression.start", params: {} });
     await wait(() => server.agents.compressions.info(child)?.state !== "running", "child compression did not settle");
     const job = server.agents.compressions.info(child)!;
-    if (overflow) {
-      assert.equal(job.state, "failed", JSON.stringify(job));
-      assert.match(job.error!, /不会截断历史/);
-      assert.equal(requests.filter(isCompressionRequest).length, 0, "local budget rejection sends no HTTP summary");
-      assert.equal(job.billing?.records ?? 0, 0, "preflight is not a physical request or an unknown charge");
-      assert.equal(readFileSync(file, "utf8"), before);
-      assert.equal(SessionManager.open(file).getBranch().filter(entry => entry.type === "compaction").length, 0);
-      return;
-    }
     assert.equal(job.state, "completed", JSON.stringify(job));
     assert.deepEqual(job.selection, childSelection);
     assert.deepEqual(server.agents.info(parent).selection, parentSelection);
@@ -99,6 +94,10 @@ for (const overflow of [false, true]) test(overflow
     }
     assert.ok(readFileSync(file, "utf8").startsWith(before));
     assert.equal(SessionManager.open(file).getBranch().filter(entry => entry.type === "compaction").length, 1);
+    await wait(() => server.agents.pool.requests.snapshot().providers.every(row => row.current === 0), "compression concurrency did not settle");
+    const finalStats = server.agents.pool.requests.snapshot().providers.find(row => row.providerId === "fixture")!;
+    assert.equal(finalStats.rpm, requests.length, "background native child compression is included without double counting");
+    assert.ok(finalStats.rpm > chatStats.rpm); assert.ok(finalStats.peak >= 1);
   } finally {
     await app?.close();
     fixture.closeAllConnections();

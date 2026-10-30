@@ -18,7 +18,7 @@
 
 `service_tier` 提供 `default`、`auto`、`fast`、`ultrafast`、`priority` 和 `flex` 候选，也可填写渠道支持的其他文本。字段直接覆盖请求体的顶层属性，带点的字段名不会展开为嵌套对象。最终接受哪些字段和值由所用接口决定。
 
-当前请求体覆盖支持 `openai-completions`、`openai-responses` 和 `azure-openai-responses`。界面编辑字符串和数字；配置中已有的布尔、对象、数组等其他值保留在服务端。删除界面中的覆盖项后，其已保存值也会移除。
+当前请求体覆盖支持 `openai-completions`、`openai-responses`、`azure-openai-responses` 和 `openai-codex-responses`（OpenAI / Codex 授权，例如用 `service_tier` 开启 fast 模式）。界面编辑字符串和数字；配置中已有的布尔、对象、数组等其他值保留在服务端。删除界面中的覆盖项后，其已保存值也会移除。
 
 供应商请求体覆盖在保存时批量应用到当前模型，模型同名覆盖优先。重新读取后，可在各模型中查看已应用的结果；供应商区域不是独立持久的继承层。
 

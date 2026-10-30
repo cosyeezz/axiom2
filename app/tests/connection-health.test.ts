@@ -112,4 +112,17 @@ test("connection evidence expires independently of errors and rejects obsolete s
   assert.equal(first.sent.filter((request) => request.op === "read.cancel").length, 0);
   optionalOff.forEach((off) => off());
   unsubscribe.forEach((off) => off());
+
+  second.close();
+  const silentOpening = connect(); release({ ok: true } as Response); await silentOpening;
+  const silent = sockets[2]; silent.open();
+  t.mock.timers.tick(9999);
+  assert.equal(silent.readyState, Socket.OPEN);
+  t.mock.timers.tick(1);
+  assert.equal(silent.readyState, 3, "OPEN with no hello or response must time out instead of checking forever");
+  t.mock.timers.tick(1500);
+  release({ ok: true } as Response); await Promise.resolve(); await Promise.resolve();
+  const recovered = sockets[3]; recovered.open(); recovered.receive({ type: "hello", streamId: "recovered" });
+  assert.equal(connectionHealth(), "connected", "a silent connection must not disable future reconnects");
+  recovered.close();
 });

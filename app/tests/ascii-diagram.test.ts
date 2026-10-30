@@ -118,7 +118,7 @@ test("composition corpus only beautifies supported, sufficiently aligned diagram
 });
 
 test("unsupported diagram code remains unwrapped without changing explicit programming code", () => {
-  for (const sample of diagramCases.filter(sample => sample.fallback)) {
+  for (const sample of diagramCases.filter(sample => sample.fallback && !sample.panel)) {
     const html = render(`\`\`\`text\n${sample.source}\n\`\`\``);
     assert.ok(!html.includes("ascii-diagram-svg"), sample.id);
     assert.match(html, /<pre[^>]*class="ascii-diagram-source"/, sample.id);

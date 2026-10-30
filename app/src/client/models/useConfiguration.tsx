@@ -179,7 +179,7 @@ export function useConfiguration() {
         confirmStop,
       });
       setNeedsReconcile(true);
-      if (await load()) {
+      if (await load(next.find(provider => provider.id === selected)?.providerId)) {
         setSaved(true);
         setFeedback(
           next.some((provider) => provider.key.trim())

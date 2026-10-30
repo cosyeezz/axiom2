@@ -3,12 +3,23 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { createHash, randomUUID } from "node:crypto";
 import { tmpdir } from "./temporary.js";
 import { join, resolve } from "node:path";
-import { chromium } from "playwright";
+import { chromium, type Locator } from "playwright";
 import { startServer } from "../src/server/index.js";
 import { reaConfigPath } from "../src/server/integrations/rea-runtime.js";
 import { listEngines } from "../src/server/integrations/rea-engines.js";
 import { openHopperInstaller, prepareEngineDownload } from "../src/server/integrations/rea-engine-download.js";
 import { fixtureEngineRelease, reaFixture } from "./rea-fixture.js";
+import { assertComponentTree, ensureComponentActions } from "./component-layout-helpers.js";
+// A recommended install shows "当前 X" with no automatic update; explicit reinstall remains available.
+const atRecommended = async (panel: Locator) => panel.page().waitForFunction(node => {
+  // Equivalent versions (e.g. 21.0.13 vs 21.0.13+9.0.LTS) count as current, so check the rendered state instead of string equality.
+  const heading = node!.querySelector(":scope > .maintenance-panel-heading");
+  const current = heading?.querySelector(".component-card-version > :last-child")?.textContent?.trim();
+  const target = heading?.querySelector(".component-card-candidate > :last-child")?.textContent?.trim();
+  const currentVersion = current?.match(/^v?(\d+\.\d+\.\d+)/)?.[1], targetVersion = target?.match(/^v?(\d+\.\d+\.\d+)/)?.[1];
+  const upgrade = [...heading?.querySelectorAll<HTMLElement>(".component-action") ?? []].some(button => /^(安装|更新|切换推荐版|下载)/.test(button.getAttribute("aria-label") ?? ""));
+  return !!currentVersion && currentVersion === targetVersion && !upgrade && !node!.textContent!.includes("已是推荐版本") && !node!.querySelector(".maintenance-task");
+}, await panel.elementHandle());
 
 const root = mkdtempSync(join(tmpdir(), "axiom-rea-engines-ui-")), fixture = reaFixture();
 let checks = 0, installs = 0, downloads = 0, installers = 0;
@@ -64,24 +75,31 @@ const output = resolve(process.env.AXIOM_REA_SCREENSHOTS ?? "test-results/rea-en
 const savedConfig = () => JSON.parse(readFileSync(reaConfigPath(root), "utf8"));
 try {
   await page.goto(app.origin + "/tools.html#rea");
-  await page.getByRole("heading", { name: "分析引擎与配套组件" }).waitFor();
-  const section = page.locator('[aria-labelledby="rea-engines-heading"]');
-  assert.match(await section.innerText(), new RegExp(process.arch)); assert.equal(checks, 0); assert.equal(installs, 0);
+  const reaCard = page.getByRole("region", { name: "REA维护", exact: true });
+  const section = reaCard.locator(":scope > .component-environment");
+  await section.getByRole("heading", { name: "JDK 21", exact: true }).waitFor();
+  assert.match(await reaCard.locator(":scope > .component-card-summary").innerText(), new RegExp(`运行平台.*${process.arch}`), "actual host facts are visible in the parent description area");
+  for (const name of ["JDK 21维护", "Ghidra维护", "Hopper维护", "JADX Headless维护", "WABT维护"]) assert.equal(await section.getByRole("region", { name, exact: true }).evaluate(node => node.parentElement!.closest(".component-card")?.getAttribute("aria-label")), "REA维护", "each engine is nested in the REA card");
+  assert.equal(checks, 0); assert.equal(installs, 0);
   assert.equal(await section.locator("input").count(), 0, "component paths use defaults without input fields");
+  await ensureComponentActions(reaCard);
   await page.getByRole("button", { name: "安装 REA", exact: true }).click();
-  await page.getByText("REA 与技能已接入；已有会话请重新加载技能与 MCP。", { exact: true }).waitFor();
+  await reaCard.getByRole("button", { name: "重新安装 REA", exact: true }).waitFor();
+  await reaCard.locator(":scope > .maintenance-task").waitFor({ state: "detached" });
+  assert.equal(await reaCard.locator(":scope > .maintenance-task").count(), 0, "successful REA installation leaves no progress panel");
   const java = section.getByRole("region", { name: "JDK 21维护", exact: true });
   await java.getByRole("button", { name: "检查JDK 21更新", exact: true }).click();
-  await java.getByText("21.0.13+9.0.LTS", { exact: true }).waitFor();
-  await java.getByRole("button", { name: /^(安装|更新|切换推荐版)JDK 21$/ }).click();
+  await java.locator(":scope > .maintenance-panel-heading .component-card-candidate").filter({ hasText: /^\s*推荐\s+21\.0\.13\+9\.0\.LTS\s*$/ }).waitFor();
+  await java.getByRole("button", { name: /^(安装|更新|重新安装)\s*JDK 21$|^切换 JDK 21 至推荐版$/ }).click();
   await java.getByRole("button", { name: "暂不安装", exact: true }).click(); assert.equal(installs, 0);
-  await java.getByRole("button", { name: /^(安装|更新|切换推荐版)JDK 21$/ }).click();
+  await java.getByRole("button", { name: /^(安装|更新|重新安装)\s*JDK 21$|^切换 JDK 21 至推荐版$/ }).click();
   await java.getByRole("button", { name: "确认下载安装", exact: true }).click();
-  await java.getByText("已是推荐版本", { exact: true }).waitFor(); assert.equal(installs, 1);
+  await atRecommended(java); assert.equal(installs, 1);
   assert.match(savedConfig().engines.java, /integrations[\\/]rea[\\/]engines[\\/]java-/);
   await java.getByRole("button", { name: "检查JDK 21更新", exact: true }).click();
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === '检查JDK 21更新' && !(button as HTMLButtonElement).disabled));
-  assert.equal(await java.getByRole("button", { name: /^(安装|更新|重新安装|修复|切换推荐版)JDK 21$/ }).count(), 0, "equivalent JDK versions do not offer another download");
+  assert.equal(await java.getByRole("button", { name: /^(安装|更新)\s*JDK 21$|^切换 JDK 21 至推荐版$/ }).count(), 0, "equivalent JDK versions do not offer an update");
+  assert.equal(await java.getByRole("button", { name: "重新安装 JDK 21", exact: true }).isEnabled(), true, "the component standard retains explicit reinstallation without repeating it automatically");
   const ghidra = section.getByRole("region", { name: "Ghidra维护", exact: true }), hopper = section.getByRole("region", { name: "Hopper维护", exact: true });
   const jdkNotice = "Ghidra 需要依赖 JDK 21，请先在上方「JDK 21」组件中下载并安装；安装 Ghidra 不会自动安装 JDK。";
   await ghidra.getByText(jdkNotice, { exact: true }).waitFor();
@@ -89,6 +107,7 @@ try {
   const labelFor = (id: "ghidra" | "hopper") => id === "ghidra" ? "Ghidra" : "Hopper";
   const prepareDownload = async (id: "ghidra" | "hopper") => {
     const panel = panelFor(id), label = labelFor(id);
+    await ensureComponentActions(panel);
     assert.equal(await panel.getByRole("button", { name: `检查${label}更新`, exact: true }).isEnabled(), true, `${label} can check while another component downloads`);
     await panel.getByRole("button", { name: `检查${label}更新`, exact: true }).click();
     await panel.getByRole("button", { name: `下载${label}安装包`, exact: true }).click();
@@ -96,7 +115,7 @@ try {
   };
   if (["win32", "linux"].includes(process.platform) && process.arch === "x64") {
     await ghidra.getByRole("button", { name: "检查Ghidra更新", exact: true }).click();
-    await ghidra.getByRole("button", { name: "安装Ghidra", exact: true }).click();
+    await ghidra.getByRole("button", { name: "安装 Ghidra", exact: true }).click();
     const installConfirm = ghidra.getByRole("group", { name: "确认安装Ghidra", exact: true });
     await installConfirm.getByText(jdkNotice, { exact: true }).waitFor();
     await installConfirm.getByRole("button", { name: "暂不安装", exact: true }).click();
@@ -106,9 +125,9 @@ try {
     await downloadConfirm.getByRole("button", { name: "确认下载", exact: true }).click();
     await ghidra.getByText("已下载 · 待安装", { exact: true }).waitFor();
     await page.reload();
-    await ghidra.getByRole("button", { name: "安装Ghidra", exact: true }).click();
+    await ghidra.getByRole("button", { name: "使用缓存安装 Ghidra", exact: true }).click();
     await installConfirm.getByText(jdkNotice, { exact: true }).waitFor();
-    assert.match(await installConfirm.innerText(), /将使用已下载的安装包/);
+    assert.match(await installConfirm.innerText(), /将重新校验已登记包/);
     await installConfirm.getByRole("button", { name: "暂不安装", exact: true }).click();
     assert.equal(installs, 1, "dependency notices and cancellations never install Ghidra or JDK automatically");
     assert.equal(savedConfig().engines.ghidra, undefined);
@@ -116,9 +135,9 @@ try {
   if (process.platform === "darwin") {
     for (const id of ["ghidra", "hopper"] as const) {
       const panel = panelFor(id), label = labelFor(id);
-      assert.equal(await panel.getByRole("button", { name: `下载${label}安装包`, exact: true }).isDisabled(), true);
+      assert.equal(await panel.getByRole("button", { name: `下载${label}安装包`, exact: true, includeHidden: true }).isEnabled(), true, "component installation remains available before a version check");
       const confirm = await prepareDownload(id);
-      assert.match(await confirm.innerText(), /下载后可继续安装/);
+      assert.match(await confirm.innerText(), /只下载安装包，不改变当前安装/);
       if (id === "ghidra") await confirm.getByText(jdkNotice, { exact: true }).waitFor();
       await confirm.getByRole("button", { name: "暂不下载", exact: true }).click();
       const before = downloads;
@@ -131,9 +150,10 @@ try {
       await panel.getByRole("button", { name: `检查${label}更新`, exact: true }).click();
       await page.waitForFunction(label => [...document.querySelectorAll('button')].some(button => button.textContent === `检查${label}更新` && !(button as HTMLButtonElement).disabled), label);
       assert.equal(downloads, before + 1); assert.equal(await panel.getByRole("button", { name: `下载${label}安装包`, exact: true }).count(), 0);
-      await panel.getByRole("button", { name: `安装${label}`, exact: true }).click();
+      const cachedActionName = id === "ghidra" ? "使用缓存安装 Ghidra" : "打开Hopper系统安装器";
+      await panel.getByRole("button", { name: cachedActionName, exact: true }).click();
       const installConfirm = panel.getByRole("group", { name: `确认安装${label}`, exact: true });
-      if (id === "ghidra") assert.match(await installConfirm.innerText(), /已下载的安装包.*JDK 21.*Xcode/s);
+      if (id === "ghidra") assert.match(await installConfirm.innerText(), /使用缓存安装.*重新校验已登记包.*JDK 21.*Xcode/s);
       else assert.match(await installConfirm.innerText(), /后台 Mac.*系统窗口/);
       if (id === "hopper") {
         versions.hopper = "6.6.1";
@@ -146,9 +166,9 @@ try {
       }
       await installConfirm.getByRole("button", { name: "暂不安装", exact: true }).click();
       assert.equal(installs, id === "ghidra" ? 1 : 2); assert.equal(installers, 0);
-      await page.reload(); await panel.getByRole("button", { name: `安装${label}`, exact: true }).click();
+      await page.reload(); await panel.getByRole("button", { name: cachedActionName, exact: true }).click();
       await installConfirm.getByRole("button", { name: id === "ghidra" ? "确认安装" : "打开安装程序", exact: true }).click();
-      await panel.getByText(id === "ghidra" ? "已是推荐版本" : "待完成系统安装", { exact: true }).waitFor();
+      if (id === "ghidra") await atRecommended(panel); else await panel.getByText("待完成系统安装", { exact: true }).waitFor();
       assert.equal(downloads, before + 1, "installing cached packages must not repeat the package download");
       if (id === "ghidra") { assert.equal(installs, 2); assert.match(savedConfig().engines.ghidra, /engines\/ghidra-/); }
       else { assert.equal(installers, 1); assert.equal(savedConfig().engines.hopper, undefined); assert.equal(savedConfig().managedEngines.hopper, undefined); }
@@ -161,7 +181,7 @@ try {
     for (const id of ["ghidra", "hopper"]) downloadGates.set(id, downloadGate());
     await (await prepareDownload("ghidra")).getByRole("button", { name: "确认下载", exact: true }).click();
     await cancelGhidra.waitFor(); await downloadGates.get("ghidra")!.entered;
-    assert.equal(await ghidra.getByRole("button", { name: "检查Ghidra更新", exact: true }).isDisabled(), true);
+    assert.equal(await ghidra.getByRole("button", { name: "检查Ghidra更新", exact: true }).isDisabled(), true, "running maintenance explains why conflicting checks are temporarily blocked");
     assert.equal(await hopper.getByRole("button", { name: "检查Hopper更新", exact: true }).isEnabled(), true, "regression: upper download must not grey out the lower card");
     assert.equal(await section.getByRole("button", { name: "检查JADX Headless更新", exact: true }).isEnabled(), true);
     const hopperConfirm = await prepareDownload("hopper");
@@ -194,7 +214,8 @@ try {
     await page.reload(); await cancelGhidra.waitFor(); await cancelHopper.waitFor();
     assert.equal(downloads, before + 2, "refresh restores jobs without repeating downloads");
     await cancelGhidra.click(); await cancelGhidra.waitFor({ state: "detached" });
-    await ghidra.getByText("操作已取消。", { exact: true }).waitFor();
+    await ghidra.getByRole("button", { name: "检查Ghidra更新", exact: true }).and(page.locator(":enabled")).waitFor();
+    assert.equal(await ghidra.locator(":scope > .maintenance-task").count(), 0);
     assert.equal(await cancelHopper.isVisible(), true); assert.deepEqual(savedConfig().downloads.ghidra, completed.ghidra);
     assert.equal(await ghidra.getByRole("alert").count(), 0); assert.equal(await hopper.getByRole("alert").count(), 0);
     await page.screenshot({ path: join(output, "parallel-cancel.png"), fullPage: true });
@@ -203,17 +224,24 @@ try {
     assert.deepEqual(savedConfig().downloads.ghidra, completed.ghidra);
   }
   const beforeChecks = checks;
-  await page.reload(); await java.getByText("已是推荐版本", { exact: true }).waitFor();
+  await page.reload(); await atRecommended(java);
   assert.equal(checks, beforeChecks); assert.equal(installs, process.platform === "darwin" ? 2 : 1);
   if (process.platform === "darwin") await hopper.getByText("已下载 · 待安装", { exact: true }).waitFor();
   for (const width of [320, 390, 820, 1440]) {
     await page.setViewportSize({ width, height: 900 }); await section.scrollIntoViewIfNeeded();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false, `overflow ${width}`);
-    for (const button of await section.getByRole("button").all()) {
-      const box = await button.boundingBox(); assert.ok(box && box.height >= 44, `button target ${await button.innerText()} at ${width}`);
+    await assertComponentTree(reaCard);
+    const engineCards = section.locator(".rea-engine");
+    assert.equal(await engineCards.count(), 5, "all five engine roots carry their sizing scope");
+    for (const engine of await engineCards.all()) await ensureComponentActions(engine);
+    // Header operations are glyph-sized by design and checked by assertComponentTree; other engine buttons keep 44px targets.
+    assert.ok(await engineCards.locator(".maintenance-panel-heading .component-action:visible").count() >= 5, "header action checks inspect real engine actions");
+    const engineButtons = await engineCards.locator("button:visible:not(.component-action):not(.component-card-location button)").all();
+    for (const button of engineButtons) {
+      const box = await button.boundingBox(); assert.ok(box && box.width >= 44 && box.height >= 44, `engine button target ${await button.innerText()} at ${width}`);
     }
     if ([390, 1440].includes(width)) await page.screenshot({ path: join(output, `engines-${width}.png`), fullPage: true });
   }
   assert.deepEqual(errors, []);
-  console.log("REA engines UI passed: upfront JDK dependency notices for fresh/download/cached Ghidra confirmations; cached Ghidra installation without re-download, Hopper installer opening without marking installation complete, confirmations/reload, default locations, equivalent JDK version, parallel downloads and cancellation, 320/390/820/1440 layouts and 44px targets; fixture packages and installer only.");
+  console.log("REA engines UI passed: upfront JDK dependency notices for fresh/download/cached Ghidra confirmations; cached Ghidra installation without re-download, Hopper installer opening without marking installation complete, confirmations/reload, default locations, equivalent JDK version, parallel downloads and cancellation, 320/390/820/1440 layouts, glyph header actions and 44px body targets; fixture packages and installer only.");
 } finally { for (const gate of downloadGates.values()) gate.release(); await browser.close(); await app.close(); rmSync(root, { recursive: true, force: true }); }

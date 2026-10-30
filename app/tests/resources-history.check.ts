@@ -42,10 +42,13 @@ try {
   await page.getByRole("button", { name: "刷新目录", exact: true }).waitFor();
   assert.equal(await history.count(), 0);
   assert.deepEqual(JSON.parse(readFileSync(jobPath, "utf8")).job, job, "history display never erases server evidence");
-  await page.getByRole("button", { name: "任务与下载设置", exact: true }).click();
-  const center = page.getByRole("dialog");
-  await center.getByRole("alert").filter({ hasText: "操作未完成，请到来源页面核实安装结果。" }).waitFor();
-  await center.getByRole("button", { name: "关闭", exact: true }).click();
+  assert.equal(await page.getByRole("button", { name: "任务与下载设置", exact: true }).count(), 0);
+  const legacy = page.locator(".resources-legacy-maintenance");
+  await legacy.locator("summary").first().click();
+  await legacy.getByRole("alert").filter({ hasText: "操作未完成，请到来源页面核实安装结果。" }).waitFor();
+  assert.match(await legacy.innerText(), /具体资源未记录/, "legacy evidence is not misattributed to the selected resource");
+  await legacy.locator("summary").first().click();
+  assert.equal(JSON.parse(readFileSync(join(root, "maintenance/tasks.json"), "utf8")).tasks[0].id, job.id, "display does not erase durable maintenance evidence");
   await page.locator("nav.supplier-list button").filter({ hasText: "history-fixture" }).click();
   const editor = page.locator("#resource-content");
   await editor.fill("# missing frontmatter");
@@ -56,16 +59,18 @@ try {
   await editor.fill(content + "\nUpdated");
   await page.getByRole("button", { name: "保存技能内容", exact: true }).click();
   await page.getByText("配置已保存。", { exact: true }).waitFor();
+  // Resource and maintenance scopes publish independently; wait for the successful task snapshot too.
+  await page.getByRole("alert").waitFor({ state: "hidden" });
   assert.equal(await page.getByRole("alert").count(), 0);
-  assert.equal(await history.count(), 0);
+  assert.equal(await history.getAttribute("open"), null, "older failures remain collapsed evidence, not current alerts");
   await page.getByRole("button", { name: "卸载资源", exact: true }).click();
   await page.getByRole("button", { name: "确认卸载", exact: true }).click();
-  await page.getByText("已卸载，资源列表已刷新。", { exact: true }).waitFor();
+  await page.getByText("已删除，资源列表已刷新。", { exact: true }).waitFor();
   assert.equal(existsSync(directory), false);
   assert.equal(await page.locator("nav.supplier-list button").filter({ hasText: "history-fixture" }).count(), 0);
   assert.equal(await page.getByRole("alert").count(), 0);
   assert.deepEqual(errors, []);
-  console.log("PASS: persisted resource and maintenance failures do not reopen as alerts; history remains inspectable; new failures alert, successful save and uninstall clear them.");
+  console.log("PASS: persisted resource and maintenance failures do not reopen as alerts; legacy evidence remains locally inspectable without a public center; new failures alert, successful save and uninstall clear them.");
 } finally {
   await browser.close(); await app.close();
   if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = previous;

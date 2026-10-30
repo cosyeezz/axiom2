@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import { tmpdir } from "./temporary.js";
 import { PathActions } from "../src/server/path-actions.js";
 import { FileManager, FileManagerError } from "../src/server/file-manager.js";
+import { Terminal, TerminalError } from "../src/server/terminal.js";
 import { Store } from "../src/server/storage.js";
 import { Memories } from "../src/server/memories.js";
 import { memoryDirectory } from "../src/server/memory-files.js";
@@ -51,6 +52,29 @@ test("reveal selects existing files, opens directories, handles an absent file, 
     const failure = new PathActions({} as Store, { open: async () => { throw new FileManagerError("正在打开文件夹，请稍候", 409); } });
     await assert.rejects(failure.command(command(file, "paths.reveal"), signal), { code: "PATH_UNAVAILABLE", message: "正在打开文件夹，请稍候" });
   } finally { await manager.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("terminal navigation uses the requested directory without executing path contents and preserves errors/cancellation", async () => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-path-terminal-")), directory = join(root, "终端 路径 # & ' $(echo never)");
+  mkdirSync(directory);
+  const calls: string[] = [], terminal = new Terminal(async path => { calls.push(path); });
+  const store = { workspace: () => ({ path: root, authorized: true }) } as unknown as Store;
+  const paths = new PathActions(store, { open: async () => { throw Error("must not open file manager"); } }, terminal);
+  const signal = new AbortController().signal;
+  try {
+    assert.equal(await paths.command(command(directory, "paths.terminal"), signal), directory);
+    assert.equal(await paths.command(command(pathToFileURL(directory).href, "paths.terminal"), signal), directory);
+    assert.equal(await paths.command(command("./" + directory.slice(root.length + 1), "paths.terminal"), signal), directory);
+    assert.deepEqual(calls, [directory, directory, directory]);
+    const file = join(root, "file.txt"); writeFileSync(file, "never execute");
+    for (const path of [file, join(root, "missing")])
+      await assert.rejects(paths.command(command(path, "paths.terminal"), signal), { code: "TERMINAL_UNAVAILABLE" });
+    await assert.rejects(paths.command({ ...command(directory, "paths.terminal"), params: { path: directory, command: "echo not allowed" } }, signal), { code: "INVALID_INPUT" });
+    await assert.rejects(paths.command(command(directory, "paths.terminal"), AbortSignal.abort()));
+    assert.equal(calls.length, 3);
+    const failure = new PathActions(store, { open: async () => {} }, { open: async () => { throw new TerminalError("正在打开终端，请稍候", 409); } });
+    await assert.rejects(failure.command(command(directory, "paths.terminal"), signal), { code: "TERMINAL_UNAVAILABLE", message: "正在打开终端，请稍候" });
+  } finally { await terminal.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
 test("memory.resolve uses the memory directory and retains session/workspace authorization", async () => {

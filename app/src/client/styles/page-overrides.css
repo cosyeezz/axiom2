@@ -5,3 +5,31 @@
 @import "./mobile.css";
 @import "./theme.css";
 @import "./confirmation-inline.css";
+
+/* Both labels share a compact font and a common vertical center.
+   Resolve scale on the composer before the model menu applies its own cap. */
+.composer {
+  --composer-identity-size: calc(14px * clamp(.85, var(--display-font-scale, 1), 1.15));
+  --composer-identity-height: calc(44px * var(--display-font-scale, 1));
+}
+.app .composer-area .composer textarea,
+.app .composer-area .composer .model-picker > summary {
+  font-family: var(--font-body);
+  font-size: var(--composer-identity-size);
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.5;
+}
+.app .composer-area .composer .model-picker > summary {
+  min-height: var(--composer-identity-height);
+  color: var(--muted);
+}
+.app .composer-area .composer:not([data-multiline]) textarea {
+  min-height: var(--composer-identity-height);
+  padding-block: calc((var(--composer-identity-height) - var(--composer-identity-size) * 1.5) / 2);
+}
+.app .composer-area .composer textarea::placeholder {
+  font: inherit;
+  letter-spacing: inherit;
+  opacity: 1;
+}

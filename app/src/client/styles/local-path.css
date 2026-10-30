@@ -29,6 +29,15 @@
  .path-actions>.icon-btn,.remote-file-dialog .remote-path-actions .icon-btn{width:44px;min-width:44px;height:44px;min-height:44px}
  .history-row:has(.path-actions){flex-wrap:wrap}
  .history-row:has(.path-actions) .history-item{flex-basis:100%}
- .history-row:has(.path-actions) .session-actions,.workspace-row:has(.path-actions) .workspace-actions{position:static;transform:none;justify-content:flex-end;width:100%;padding:0 4px 4px;opacity:1;pointer-events:auto}
+ .history-row:has(.path-actions) .session-actions{position:static;transform:none;justify-content:flex-end;width:100%;padding:0 4px 4px;opacity:1;pointer-events:auto}
+ /* Keep workspace names and all four touch actions on their original single row.
+    Let flex reserve the actual action width instead of a second full-width row. */
+ .workspace-row:has(.path-actions){--workspace-action-size:44px;--workspace-row-inset:4px;--workspace-row-gap:4px;--workspace-icon-size:16px;display:flex;align-items:center;flex-wrap:nowrap}
+ .workspace-row:has(.path-actions) .workspace-option{flex:1;min-width:0;width:0;padding-inline:var(--workspace-row-inset);gap:var(--workspace-row-gap)}
+ .workspace-row:has(.path-actions) .workspace-option>svg{flex-shrink:0;width:var(--workspace-icon-size)}
+ .workspace-row:has(.path-actions) .workspace-actions{position:static;transform:none;flex:none;align-items:center;gap:0;width:auto;padding:0;opacity:1;pointer-events:auto}
+ .workspace-row:has(.path-actions) .workspace-actions .path-actions{gap:0}
+ /* Font enlargement must not multiply four touch targets beyond a phone's width. */
+ .workspace-row:has(.path-actions) .workspace-actions .icon-btn{width:var(--workspace-action-size);min-width:var(--workspace-action-size);height:var(--workspace-action-size);min-height:var(--workspace-action-size)}
  .history-row:has(.path-actions):not([data-editing=true]) :is(.session-title-line,.history-item small),.workspace-row:has(.path-actions):not([data-editing=true]) .workspace-copy :is(strong,small){margin-right:0}
 }

@@ -31,9 +31,9 @@ try {
     const server = socket.connectToServer();
     socket.onMessage(raw => {
       const c = JSON.parse(String(raw));
-      if (["paths.reveal", "files.reveal"].includes(c.op)) {
+      if (["paths.reveal", "files.reveal", "paths.terminal"].includes(c.op)) {
         requests.push(c);
-        const reply = () => socket.send(JSON.stringify({ type: "receipt", requestId: c.requestId, ok: !failReveal, ...(failReveal ? { error: { code: "PATH_UNAVAILABLE", message: "测试：文件夹暂不可用" } } : { result: c.params.path }) }));
+        const reply = () => socket.send(JSON.stringify({ type: "receipt", requestId: c.requestId, ok: !failReveal, ...(failReveal ? { error: { code: "PATH_UNAVAILABLE", message: c.op === "paths.terminal" ? "测试：终端暂不可用" : "测试：文件夹暂不可用" } } : { result: c.params.path }) }));
         if (holdReveal) { held = reply; holdReveal = false; } else reply();
       } else server.send(raw);
     });
@@ -51,6 +51,30 @@ try {
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), project);
   await title.getByRole("button", { name: "打开系统文件管理器", exact: true }).click();
   assert.equal(requests.at(-1).params.path, project);
+  const terminal = title.getByRole("button", { name: "打开终端", exact: true });
+  assert.equal(await terminal.locator('use[href="#i-square-terminal"]').count(), 1);
+  await page.locator('.title-meta button[aria-label="打开终端"]:enabled').waitFor();
+  await terminal.press("Enter");
+  for (let i = 0; requests.at(-1)?.op !== "paths.terminal" && i < 100; i++) await page.waitForTimeout(10);
+  await page.waitForFunction(() => !document.querySelector('.title-meta button[aria-busy="true"]'));
+  assert.equal(requests.at(-1).op, "paths.terminal");
+  assert.equal(requests.at(-1).params.path, project, "terminal uses the displayed workspace directory, including spaces and Unicode");
+  failReveal = true; await terminal.click();
+  await title.getByRole("alert").filter({ hasText: "终端暂不可用" }).waitFor();
+  failReveal = false; holdReveal = true;
+  await terminal.click();
+  await page.waitForFunction(() => document.querySelector('.title-meta button[aria-busy="true"]'));
+  assert.ok(await terminal.isDisabled());
+  assert.ok(await title.getByRole("button", { name: "复制工作空间路径", exact: true }).isDisabled());
+  assert.ok(await title.getByRole("button", { name: "打开系统文件管理器", exact: true }).isDisabled());
+  const pendingCount = requests.length;
+  await terminal.evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
+  assert.equal(requests.length, pendingCount, "pending terminal launch blocks duplicate clicks");
+  assert.ok(held); held!();
+  await page.waitForFunction(() => !document.querySelector('.title-meta button[aria-busy="true"]'));
+  assert.equal(await title.getByRole("alert").count(), 0, "successful retry clears the terminal error");
+  await terminal.hover();
+  await page.screenshot({ path: join(artifacts, "terminal-header.png") });
   await page.getByRole("button", { name: "复制会话标题", exact: true }).click();
   await page.locator(".title-heading [role=status]").filter({ hasText: "已复制标题" }).waitFor();
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), await page.locator("#chat-title").textContent());
@@ -112,7 +136,8 @@ try {
   await mobile.waitForFunction(expected => document.querySelector("#title-path")?.textContent === expected, project);
   assert.equal(await mobile.locator("#title-path").textContent(), project);
   assert.equal(await mobile.locator(".history-row .path-actions").count(), 0, "mobile sidebar session titles have no path action buttons");
-  assert.equal(await mobile.locator(".title-meta button").count(), 2, "mobile header keeps both path actions");
+  assert.equal(await mobile.locator(".title-meta button").count(), 3, "mobile header keeps copy, file manager and terminal actions");
+  assert.ok(await mobile.locator(".title-meta").getByRole("button", { name: "打开终端", exact: true }).isEnabled());
   assert.ok(await mobile.getByRole("button", { name: "复制会话标题", exact: true }).isVisible());
   assert.equal(await mobile.locator('[aria-label="助手回复"] .markdown .path-actions').count(), 0, "mobile message paths have no inline actions");
   const actions = mobile.locator(".title-meta .path-actions");
@@ -123,7 +148,7 @@ try {
   assert.ok(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
   await mobile.screenshot({ path: join(artifacts, "paths-mobile.png") });
   await touch.close(); await context.close(); assert.deepEqual(errors, []);
-  console.log(`PASS local paths: no body copy/open actions on desktop/mobile, keyboard file preview, relative-path tooltips, header clipboard/reveal, error/retry, busy guard, touch targets and responsive layout. Artifacts: ${resolve(artifacts)}`);
+  console.log(`PASS local paths: no body copy/open actions on desktop/mobile, keyboard file preview, relative-path tooltips, header clipboard/reveal/terminal, exact terminal cwd, error/retry, duplicate-click guard, touch targets and responsive layout. Artifacts: ${resolve(artifacts)}`);
 } finally {
   await browser.close(); await app.close();
   if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;

@@ -1,12 +1,15 @@
+// 遵循通用组件规范（Integrated component standard），见 ./component-maintenance.ts。
 import type { IntegrationRemoval } from "./managed-removal.js";
 import { proxyLaunchSupported, toolProcessSupported, toolProcessSupportError } from "./tool-process.js";
 import { prepareXrayImporter } from "./model-proxy-xray-installer.js";
-import { cleanupScope, assertCleanupScope } from "./cleanup-scope.js";
-import { assertProxyStopped, proxyRemovalPlan } from "./model-proxy-removal.js";
+import { cleanupScope } from "./cleanup-scope.js";
+import { forceRemoveProxyKernel, proxyRemovalPlan } from "./model-proxy-removal.js";
+import { abortComponentOperation, installWithFallback } from "./component-maintenance.js";
+import { proxyImporterDirectoryPattern } from "./model-proxy-config.js";
 import { readProxyShareSource } from "./model-proxy-share-source.js";
 import { runMaintenance, maintenanceCancelled, maintenanceFailure, maintenancePhase } from "../maintenance.js";
 import { randomUUID } from "node:crypto";
-import { rmSync } from "node:fs";
+import { copyFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { proxySourceLimit, type ModelProxyState, type ProxyKernel } from "../../shared/model-proxy.js";
 import { AppError, text, type Command } from "../../shared/protocol.js";
@@ -109,6 +112,11 @@ export class ModelProxyService {
     atomicProxyJson(proxyRuntimePath(this.root), Object.fromEntries([...this.processes].map(([id, process]) => [id, process.endpoint])));
   }
   private notify = () => { this.publishRuntime(); this.changed(); };
+  /** Keeps a copy of an unreadable config, then starts from an empty one so install/uninstall proceed. */
+  private resetUnreadableConfig() {
+    try { copyFileSync(proxyConfigPath(this.root), `${proxyConfigPath(this.root)}.unreadable-${Date.now()}`); } catch { /* Missing or unreadable; nothing to keep. */ }
+    this.config = { revision: "", profiles: [], installations: {}, bindings: {} }; this.error = undefined;
+  }
   private save(next: ProxyConfig) {
     const value = { ...next, revision: randomUUID() };
     atomicProxyJson(proxyConfigPath(this.root), value);
@@ -151,11 +159,12 @@ export class ModelProxyService {
     if (this.closed) throw new AppError("CLOSING", "服务正在退出。");
     if (c.op === "modelProxy.get") return this.snapshot();
     if (c.op === "modelProxy.cancel") {
-      if (this.job?.running && this.job.cancellable === false) throw new AppError("NOT_CANCELLABLE", "卸载已开始，正在停止线路并清理文件。");
       if (c.params?.jobId && c.params.jobId !== this.job?.id) throw new AppError("REVISION_CONFLICT", "当前操作已改变。");
       this.controller?.abort(); await this.pending; return this.snapshot();
     }
     if (this.refreshing) { this.controller?.abort(); await this.pending; }
+    // Install, update and uninstall preempt whatever is running (component standard).
+    if ((c.op === "modelProxy.install" || c.op === "modelProxy.uninstall") && this.pending) await abortComponentOperation(this.controller, this.pending);
     if (this.pending || this.mutation) throw new AppError("BUSY", "请等待当前模型代理操作完成。");
     const operation = Promise.resolve().then(() => this.execute(c));
     this.mutation = operation;
@@ -167,8 +176,9 @@ export class ModelProxyService {
     if (c.op === "modelProxy.get") return this.snapshot();
     if (c.op === "modelProxy.cancel") { this.controller?.abort(); await this.pending; return this.snapshot(); }
     if (this.pending) throw new AppError("BUSY", "请等待当前模型代理操作完成。");
+    if (this.error && (c.op === "modelProxy.install" || c.op === "modelProxy.uninstall")) this.resetUnreadableConfig();
     if (this.error) throw new AppError("CONFIG_READ_FAILED", this.error);
-    if (["modelProxy.save", "modelProxy.remove", "modelProxy.start", "modelProxy.stop", "modelProxy.uninstall"].includes(c.op) && p.revision !== this.config.revision)
+    if (["modelProxy.save", "modelProxy.remove", "modelProxy.start", "modelProxy.stop"].includes(c.op) && p.revision !== this.config.revision)
       throw new AppError("REVISION_CONFLICT", "代理配置已改变，请重新读取后操作。");
     if (c.op === "modelProxy.save") {
       const existing = this.config.profiles.find(item => item.id === p.id);
@@ -231,11 +241,7 @@ export class ModelProxyService {
     if (c.op === "modelProxy.start" && !profile) throw new AppError("NOT_FOUND", "线路已不存在。");
     if (c.op !== "modelProxy.start" && kernel !== "xray" && kernel !== "mihomo") throw new AppError("INVALID_INPUT", "请选择内核。");
     const release = this.releases.get(kernel);
-    if (c.op === "modelProxy.install" && (!release || release.version !== p.version)) throw new AppError("CHECK_REQUIRED", "请先检查更新，再安装已确认版本。");
-    if (c.op === "modelProxy.install" && kernel === "mihomo" && this.config.installations[kernel]?.version === release!.version) return this.snapshot();
-    if (c.op === "modelProxy.install" && this.config.removalPending?.some(name => name.startsWith(`${kernel}-`))) throw new AppError("REMOVAL_PENDING", "此内核有待清理文件，请先完成清理后重新安装。");
     const removing = c.op === "modelProxy.uninstall";
-    if (removing && p.confirm !== true) throw new AppError("CONFIRM_REQUIRED", "请确认卸载内核并停止使用它的线路；订阅和供应商绑定会保留。");
     this.controller = new AbortController(); const signal = this.controller.signal;
     // profileId 让界面把「启动中」显示在对应线路卡片上，而不是只留一条全局提示。
     this.job = { id: c.requestId, running: true, cancellable: !removing, ...(profile ? { profileId: profile.id } : {}), message: removing ? "正在准备卸载内核…" : inspecting ? "正在识别节点…" : c.op === "modelProxy.start" ? "正在启动线路…" : c.op === "modelProxy.check" ? "正在检查官方版本…" : "正在下载并校验内核…" };
@@ -245,23 +251,14 @@ export class ModelProxyService {
       try {
         if (removing) {
           await (this.dependencies.removal ?? (async work => work()))(async () => {
-          signal.throwIfAborted();
-          if (p.revision !== this.config.revision || readProxyConfig(this.root).revision !== this.config.revision) throw new AppError("REVISION_CONFLICT", "代理配置已变化，请重新读取后卸载。");
-          const plan = proxyRemovalPlan(this.root, kernel, this.config);
-          assertCleanupScope(p.cleanupRevision, cleanupScope(plan.paths));
-          await Promise.all([...this.processes.values()].filter(process => process.profile.kernel === kernel).map(process => process.stop()));
-          assertProxyStopped(this.root, kernel, plan.paths);
-          signal.throwIfAborted();
-          if (readProxyConfig(this.root).revision !== this.config.revision) throw new AppError("REVISION_CONFLICT", "代理配置已变化，线路已停止，请重新读取后卸载。");
-          assertCleanupScope(p.cleanupRevision, cleanupScope(proxyRemovalPlan(this.root, kernel, this.config).paths));
-          const installations = { ...this.config.installations }; delete installations[kernel];
-          maintenancePhase("removing");
-          this.save({ ...this.config, installations, profiles: this.config.profiles.map(item => item.kernel === kernel ? { ...item, enabled: false } : item), removalPending: [...new Set([...(this.config.removalPending ?? []), ...plan.names])] });
-          try { plan.remove(); } catch { throw Error("内核已停用，部分文件未能删除；解除占用后可重试清理。订阅和供应商绑定已保留。"); }
-          maintenancePhase("validating");
-          const remaining = this.config.removalPending!.filter(name => !plan.names.includes(name));
-          this.save({ ...this.config, removalPending: remaining.length ? remaining : undefined });
-          this.clearInspection();
+            await Promise.all([...this.processes.values()].filter(process => process.profile.kernel === kernel).map(process => process.stop().catch(() => {})));
+            const installations = { ...this.config.installations }; delete installations[kernel];
+            const pending = this.config.removalPending?.filter(name => !name.startsWith(`${kernel}-`) && !(kernel === "xray" && proxyImporterDirectoryPattern.test(name)));
+            maintenancePhase("removing");
+            this.save({ ...this.config, installations, profiles: this.config.profiles.map(item => item.kernel === kernel ? { ...item, enabled: false } : item), removalPending: pending?.length ? pending : undefined });
+            this.clearInspection();
+            await forceRemoveProxyKernel(this.root, kernel);
+            maintenancePhase("validating");
           });
         } else if (inspecting) {
           if (kernel === "xray") {
@@ -277,10 +274,25 @@ export class ModelProxyService {
           }
         } else if (c.op === "modelProxy.check") this.releases.set(kernel, await (this.dependencies.latestRelease ?? latestProxyRelease)(kernel, signal));
         else if (c.op === "modelProxy.install") {
-          prepared = await (this.dependencies.installKernel ?? installProxyKernel)(this.root, release!, signal);
-          if (kernel === "xray") await (this.dependencies.prepareImporter ?? prepareXrayImporter)(this.root, signal, message => { this.job!.message = message; this.changed(); });
-          signal.throwIfAborted();
-          this.save({ ...this.config, installations: { ...this.config.installations, [kernel]: prepared } }); prepared = undefined;
+          // Refetch first; an earlier check result is only an offline fallback.
+          let target: ProxyRelease;
+          try { target = await (this.dependencies.latestRelease ?? latestProxyRelease)(kernel, signal); }
+          catch (error) { if (!release || signal.aborted) throw error; target = release; }
+          this.releases.set(kernel, target);
+          const attempt = async () => {
+            prepared = await (this.dependencies.installKernel ?? installProxyKernel)(this.root, target, signal);
+            if (kernel === "xray") await (this.dependencies.prepareImporter ?? prepareXrayImporter)(this.root, signal, message => { this.job!.message = message; this.changed(); });
+            signal.throwIfAborted();
+            this.save({ ...this.config, installations: { ...this.config.installations, [kernel]: prepared } }); prepared = undefined;
+          };
+          // Component standard: a failed install is followed by a forced cleanup and one retry.
+          await installWithFallback(attempt, async () => {
+            if (prepared) { rmSync(join(proxyDirectory(this.root), "versions", prepared.directory), { recursive: true, force: true }); prepared = undefined; }
+            await Promise.all([...this.processes.values()].filter(process => process.profile.kernel === kernel).map(process => process.stop().catch(() => {})));
+            const installations = { ...this.config.installations }; delete installations[kernel];
+            this.save({ ...this.config, installations, profiles: this.config.profiles.map(item => item.kernel === kernel ? { ...item, enabled: false } : item) });
+            await forceRemoveProxyKernel(this.root, kernel);
+          }, signal, message => { this.job!.message = message; this.changed(); });
         } else {
           await this.start(profile!, signal); signal.throwIfAborted();
           this.save({ ...this.config, profiles: this.config.profiles.map(item => item.id === profile!.id ? { ...item, enabled: true } : item) });

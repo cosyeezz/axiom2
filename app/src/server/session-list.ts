@@ -1,5 +1,5 @@
-import { AppError, type Session } from "../shared/protocol.js";
-import type { SessionListCursor, SessionListGroup, SessionListItem, SessionListPage } from "../shared/session-list.js";
+import { AppError, text, type Scope, type Session } from "../shared/protocol.js";
+import type { SessionListCursor, SessionListGroup, SessionListInitial, SessionListItem, SessionListPage } from "../shared/session-list.js";
 import type { Store } from "./storage.js";
 
 interface Locator {
@@ -11,11 +11,13 @@ interface Locator {
 }
 
 // This bounds rows crossing into JS, not the SQL scan/sort or deep-tree path cost.
+// Resolve family membership BEFORE ranking: every member of a top family uses a
+// fixed anchor, so activity cannot move either siblings or the whole family.
 // Normal UUID tie buckets use BINARY. Arbitrary legacy IDs use localeCompare only
 // inside their equal-priority/time bucket (worst-case quadratic in that bucket).
 const locators = `/* session-list locators */ WITH RECURSIVE
 eligible AS MATERIALIZED (
-  SELECT s.id,s.workspaceId,s.forkParentSessionId,s.updatedAt,s.pinned,s.unread,s.autoPinUntil,
+  SELECT s.id,s.workspaceId,s.forkParentSessionId,s.updatedAt,COALESCE(s.listOrderAt,s.updatedAt) AS listOrderAt,s.pinned,s.unread,s.autoPinUntil,
     (SELECT r.status FROM runs r WHERE r.sessionId=s.id ORDER BY r.startedAt DESC,r.rowid DESC LIMIT 1) AS runStatus,
     EXISTS(SELECT 1 FROM tasks t WHERE t.parentSessionId=s.id
       AND t.status IN ('queued','starting','running','stopping')) AS taskActive
@@ -30,35 +32,45 @@ eligible AS MATERIALIZED (
   SELECT *,CASE WHEN pinned=1 OR selfAuto=1 THEN 1 ELSE 0 END AS selfTop FROM automatic
 ), pool AS MATERIALIZED (
   SELECT * FROM flags WHERE workspaceId=:workspaceId OR selfTop=1
+), edge AS MATERIALIZED (
+  SELECT c.id,p.id AS parentId FROM pool c LEFT JOIN pool p
+    ON p.id=c.forkParentSessionId AND p.workspaceId=c.workspaceId AND p.id<>c.id
+), ancestry(id,familyId) AS (
+  SELECT id,id FROM edge WHERE parentId IS NULL
+  UNION ALL
+  SELECT e.id,a.familyId FROM ancestry a JOIN edge e ON e.parentId=a.id
+), members AS MATERIALIZED (
+  SELECT * FROM ancestry
+  UNION ALL
+  SELECT p.id,p.id FROM pool p WHERE NOT EXISTS(SELECT 1 FROM ancestry a WHERE a.id=p.id)
+), familyFlags AS (
+  SELECT m.familyId,MAX(p.selfTop) AS familyTop FROM members m JOIN pool p ON p.id=m.id GROUP BY m.familyId
+), sortable AS MATERIALIZED (
+  SELECT p.*,m.familyId,f.familyTop,CASE WHEN f.familyTop=1 THEN p.listOrderAt ELSE p.updatedAt END AS orderAt
+    FROM pool p JOIN members m ON m.id=p.id JOIN familyFlags f USING(familyId)
 ), ties AS MATERIALIZED (
   SELECT *,MAX(CASE WHEN axiom_list_uuid(id) THEN 0 ELSE 1 END)
-    OVER (PARTITION BY selfTop,selfAuto,updatedAt) AS localeTie FROM pool
+    OVER (PARTITION BY familyTop,orderAt) AS localeTie FROM sortable
 ), ranked AS MATERIALIZED (
-  SELECT *,ROW_NUMBER() OVER (ORDER BY a.selfTop DESC,a.selfAuto DESC,a.updatedAt DESC,
+  SELECT *,ROW_NUMBER() OVER (ORDER BY a.familyTop DESC,a.orderAt DESC,
     CASE WHEN a.localeTie=1 THEN (
-      SELECT COUNT(*) FROM pool b WHERE b.selfTop=a.selfTop AND b.selfAuto=a.selfAuto AND b.updatedAt=a.updatedAt
+      SELECT COUNT(*) FROM sortable b WHERE b.familyTop=a.familyTop AND b.orderAt=a.orderAt
         AND axiom_list_compare(b.id,a.id)<0
     ) ELSE a.id END COLLATE BINARY,
-    CASE WHEN a.workspaceId=:workspaceId THEN 0 ELSE 1 END,a.pinned DESC,a.id COLLATE BINARY) AS selfRank
+    CASE WHEN a.workspaceId=:workspaceId THEN 0 ELSE 1 END,a.id COLLATE BINARY) AS selfRank
   FROM ties a
-), edge AS MATERIALIZED (
-  SELECT c.id,p.id AS parentId FROM ranked c LEFT JOIN ranked p
-    ON p.id=c.forkParentSessionId AND p.workspaceId=c.workspaceId AND p.id<>c.id
 ), tree(id,familyId,path) AS (
-  SELECT e.id,e.id,printf('%020d',r.selfRank) FROM edge e JOIN ranked r ON r.id=e.id WHERE e.parentId IS NULL
+  SELECT id,familyId,printf('%020d',selfRank) FROM ranked WHERE id=familyId
   UNION ALL
   SELECT e.id,t.familyId,t.path||'/'||printf('%020d',r.selfRank)
-    FROM tree t JOIN edge e ON e.parentId=t.id JOIN ranked r ON r.id=e.id
-), members AS MATERIALIZED (
+    FROM tree t JOIN edge e ON e.parentId=t.id JOIN ranked r ON r.id=e.id AND r.familyId=t.familyId
+), orderedMembers AS (
   SELECT id,familyId,ROW_NUMBER() OVER (PARTITION BY familyId ORDER BY path COLLATE BINARY) AS memberRank FROM tree
-  UNION ALL
-  SELECT r.id,r.id,1 FROM ranked r WHERE NOT EXISTS(SELECT 1 FROM tree t WHERE t.id=r.id)
 ), families AS (
-  SELECT m.familyId,MAX(r.selfTop) AS familyTop,MIN(r.selfRank) AS familyRank
-    FROM members m JOIN ranked r ON r.id=m.id GROUP BY m.familyId
+  SELECT familyId,MAX(familyTop) AS familyTop,MIN(selfRank) AS familyRank FROM ranked GROUP BY familyId
 ), ordered AS (
   SELECT m.id,m.familyId,f.familyTop,f.familyRank,m.memberRank
-    FROM members m JOIN families f USING(familyId) JOIN ranked r ON r.id=m.id
+    FROM orderedMembers m JOIN families f USING(familyId) JOIN ranked r ON r.id=m.id
     WHERE (:group='top' AND f.familyTop=1)
        OR (:group='workspace' AND f.familyTop=0 AND r.workspaceId=:workspaceId)
 )
@@ -129,6 +141,14 @@ export class SessionLists {
     });
   }
 
+  /** Both first pages belong to one snapshot, even with an external WAL writer. */
+  initial(workspaceId: unknown, query: unknown = ""): SessionListInitial {
+    return this.read(() => {
+      const top = this.page(workspaceId, "top", query), workspace = this.page(workspaceId, "workspace", query);
+      return { top, workspace, revision: top.revision };
+    });
+  }
+
   /** Authority does not depend on the title query, current page or top membership. */
   summary(workspaceId: unknown, sessionId: unknown): Session | null {
     this.identifier(workspaceId); this.identifier(sessionId);
@@ -136,6 +156,26 @@ export class SessionLists {
       const row = this.store.prepare(`SELECT s.id FROM sessions s WHERE s.workspaceId=? AND s.id=? AND ${visible}`)
         .get(workspaceId, sessionId);
       return row ? this.hydrate([row.id as string])[0] : null;
+    });
+  }
+
+  /** Validate the WHOLE bounded batch before any transcript can be opened. */
+  countScopes(workspaceId: unknown, value: unknown): Scope[] {
+    const id = text(workspaceId, "工作空间标识");
+    if (!Array.isArray(value) || value.length < 1 || value.length > 30)
+      throw new AppError("INVALID_INPUT", "计数每次须提供 1–30 个会话");
+    const ids = value.map(value => {
+      const parsed = text(value, "会话标识");
+      if (parsed !== value) throw new AppError("INVALID_INPUT", "会话标识无效");
+      return parsed;
+    });
+    if (new Set(ids).size !== ids.length) throw new AppError("INVALID_INPUT", "会话标识不能重复");
+    return this.read(() => {
+      this.store.workspace(id);
+      return ids.map(sessionId => {
+        this.store.session(id, sessionId);
+        return { workspaceId: id, sessionId };
+      });
     });
   }
 

@@ -17,9 +17,14 @@ final class ConnectionHistory {
         return new ArrayList<>(unique);
     }
 
-    static String next(String saved, String current) {
+    static String next(String saved, String current) { return next(saved, current, 1); }
+
+    static String next(String saved, String current, int direction) {
         List<String> history = entries(saved);
-        return history.isEmpty() ? "" : history.get((history.indexOf(current) + 1) % history.size());
+        if (history.isEmpty()) return "";
+        int currentIndex = history.indexOf(current);
+        if (currentIndex < 0) return history.get(direction < 0 ? history.size() - 1 : 0);
+        return history.get((currentIndex + (direction < 0 ? -1 : 1) + history.size()) % history.size());
     }
 
     static String record(String saved, String endpoint, boolean cycling) {

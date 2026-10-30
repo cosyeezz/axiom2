@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { chromium, type Browser } from "playwright";
 import { startServer } from "../src/server/index.js";
 import type { AgentViews } from "../src/server/agents/views.js";
-import { threadScope, type ChatMessage } from "../src/shared/agent.js";
+import { threadMetadataScope, type ChatMessage } from "../src/shared/agent.js";
 import type { Session, Workspace } from "../src/shared/protocol.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-full-message-"));
@@ -21,7 +21,11 @@ try {
   const scope = { workspaceId: workspace.id, sessionId: first.id };
   const views = (app.agents as unknown as { views: AgentViews }).views;
   let revision = 0;
-  const revise = () => app!.agents.publish(threadScope(scope), { ...views.thread(scope), contextRevision: ++revision });
+  const revise = () => {
+    const metadata = views.threadMetadata(scope);
+    revision = Math.max(revision, metadata.contextRevision) + 1;
+    app!.agents.publish(threadMetadataScope(scope), { ...metadata, contextRevision: revision });
+  };
   const preview = (label: string) => `${label}\n\n3. 第三项\n4. 第四项\n\n${"预览正文。".repeat(5000)}`;
   const update = (text: string) => { views.messageChanged(scope, { id: "answer", role: "assistant", text }); views.flush(scope); };
   update(preview("最初预览"));

@@ -9,6 +9,7 @@ import { FileIcon, type FileIconName } from "./FileIcon.js";
 import { Markdown } from "./Markdown.js";
 import { CodeBlock } from "./CodeBlock.js";
 import { HtmlFile } from "./HtmlFile.js";
+import { ImageFile, type ImageZoomControls, type ImageZoomState } from "./ImageFile.js";
 import { WebPreview } from "./WebPreview.js";
 import { OfficeFile } from "./OfficeFile.js";
 import { ArchiveFile, MediaFile } from "./RichFile.js";
@@ -41,27 +42,6 @@ function useMedia(file: FilePreview | null) {
   }, [file]);
   return url;
 }
-function ImageFile({ url, name, zoom }: { url: string; name: string; zoom: number | null }) {
-  const scroller = useRef<HTMLDivElement>(null);
-  const [viewport, setViewport] = useState({ width: 0, height: 0 });
-  const [natural, setNatural] = useState({ width: 0, height: 0 });
-  const [error, setError] = useState(false);
-  useEffect(() => {
-    const node = scroller.current!;
-    const measure = () => setViewport({ width: node.clientWidth, height: node.clientHeight });
-    const observer = new ResizeObserver(measure); observer.observe(node); measure();
-    return () => observer.disconnect();
-  }, []);
-  useEffect(() => { setError(false); }, [url]);
-  useEffect(() => { if (zoom === null) scroller.current?.scrollTo(0, 0); }, [zoom]);
-  const scale = zoom === null ? Math.min(1, Math.max(1, viewport.width - 48) / (natural.width || 1), Math.max(1, viewport.height - 48) / (natural.height || 1)) : zoom / 100;
-  const width = natural.width * scale, height = natural.height * scale;
-  return <div className="file-image-scroll" ref={scroller} tabIndex={0} aria-label="图片预览内容">
-    {error ? <div className="file-empty" role="alert"><strong>图片无法解码</strong><p>请重新加载，或打开本地位置查看原文件。</p></div> : <div className="file-image-stage" style={{ width: width + 48, height: height + 48 }}>
-      {url && <img src={url} alt={name} style={{ width, height }} onLoad={event => setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} onError={() => setError(true)} />}
-    </div>}
-  </div>;
-}
 const size = (bytes: number) => bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileReference; onClose: () => void }) {
   const [file, setFile] = useState<FilePreview | null>(null), [error, setError] = useState("");
@@ -87,7 +67,8 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
   }, [file, mode, rendered]);
   const [revealing, setRevealing] = useState(false), [notice, setNotice] = useState("");
   const [maximized, setMaximized] = useState(false);
-  const [zoom, setZoom] = useState<number | null>(null);
+  const [zoom, setZoom] = useState<ImageZoomState>({ percent: null, atMin: false, atMax: false });
+  const imageControls = useRef<ImageZoomControls>(null);
   const panel = useRef<HTMLElement>(null), panes = useRef<HTMLDivElement>(null), alive = useRef(true);
   const url = useMedia(file);
   useEffect(() => { alive.current = true; panel.current?.focus(); return () => { alive.current = false; }; }, []);
@@ -160,7 +141,7 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
   else if (file.kind === "office") body = <OfficeFile key={file.name} parts={file.officeParts ?? []} />;
   else if (file.kind === "archive") body = <ArchiveFile entries={file.entries ?? []} onOpen={entry => { setMember({ entry, archiveRevision: file.revision! }); setMode("reading"); }} />;
   else if (file.kind === "audio" || file.kind === "video") body = <MediaFile url={url} kind={file.kind} name={file.name} />;
-  else if (file.kind === "image") body = <ImageFile url={url} name={file.name} zoom={zoom} />;
+  else if (file.kind === "image") body = <ImageFile url={url} name={file.name} controls={imageControls} onZoomChange={setZoom} />;
   else if (file.kind === "pdf") body = <div className="file-pdf"><p>PDF 阅读器不可用时，可通过右上角打开所在文件夹。</p>{url && <object data={url} type="application/pdf" aria-label={`PDF 预览：${file.name}`}><div className="file-empty"><strong>此环境无法内嵌显示 PDF</strong><p>请打开所在文件夹，使用本地 PDF 阅读器查看。</p></div></object>}</div>;
   else body = <div className="file-empty"><FileIcon name="file" /><strong>{file.name}</strong><p>{file.reason}</p><button type="button" className="btn" disabled={revealing} onClick={() => void reveal()}><FileIcon name="folder" />打开所在文件夹</button></div>;
   if (!loading && !error && file && !member && !reference.skillId && !editing && (html || file.directory || file.name === "package.json")) body = <WebPreview key={`${file.path}:${attempt}:${file.revision ?? file.modified}`} reference={reference}>{body}</WebPreview>;
@@ -188,7 +169,7 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
           <button type="button" className="file-edit-action" disabled={saving} onClick={() => void save()}>{saving ? "保存中…" : "保存"}</button>
         </> : <button type="button" className="file-edit-action" onClick={() => { setFullDocument(true); setEditing(true); setMode("source"); setNotice(""); }}><Icon name="square-pen" />{sectionActive ? "编辑全文" : "编辑"}</button>)}
         {isText && showSource && <Action icon="wrap" label="自动换行" pressed={wrap} onClick={() => setWrap(v => !v)} />}
-        {file?.kind === "image" && <><Action icon="minus" label="缩小图片" onClick={() => setZoom(v => Math.max(25, (v ?? 100) - 25))} disabled={zoom === 25} /><span className="file-zoom">{zoom === null ? "适应" : `${zoom}%`}</span><Action icon="plus" label="放大图片" onClick={() => setZoom(v => Math.min(300, (v ?? 100) + 25))} disabled={zoom === 300} /><Action icon="fit" label="图片适应窗口" onClick={() => setZoom(null)} /></>}
+        {file?.kind === "image" && <><Action icon="minus" label="缩小图片" onClick={() => imageControls.current?.step(-1)} disabled={loading || zoom.atMin} /><span className="file-zoom">{zoom.percent === null ? "适应" : `${Math.round(zoom.percent)}%`}</span><Action icon="plus" label="放大图片" onClick={() => imageControls.current?.step(1)} disabled={loading || zoom.atMax} /><Action icon="fit" label="图片适应窗口" onClick={() => imageControls.current?.fit()} /></>}
         <Action icon="reload" label="重新加载文件" disabled={loading || saving} onClick={reload} />
       </div>
     </div>

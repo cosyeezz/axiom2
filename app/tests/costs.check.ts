@@ -237,8 +237,15 @@ try {
   await page.waitForFunction(before => (window as any).__costHeld > before, heldBeforeChild);
   assert.equal(await dialog.locator('.cost-total').count(), 0, 'parent cache is never reused for a child request');
   await page.evaluate(() => { (window as any).__costDelay = 0; });
-  await dialog.locator(".cost-total > .cost-number").filter({ hasText: "$2.0250 + 未知" }).waitFor();
+  await dialog.locator(".cost-total > .cost-number").filter({ hasText: "$0.5000" }).waitFor();
   await dialog.getByText(/当前查看的子会话/).waitFor();
+  assert.equal(await dialog.locator('#cost-main').count(), 0, 'child report has no main-agent section');
+  assert.equal(await dialog.locator('#cost-subagent .cost-source').count(), 1, 'child report has no siblings');
+  assert.deepEqual(await dialog.locator('.cost-token-facts dd').allTextContents(), ['1,700', '1,000', '200', '400', '100']);
+  assert.ok(!(await dialog.innerText()).includes('检查边界条件'), 'sibling titles never leak into a child report');
+  await dialog.getByText('仅当前子会话', { exact: false }).first().waitFor();
+  await dialog.locator('.cost-content').evaluate(el => { el.scrollTop = 0; });
+  await page.screenshot({ path: join(artifacts, 'child-only-1440-900.png'), fullPage: true });
   assert.equal(await dialog.locator('.cost-session-facts dd').first().textContent(), '$0.5000', 'child summary includes only its own session ledger');
   assert.equal(await dialog.locator('.cost-session-facts dd').nth(1).textContent(), '1,700', 'child token summary includes only its own session ledger');
   await page.keyboard.press("Escape");
@@ -248,20 +255,27 @@ try {
   // Existing direct URLs remain readable, independently of the popover entry.
   const direct = await context.newPage();
   await direct.goto(`${app.origin}/costs.html?${new URLSearchParams({ workspaceId: workspace.id, sessionId: childIds[0] })}`);
-  await direct.locator(".cost-total > .cost-number").filter({ hasText: "$2.0250 + 未知" }).waitFor();
+  await direct.locator(".cost-total > .cost-number").filter({ hasText: "$0.5000" }).waitFor();
   await direct.getByText(/当前查看的子会话/).waitFor();
   await direct.reload();
-  await direct.locator(".cost-total > .cost-number").filter({ hasText: "$2.0250 + 未知" }).waitFor();
-  // Explicit memory charges in a sibling invalidate every open report in the same family.
+  await direct.locator(".cost-total > .cost-number").filter({ hasText: "$0.5000" }).waitFor();
+  assert.equal(await direct.locator('#cost-main').count(), 0);
+  // Sibling invalidation may reread the child, but only the family total changes.
   const family = await context.newPage();
   await family.goto(`${app.origin}/costs.html?${new URLSearchParams(scope)}`);
   await family.locator('.cost-total > .cost-number').filter({ hasText: '$2.0250 + 未知' }).waitFor();
+  let childReads = await direct.evaluate(() => (window as any).__costReads);
   app.store.db.prepare('INSERT INTO memory_usage(id,sessionId,kind,provider,model,usage,createdAt) VALUES(?,?,?,?,?,?,?)').run('cost-ui-memory', childIds[1], 'query', 'fixture', 'memory-model', JSON.stringify(usage(.1)), Date.now());
   app.agents.publish(`costs:${workspace.id}:${childIds[1]}`, { revision: Date.now() });
-  for (const target of [direct, family]) await target.locator('.cost-total > .cost-number').filter({ hasText: '$2.1250 + 未知' }).waitFor();
+  await family.locator('.cost-total > .cost-number').filter({ hasText: '$2.1250 + 未知' }).waitFor();
+  await direct.waitForFunction(before => (window as any).__costReads > before && (window as any).__costInFlight === 0, childReads);
+  assert.equal(await direct.locator('.cost-total > .cost-number').textContent(), '$0.5000', 'sibling charges cannot change child totals after a fresh read');
+  childReads = await direct.evaluate(() => (window as any).__costReads);
   app.store.db.prepare('UPDATE memory_usage SET usage=? WHERE id=?').run(JSON.stringify(usage(.2)), 'cost-ui-memory');
   app.agents.publish(`costs:${workspace.id}:${childIds[1]}`, { revision: Date.now() });
-  for (const target of [direct, family]) await target.locator('.cost-total > .cost-number').filter({ hasText: '$2.2250 + 未知' }).waitFor();
+  await family.locator('.cost-total > .cost-number').filter({ hasText: '$2.2250 + 未知' }).waitFor();
+  await direct.waitForFunction(before => (window as any).__costReads > before && (window as any).__costInFlight === 0, childReads);
+  assert.equal(await direct.locator('.cost-total > .cost-number').textContent(), '$0.5000');
   await family.close();
   await direct.goto(`${app.origin}/costs.html?workspaceId=foreign&sessionId=${parent.id}`);
   await direct.getByRole("alert").waitFor();

@@ -1,5 +1,6 @@
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, readSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { accountBindings, selectedAuthPath } from "./model-account-storage.js";
 import type { Credential, CredentialStore, ModelsStoreEntry } from "@earendil-works/pi-ai";
 import { AppError } from "../shared/protocol.js";
 import { costParts } from "../shared/costs.js";
@@ -20,6 +21,12 @@ function readObject(path: string): Record<string, unknown> {
 /** A display snapshot, not request authentication. Never locks, creates or resolves auth.json. */
 export function credentialMetadata(path: string, providerScope?: string): CredentialStore {
   const stored = readObject(path);
+  for (const providerId of Object.keys(accountBindings(dirname(path)))) {
+    if (providerScope && providerScope !== providerId) continue;
+    const selected = readObject(selectedAuthPath(providerId, path));
+    delete stored[providerId];
+    if (Object.hasOwn(selected, providerId)) stored[providerId] = selected[providerId];
+  }
   const data = providerScope ? Object.fromEntries(Object.entries(stored).filter(([id]) => id === providerScope)) : stored;
   for (const credential of Object.values(data)) {
     const value = credential as Partial<Credential> | null;

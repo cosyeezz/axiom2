@@ -125,7 +125,7 @@ test("refresh is passive, paths persist with revision guard and only REA MCP rec
     await assert.rejects(call(service, "rea.engineSave", { revision: service.snapshot().revision, engine: "java", path: "relative" }));
   } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
 });
-test("managed install commits only verified components; failure and revision races clean staging", async () => {
+test("managed install commits only verified components; failure force-cleans and a revision race no longer blocks the install", async () => {
   for (const mode of ["success", "failure", "conflict", "cancel"] as const) {
     const root = temporary(), initial = config(root), directory = join(root, "integrations", "rea", "engines", `java-${randomUUID()}`);
     let verify: (() => void) | undefined, prepared = false;
@@ -146,9 +146,10 @@ test("managed install commits only verified components; failure and revision rac
       await call(service, "rea.engine-install", { revision: initial.revision, engine: "java", token: available.token, version: available.version });
       if (mode === "cancel") { while (!verify) await new Promise(resolve => setTimeout(resolve, 5)); await call(service, "rea.cancel", { jobId: service.snapshot().job!.id }); }
       const state = await settle(service);
-      assert.equal(readReaConfig(root).engines?.java, mode === "success" ? join(directory, "jdk") : mode === "conflict" ? join(root, "external-change") : undefined); assert.equal(existsSync(directory), mode === "success");
-      assert.equal(readReaConfig(root).managedEngines?.java?.length ?? 0, mode === "success" ? 1 : 0);
-      if (mode === "failure" || mode === "conflict") assert.ok(state.job?.error); else assert.equal(state.job?.error, undefined);
+      const published = mode === "success" || mode === "conflict";
+      assert.equal(readReaConfig(root).engines?.java, published ? join(directory, "jdk") : undefined); assert.equal(existsSync(directory), published);
+      assert.equal(readReaConfig(root).managedEngines?.java?.length ?? 0, published ? 1 : 0);
+      if (mode === "failure") assert.ok(state.job?.error); else assert.equal(state.job?.error, undefined);
     } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
   }
 });

@@ -252,12 +252,34 @@ try {
   assert.equal(await page.getByText(/后续等待/).count(), 0); await page.getByText(/正在整理 2 个目的/).waitFor();
   // Original compression card uses the native phase/application fact, not generated==applied.
   snapshots.set("configuration", { data: { revision: "1", providerCount: 0, modelCount: 0, available: [], dataRoot: "fixture", autoCompression: { enabled: false } }, seq: ++sequence });
-  const job = { id: "compression-job", sessionId: "session", state: "completed", phase: "applying", stage: "应用状态待核实", selection: { provider: "fixture", id: "fixture", thinking: "off" }, startedAt: Date.now() - 2000, endedAt: Date.now(), error: null, summary: "公开摘要", messageCount: 2 };
+  const job = { id: "compression-job", sessionId: "session", state: "completed", phase: "applying", stage: "应用状态待核实", selection: { provider: "fixture", id: "fixture", thinking: "off" }, startedAt: Date.now() - 2000, endedAt: Date.now(), error: null, summary: "公开摘要", messageCount: 2, before: 118451, after: 9369 };
   await render({ mode: "compression", job }); await page.getByRole("button", { name: "查看原压缩入口", exact: true }).click();
   const compression = page.getByRole("dialog", { name: "后台压缩", exact: true }); await compression.waitFor();
   assert.match(await compression.innerText(), /应用状态待核实/); assert.equal(await compression.locator('.compression-steps [data-phase="done"]').count(), 0);
   await render({ mode: "compression", job: { ...job, phase: "done", stage: "摘要已应用" } }); await compression.getByText("摘要已应用", { exact: false }).first().waitFor();
   assert.equal(await compression.locator('.compression-steps [data-phase="done"]').count(), 3);
+  await compression.getByText("压缩前 · 历史估算", { exact: true }).waitFor();
+  await compression.getByText("历史估算（来源未记录）", { exact: true }).waitFor();
+  assert.equal(await compression.locator('time').count(), 0, "legacy jobs must not invent a snapshot timestamp from startedAt");
+  const snapshot = { capturedAt: 1793172310039, leafId: "snapshot-leaf", source: "model-usage" };
+  await render({ mode: "compression", job: { ...job, state: "running", phase: "summarizing", before: 175855, after: null, snapshot } });
+  await compression.getByText("压缩前 · 上下文快照", { exact: true }).waitFor();
+  await compression.getByText("模型用量校准＋新增消息估算", { exact: true }).waitFor();
+  assert.equal(await compression.locator('time').getAttribute('datetime'), new Date(snapshot.capturedAt).toISOString());
+  await compression.getByText("等待结果", { exact: true }).waitFor();
+  await render({ mode: "compression", job: { ...job, state: "failed", phase: "applying", stage: "应用失败", before: 175855, snapshot, error: "fixture apply failed" } });
+  await compression.getByText("未应用", { exact: true }).waitFor();
+  assert.equal(await compression.locator('.compression-steps [data-phase="done"]').count(), 2, "snapshot and summary succeeded, application did not");
+  assert.equal(await compression.locator('.compression-steps [data-phase="failed"]').count(), 1);
+  assert.match(await compression.locator('.compression-facts').innerText(), /175,855 Token/);
+  assert.doesNotMatch(await compression.locator('.compression-facts').innerText(), /摘要已应用/);
+  for (const width of [375, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 }); await settle();
+    assert.ok(await compression.evaluate(node => node.scrollWidth <= node.clientWidth + 1), `snapshot details fit width ${width}`);
+    await page.screenshot({ path: join(artifacts, `compression-snapshot-${width}.png`) });
+  }
+  await render({ mode: "compression", job: { ...job, phase: "done", stage: "摘要已应用", snapshot } });
+  await compression.getByText("摘要已应用；当前占用另计", { exact: true }).waitFor();
   assert.deepEqual(blocked, []); assert.deepEqual(errors, []);
   assert.equal(commands.some(c => /^(prompt|memory\.(query|organize|configure)|compression\.(start|cancel)|task\.)/.test(c.op)), false);
   console.log("PASS fake-only UI: dedup/serial reads, stale receipts, reconnect, revocation, hidden directory, title process/modal/focus/four widths, queue/batch, original query card/outcomes, native compression application; no models or mutations");

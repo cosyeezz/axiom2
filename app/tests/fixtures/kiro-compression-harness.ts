@@ -157,7 +157,9 @@ try {
     assert.equal(compactions.length, 1); assert.deepEqual(kiroUsageInfo(compactions[0].usage), kiroUsageInfo(job.usage));
   }
   await pool.close(); assert.equal(pool.stats().total, 0);
-  console.log(JSON.stringify({ variant, requests, outcome, physical: physical.length, billing: expectedBilling,
+  const requestStats = pool.requests.snapshot().providers;
+  assert.deepEqual(requestStats, [{ providerId: "kiro", current: 0, peak: 1, rpm: requests, callLevel: variant === "aborted-result" }], "Kiro requests remain observable; the synthetic native stream override explicitly downgrades to call-level precision");
+  console.log(JSON.stringify({ variant, requests, outcome, physical: physical.length, requestStats, billing: expectedBilling,
     applied: success ? 1 : 0, childrenClosed: closed, permits }));
 } finally {
   await pool.close(); environment.release(); store.close(); assert.equal(profiles.size, 0);

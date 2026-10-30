@@ -13,8 +13,9 @@ svg.ui-glyph { display: block; flex-shrink: 0; overflow: visible; }
 .send:not(.is-running) > svg { width: 18px; height: 18px; }
 .model-picker > summary > svg:last-child { width: 10px; height: 10px; }
 .workspace-picker > summary > svg:last-child { width: 12px; height: 6px; }
-/* A common optical row, with spacing owned by the controls, not by SVG padding. */
-.usage { --toolbar-icon-size: 16px; --toolbar-gap: 0px; --icon-stroke: 1.2px; column-gap: var(--toolbar-gap); padding-inline: 4px; }
+/* One scaled glyph size for statistics AND tools; custom properties are not
+   rewritten by displayTypography. Keep width, height and flex basis in sync. */
+.usage { --toolbar-icon-size: calc(16px * var(--display-font-scale, 1)); --toolbar-gap: 0px; --icon-stroke: 1.2px; column-gap: var(--toolbar-gap); padding-inline: 4px; }
 .usage-row { column-gap: var(--toolbar-gap); }
 .usage-settings { gap: 0; }
 .usage[data-od-id="token-usage"] :is(.usage-metric, .usage-settings > button, .memory-todo-toggle) > svg {

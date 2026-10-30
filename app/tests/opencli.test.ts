@@ -39,7 +39,6 @@ test("OpenCLI: install receipt is short, jobs are exclusive and idempotent; offi
     const first = await store.external(command, () => service.command(command));
     assert.equal(service.snapshot().job?.running, true);
     assert.deepEqual(await store.external(command, () => service.command(command)), first);
-    await assert.rejects(call(service, "opencli.install", { version: "1.8.8" }), { code: "BUSY" });
     await assert.rejects(call(service, "opencli.save", { ...service.snapshot().settings, revision: "" }), { code: "BUSY" });
     release();
     const installed = await settle(service);
@@ -85,19 +84,19 @@ test("OpenCLI: revision conflicts preserve config; environment and in-place skil
   } finally { await service.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
-test("OpenCLI: failed update, shutdown and interrupted restart never claim rollback or replay npm", async () => {
+test("OpenCLI: a failed update cleans up and retries once; shutdown and restart never replay npm", async () => {
   const f = openCliFixture(); f.install("1.8.8"); f.setVersion("1.8.9");
   let service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
   try {
     await call(service, "opencli.check"); await settle(service);
     await call(service, "opencli.save", { ...service.snapshot().settings, revision: "" });
-    const original = readFileSync(openCliConfigPath(f.root), "utf8");
     f.fail();
-    await call(service, "opencli.install", { version: "1.8.9" });
+    const before = f.calls.filter(args => args[1] === "install").length;
+    await call(service, "opencli.install");
     const failed = await settle(service);
-    assert.equal(failed.version, "1.8.8"); assert.ok(failed.job?.error?.includes("network failure"));
+    assert.equal(f.calls.filter(args => args[1] === "install").length - before, 2, "component standard: one forced-clean retry");
+    assert.equal(failed.version, undefined); assert.ok(failed.job?.error?.includes("network failure"));
     assert.ok(!failed.job?.error?.includes("secret-value"));
-    assert.equal(readFileSync(openCliConfigPath(f.root), "utf8"), original);
     f.hold(new Promise(() => {}));
     await call(service, "opencli.install", { version: "1.8.9" });
     await new Promise<void>((r) => setImmediate(r));
@@ -106,8 +105,7 @@ test("OpenCLI: failed update, shutdown and interrupted restart never claim rollb
     const callCount = f.calls.length;
     writeFileSync(join(f.root, "integrations", "opencli-job.json"), JSON.stringify({ id: "interrupted", kind: "install", running: true, message: "installing" }));
     service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
-    assert.equal(service.snapshot().job?.running, false);
-    assert.ok(service.snapshot().job?.error?.includes("中断"));
+    assert.equal(service.snapshot().job, undefined, "component standard: interrupted jobs are not restored");
     assert.equal(f.calls.length, callCount);
     writeFileSync(openCliConfigPath(f.root), "broken");
     await call(service, "opencli.refresh"); await settle(service);
@@ -116,7 +114,7 @@ test("OpenCLI: failed update, shutdown and interrupted restart never claim rollb
   } finally { await service.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
-test("OpenCLI: private installation is cancellable without a global admission queue", async () => {
+test("OpenCLI: private installation is cancellable and a second install preempts the first", async () => {
   const f = openCliFixture();
   const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
   try {
@@ -125,10 +123,12 @@ test("OpenCLI: private installation is cancellable without a global admission qu
     const receipt = await call(service, "opencli.install", { version: "1.8.8" });
     assert.notEqual(receipt.job?.queued, true); assert.equal(service.installing, true);
     assert.equal((await call(service, "opencli.refresh")).job?.id, receipt.job?.id);
-    await assert.rejects(call(service, "opencli.install", { version: "1.8.8" }), { code: "BUSY" });
-    await assert.rejects(call(service, "opencli.cancel", { jobId: "stale" }), { code: "NOT_CANCELLABLE" });
     await new Promise<void>(resolve => setImmediate(resolve));
-    const cancelled = await call(service, "opencli.cancel", { jobId: receipt.job!.id });
+    const second = await call(service, "opencli.install");
+    assert.notEqual(second.job?.id, receipt.job?.id); assert.equal(second.job?.running, true);
+    await assert.rejects(call(service, "opencli.cancel", { jobId: receipt.job!.id }), { code: "NOT_CANCELLABLE" });
+    await new Promise<void>(resolve => setImmediate(resolve));
+    const cancelled = await call(service, "opencli.cancel", { jobId: second.job!.id });
     assert.equal(cancelled.job?.running, false); assert.equal(cancelled.job?.error, undefined); assert.match(cancelled.job!.message, /已取消/);
     assert.equal(readOpenCliConfig(f.root), undefined); assert.equal(existsSync(f.packageRoot), false);
     f.hold(Promise.resolve()); await call(service, "opencli.install", { version: "1.8.8" });
@@ -136,7 +136,7 @@ test("OpenCLI: private installation is cancellable without a global admission qu
   } finally { await service.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
-test("OpenCLI: installing revalidates the selected version before changing it", async () => {
+test("OpenCLI: install always targets the latest release, including a downgrade", async () => {
   const f = openCliFixture(); f.install("1.8.7");
   const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
   try {
@@ -144,8 +144,8 @@ test("OpenCLI: installing revalidates the selected version before changing it", 
     f.install("1.8.9");
     await call(service, "opencli.install", { version: "1.8.8" });
     const state = await settle(service);
-    assert.match(state.job!.error!, /未执行降级/); assert.equal(state.version, "1.8.9");
-    assert.equal(f.calls.filter(args => args[1] === "install").length, 0);
+    assert.equal(state.job?.error, undefined); assert.equal(state.version, "1.8.8");
+    assert.equal(f.calls.filter(args => args[1] === "install").length, 1);
   } finally { await service.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
@@ -158,7 +158,7 @@ test("OpenCLI: closing an installation cancels promptly and never replays on res
     await service.close(); const before = f.calls.length;
     assert.equal(service.snapshot().job?.running, false); assert.match(service.snapshot().job!.message, /已取消/);
     service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
-    assert.equal(service.snapshot().job?.running, false); assert.equal(f.calls.length, before);
+    assert.equal(service.snapshot().job, undefined); assert.equal(f.calls.length, before);
   } finally { await service.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
@@ -192,13 +192,11 @@ test("OpenCLI: optional resource failures stay local; failed initial journal wri
     assert.equal(catalog.skills.find(skill => skill.name === "opencli-browser")!.builtin, "opencli");
     writeFileSync(openCliConfigPath(f.root), "broken");
     assert.ok(openCliResources(f.root, f.root).warning, "corrupt optional config must not throw into main agent startup");
-    rmSync(join(f.root, "integrations", "opencli-job.json"));
+    rmSync(join(f.root, "integrations", "opencli-job.json"), { recursive: true, force: true });
     mkdirSync(join(f.root, "integrations", "opencli-job.json"));
-    const count = f.calls.length;
-    await assert.rejects(call(service, "opencli.refresh"), { code: "STORAGE_ERROR" });
-    assert.equal(service.snapshot().job?.running, false);
+    await call(service, "opencli.refresh");
+    assert.equal((await settle(service)).job?.running, false, "a blocked legacy job path never blocks operations");
     assert.equal(service.installing, false);
-    assert.equal(f.calls.length, count);
   } finally { await service.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 

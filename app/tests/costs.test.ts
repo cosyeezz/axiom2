@@ -107,11 +107,48 @@ test("costs include full main history, distinct children, compactions and tool m
     assert.equal(report.rows.find((row) => row.status === "取消 · 未应用")!.unknownParts, 1);
     assert.equal(readFileSync(main.getSessionFile()!, "utf8"), before);
     const fromChild = f.costs.get({ ...f.scope, sessionId: childIds[0] });
-    assert.deepEqual(fromChild.total, report.total);
+    assert.deepEqual(fromChild.total, sumCosts(report.rows.filter(row => row.sessionId === childIds[0])));
+    assert.ok(Math.abs(fromChild.total.knownCost - 3.4) < 1e-9, "child keeps its own model and compression charges");
     assert.equal(fromChild.requestedSessionId, childIds[0]);
-    assert.equal(fromChild.scope.sessionId, f.scope.sessionId);
+    assert.equal(fromChild.scope.sessionId, childIds[0]);
+    assert.deepEqual(fromChild.sessions, report.sessions.filter(session => session.id === childIds[0]));
+    assert.ok(fromChild.rows.every(row => row.sessionId === childIds[0]));
+    assert.ok(!fromChild.rows.some(row => row.category === "main"));
+    assert.equal(fromChild.title, "子任务");
     assert.throws(() => f.costs.get({ ...f.scope, workspaceId: "foreign" }));
     assert.throws(() => f.costs.get({ ...f.scope, sessionId: "foreign" }));
+  } finally { f.close(); }
+});
+
+test("child reports isolate metadata and warnings while retaining all of their own accounting categories", () => {
+  const f = fixture();
+  try {
+    const main = f.transcript(f.scope.sessionId);
+    const { taskIds } = f.tasks.create(f.scope, "isolated", "context", [
+      { title: "当前任务", task: "当前任务正文不应泄漏" }, { title: "其他任务", task: "其他任务正文不应泄漏" },
+    ], { provider: "fixture", id: "model-one", thinking: "off" });
+    const children = taskIds.map(id => String(f.store.db.prepare("SELECT sessionId FROM tasks WHERE id=?").get(id)!.sessionId));
+    const child = f.transcript(children[0]), sibling = f.transcript(children[1]);
+    child.appendMessage({ role: "toolResult", toolName: "own-tool", toolCallId: "own-tool", content: [], isError: false, timestamp: 2, usage: usage(.2) });
+    child.appendUsage("own-other", "fixture", "own-model", usage(.3));
+    f.job("own-compression", children[0], { billing: usageCost(usage(.4)) });
+    rmSync(main.getSessionFile()!); rmSync(sibling.getSessionFile()!);
+    const childScope = { ...f.scope, sessionId: children[0] };
+    let report = f.costs.get(childScope);
+    assert.equal(report.title, "当前任务");
+    assert.deepEqual(report.sessions.map(session => session.id), [children[0]]);
+    assert.deepEqual(report.warnings, [], "unreadable parent and sibling warnings are not inherited");
+    assert.deepEqual(new Set(report.rows.map(row => row.category)), new Set(["subagent", "tool", "other", "compression"]));
+    assert.ok(Math.abs(report.total.knownCost - 1) < 1e-9);
+    assert.ok(report.rows.every(row => row.sessionId === children[0]));
+    assert.ok(!JSON.stringify(report).includes("正文"));
+    assert.ok(!JSON.stringify(report).includes("其他任务"));
+    assert.equal(f.costs.get(f.scope).warnings.length, 2, "main report still exposes the family warnings");
+    rmSync(child.getSessionFile()!);
+    report = f.costs.get(childScope);
+    assert.equal(report.warnings.length, 1, "the child's own incomplete accounting remains visible");
+    assert.match(report.warnings[0], /当前任务/);
+    assert.equal(report.total.unknownCost, 1);
   } finally { f.close(); }
 });
 

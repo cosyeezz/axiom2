@@ -19,7 +19,7 @@ try {
   if (!suppliedFile) writeFileSync(filePath, "# 耗时诊断\n\n存在的文件应正常显示，**零宽前缀**不应改变绝对路径。\n");
   const expected = readFileSync(filePath, "utf8"), canonical = realpathSync(filePath);
   const alias = process.platform === "darwin" && canonical.startsWith("/private/tmp/") ? canonical.slice("/private".length) : filePath;
-  const href = "\u200b" + alias;
+  const href = "\u200c" + alias;
   app = await startServer({ root: join(root, "data"), port: 0, dev: true });
   const workspace = app.store.execute({ requestId: crypto.randomUUID(), op: "workspace.open", params: { path: root, authorized: true } }) as Workspace;
   const session = app.store.execute({ requestId: crypto.randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
@@ -74,7 +74,7 @@ try {
   await reloaded;
   await page.locator('.file-preview-body[aria-busy="false"]').waitFor();
   assert.equal(replies.length, 2); assert.deepEqual(errors, []);
-  const result = { originalHref: href, prefix: "U+200B", canonical, replies, pageErrors: errors, widths: [1440, 390], suppliedFile: !!suppliedFile };
+  const result = { originalHref: href, prefix: "U+200C", canonical, replies, pageErrors: errors, widths: [1440, 390], suppliedFile: !!suppliedFile };
   writeFileSync(join(artifacts, "result.json"), JSON.stringify(result, null, 2) + "\n");
   console.log(JSON.stringify({ ...result, artifacts }, null, 2));
 } finally {

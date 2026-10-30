@@ -93,6 +93,33 @@ test("pages preserve the full forest order, split large families, and keep forei
   assert.equal(all(f, "workspace", "only")[0]?.id, onlyMatch, "nonmatching top cannot propagate into search");
 });
 
+test("top pages and fork siblings stay fixed through activity updates, including page boundaries", t => {
+  const f = fixture(t);
+  const pins = Array.from({ length: 65 }, (_, i) => f.add({ pinned: true, updatedAt: 100 + i }));
+  const root = f.add({ pinned: true, updatedAt: 1 });
+  const children = Array.from({ length: 35 }, (_, i) => f.add({ forkParentSessionId: root, updatedAt: 2 + i }));
+  const ordinary = f.add({ updatedAt: 10000 });
+  const baseline = all(f, "top").map(identity);
+  const run = f.store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt) VALUES(?,?,'running','{}',1)");
+  // Touch rows on opposite sides of the 30-row boundary and a formerly idle child.
+  for (const id of [pins[0], pins[40], children[0], children[20]]) {
+    run.run(id, id);
+    f.store.db.prepare("UPDATE sessions SET updatedAt=20000,title='renamed' WHERE id=?").run(id);
+    assert.deepEqual(all(f, "top").map(identity), baseline);
+    f.store.finishRun(id, "completed", null);
+    assert.deepEqual(all(f, "top").map(identity), baseline, "new unread result must not reorder top rows");
+    f.store.db.prepare("UPDATE sessions SET unread=0,autoPinUntil=123 WHERE id=?").run(id);
+    assert.deepEqual(all(f, "top").map(identity), baseline, "reading/cooling must not reorder the family");
+    f.store.db.prepare("UPDATE sessions SET autoPinUntil=0 WHERE id=?").run(id);
+    assert.deepEqual(all(f, "top").map(identity), baseline, "a child leaving automatic priority must not move its pinned family");
+  }
+  assert.deepEqual(all(f, "workspace").map(row => row.id), [ordinary]);
+  assert.deepEqual(all(f, "top").map(identity), reference(f, "top"));
+  const reconnected = new SessionLists(f.store, "another-stream");
+  assert.deepEqual(reconnected.initial(f.workspace).top.items.map(identity), baseline.slice(0, 30));
+  assert.equal(reconnected.summary(f.workspace, pins[0])?.title, "renamed", "fresh fields are still published");
+});
+
 test("same-time mixed IDs follow the existing stable locale comparison, not SQLite BINARY", t => {
   const f = fixture(t);
   const ids = ["z", "A", "a", "a-1", "a_1", "é", "é", "中", "2", "10", ...Array.from({ length: 40 }, () => randomUUID())];
@@ -186,6 +213,42 @@ test("selected and first are authoritative outside loaded pages; run, task and w
   assert.equal(f.lists.first(f.workspace), null);
 });
 
+test("page, selected and first never fall back to the old full-list APIs", t => {
+  const f = fixture(t);
+  const selected = f.add({ updatedAt: 1 });
+  for (let i = 0; i < 40; i++) f.add();
+  f.add({ workspaceId: f.foreign, pinned: true });
+  const forbidden = () => { throw Error("paged reads must not hydrate a full collection"); };
+  const sessions = t.mock.method(f.store, "sessions", forbidden);
+  const pins = t.mock.method(f.store, "pinnedSessions", forbidden);
+  assert.equal(f.lists.page(f.workspace, "workspace").items.length, 30);
+  assert.equal(f.lists.page(f.workspace, "top").items.length, 1);
+  assert.equal(f.lists.summary(f.workspace, selected)?.id, selected);
+  assert.ok(f.lists.first(f.workspace));
+  assert.equal(sessions.mock.callCount(), 0); assert.equal(pins.mock.callCount(), 0);
+});
+
+test("insert, delete and fork reparenting stale cursors but same-value updates preserve them", t => {
+  const f = fixture(t);
+  const parent = f.add(), child = f.add();
+  for (let i = 0; i < 64; i++) f.add();
+  const before = f.lists.page(f.workspace, "workspace");
+  f.store.db.prepare("UPDATE sessions SET title=title,pinned=pinned WHERE id=?").run(parent);
+  assert.equal(f.lists.page(f.workspace, "workspace").revision, before.revision);
+  assert.equal(f.lists.page(f.workspace, "workspace", "", before.next).items.length, 30);
+  const staleAfter = (change: () => void) => {
+    const page = f.lists.page(f.workspace, "workspace");
+    assert.ok(page.next);
+    change();
+    assert.throws(() => f.lists.page(f.workspace, "workspace", "", page.next), code("CURSOR_STALE"));
+  };
+  let inserted = "";
+  staleAfter(() => { inserted = f.add(); });
+  staleAfter(() => { f.store.db.prepare("DELETE FROM sessions WHERE id=?").run(inserted); });
+  staleAfter(() => { f.store.db.prepare("UPDATE sessions SET forkParentSessionId=? WHERE id=?").run(parent, child); });
+  assert.equal(all(f, "workspace").find(row => row.id === child)?.familyId, parent);
+});
+
 test("locator and summary hydration stay bounded and share a read snapshot across an external commit", t => {
   const f = fixture(t);
   for (let i = 0; i < 180; i++) f.add({ title: "before", updatedAt: 1000 - i });
@@ -216,4 +279,19 @@ test("locator and summary hydration stay bounded and share a read snapshot acros
   const fresh = f.lists.page(f.workspace, "workspace");
   assert.ok(fresh.revision > page.revision); assert.equal(fresh.items[0].title, "after");
   assert.throws(() => f.lists.page(f.workspace, "workspace", "", page.next), code("CURSOR_STALE"));
+});
+
+test("visible count scopes validate a whole bounded workspace batch before transcript reads", t => {
+  const f = fixture(t);
+  const ids = Array.from({ length: 30 }, () => f.add());
+  assert.deepEqual(f.lists.countScopes(f.workspace, ids), ids.map(sessionId => ({ workspaceId: f.workspace, sessionId })));
+  for (const value of [undefined, null, [], [...ids, f.add()], [ids[0], ids[0]], [""], [" bad "], ["x\u0000y"], [1], ["x".repeat(201)]])
+    assert.throws(() => f.lists.countScopes(f.workspace, value), code("INVALID_INPUT"));
+  const foreign = f.add({ workspaceId: f.foreign }), archived = f.add({ workspaceId: f.archived });
+  assert.throws(() => f.lists.countScopes(f.workspace, [ids[0], foreign]), code("SCOPE_MISMATCH"));
+  assert.throws(() => f.lists.countScopes(f.workspace, ["missing"]), code("SCOPE_MISMATCH"));
+  assert.throws(() => f.lists.countScopes(f.archived, [archived]), code("NOT_FOUND"));
+  f.store.db.prepare("UPDATE sessions SET deletedAt=1 WHERE id=?").run(ids[0]);
+  assert.throws(() => f.lists.countScopes(f.workspace, [ids[0]]), code("SCOPE_MISMATCH"));
+  assert.deepEqual(f.lists.countScopes(f.foreign, [foreign]), [{ workspaceId: f.foreign, sessionId: foreign }]);
 });

@@ -1,0 +1,8 @@
+.provider-requests-table { overflow-x: auto; }
+.provider-requests table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.provider-requests th, .provider-requests td { padding: 10px 12px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.provider-requests th:first-child { text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.provider-requests tbody th { font-weight: 500; min-width: 140px; max-width: 400px; }
+.provider-requests tbody th span, .provider-requests tbody th small { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.provider-requests tbody th small { color: var(--muted); font-weight: 400; }
+.provider-requests[data-stale] tbody { opacity: .65; }

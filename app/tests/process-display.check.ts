@@ -62,8 +62,32 @@ try {
     await request.waitFor();
   }
   await page.setViewportSize({ width: 1440, height: 900 });
-  clearRequest(); publish(first);
+  clearRequest(); publish({ ...first, thinking: '' });
   await request.waitFor({ state: 'detached' });
+  await title.filter({ hasText: '正在思考' }).waitFor();
+  const emptyHead = group.locator(':scope > summary');
+  const assertEmptyClosed = async () => {
+    assert.equal(await emptyHead.getAttribute('aria-disabled'), 'true');
+    const height = await group.evaluate(n => n.getBoundingClientRect().height);
+    await emptyHead.click();
+    await emptyHead.focus(); await page.keyboard.press('Enter'); await page.keyboard.press('Space');
+    await emptyHead.tap();
+    assert.equal(await group.getAttribute('open'), null, 'empty process ignores mouse, keyboard and touch');
+    assert.equal(await group.evaluate(n => n.getBoundingClientRect().height), height, 'empty clicks do not change card size');
+    assert.equal(await group.locator('.thinking-body').count(), 0);
+    assert.equal(await emptyHead.evaluate(n => getComputedStyle(n).cursor), 'default');
+    assert.equal(await emptyHead.evaluate(n => getComputedStyle(n).backgroundColor), 'rgba(0, 0, 0, 0)');
+  };
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await assertEmptyClosed();
+  }
+  publish({ ...first, thinking: '  \n\t' });
+  await assertEmptyClosed();
+  publish(first);
+  await page.waitForFunction(() => !document.querySelector('.tool-activity > summary')?.hasAttribute('aria-disabled'));
+  assert.equal(await group.getAttribute('open'), null, 'content arrival does not replay earlier empty clicks');
+  await page.setViewportSize({ width: 1440, height: 900 });
   await title.filter({ hasText: '正在思考' }).waitFor();
   assert.equal(await title.evaluate(n => getComputedStyle(n).fontWeight), '700', 'live thinking title uses the bold running weight');
   assert.equal(await groups.count(), 1);
@@ -146,6 +170,25 @@ try {
   await group.locator('.thinking-scroll-line').getByText('核对环境。', { exact: true }).waitFor();
   assert.equal(await group.locator('.thinking-label .process-ellipsis').count(), 1);
   assert.match(await group.locator('.thinking-label').evaluate(n => getComputedStyle(n).backgroundImage), /rgb\(230, 216, 163\)/, 'Think sweep uses pale yellow');
+
+  // A sibling tool keeps the outer group expandable, but an empty thought
+  // inside it must still ignore activation until its own content arrives.
+  publish({ ...first, thinking: '', calls: [call] });
+  await group.locator('.tool-header').waitFor();
+  const emptyThinking = group.locator('.thinking-block').first();
+  const emptyThinkingHead = emptyThinking.locator(':scope > summary');
+  await page.waitForFunction(() => document.querySelector('.thinking-header')?.getAttribute('aria-disabled') === 'true');
+  await emptyThinkingHead.click();
+  await emptyThinkingHead.focus(); await page.keyboard.press('Enter'); await page.keyboard.press('Space');
+  await emptyThinkingHead.tap();
+  assert.equal(await emptyThinking.getAttribute('open'), null, 'empty inner thought ignores all activation');
+  assert.equal(await emptyThinking.locator('.thinking-body').count(), 0);
+  assert.equal(await emptyThinkingHead.evaluate(n => getComputedStyle(n).cursor), 'default');
+  assert.ok(await group.getAttribute('open') !== null, 'tool content keeps its parent accessible');
+  publish(first);
+  await group.locator('.tool-header').waitFor({ state: 'detached' });
+  await page.waitForFunction(() => !document.querySelector('.thinking-header')?.hasAttribute('aria-disabled'));
+  assert.equal(await emptyThinking.getAttribute('open'), null, 'new thought content stays collapsed until requested');
 
   // Only the running, collapsed thought follows the newest visual line.
   const scroll = group.locator('.thinking-scroll');

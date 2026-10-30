@@ -1,11 +1,17 @@
 import { statSync } from "node:fs";
 import { totalmem } from "node:os";
 import { historyProjection, type HistoryProjection } from "../history-projection.js";
+import { readTranscriptSource } from "../transcript-source.js";
+import { captureNativeCanonicalSources } from "../canonical-projection-coordinator.js";
+import { captureCanonicalSources } from "../../shared/canonical-source-capture.js";
+import { CanonicalWindow } from "../canonical-window.js";
+import { createWindowIdentityScopes } from "../canonical-window-identity.js";
 import type { HistoryRead } from "../../shared/history.js";
 import { AppError, scopeKey, type Scope } from "../../shared/protocol.js";
 import {
   agentScope,
   threadScope,
+  threadMetadataScope,
   messageScope,
   readRunOrigin,
   type AgentInfo,
@@ -13,6 +19,7 @@ import {
   type Run,
   type RunOrigin,
   type ThreadIndex,
+  type ThreadMetadata,
 } from "../../shared/agent.js";
 import { threadDelivery, threadGroups } from "../../shared/thread-layout.js";
 import type { Store } from "../storage.js";
@@ -45,6 +52,8 @@ export class AgentViews {
   // be reconstructed from JSONL until pi finalizes them.
   private transient = new Map<string, Map<string, ChatMessage>>();
   private contextRevision = new Map<string, number>();
+  private windows = new Map<string, CanonicalWindow>();
+  private readonly identitySeed = createWindowIdentityScopes();
   private layouts = new WeakMap<Map<string, ChatMessage>, Pick<ThreadIndex, "ids" | "groups">>();
   private originals = new Lru<string, { source: string; messages: Map<string, ChatMessage>; bytes: number }>(5);
   private originalCleanup?: NodeJS.Immediate;
@@ -60,6 +69,15 @@ export class AgentViews {
   private origins(scope: Scope): Map<string, RunOrigin> {
     return new Map(this.store.db.prepare("SELECT id,origin FROM runs WHERE sessionId=? AND origin IS NOT NULL").all(scope.sessionId)
       .flatMap(row => { const origin = readRunOrigin(row.origin); return origin ? [[String(row.id), origin] as const] : []; }));
+  }
+  /** Internal worker bootstrap only. Never include the secret in view data. */
+  windowIdentity(scope: Scope): string {
+    this.owner(scope);
+    return this.identitySeed(scope);
+  }
+  windowOrigins(scope: Scope): [string, RunOrigin][] {
+    this.owner(scope);
+    return [...this.origins(scope)];
   }
   private source(scope: Scope, message: ChatMessage, origins?: ReadonlyMap<string, RunOrigin>): ChatMessage {
     const origin = message.runId ? origins ? origins.get(message.runId)
@@ -137,6 +155,18 @@ export class AgentViews {
       if (countSource !== undefined) this.rememberCount(scope, manager, countSource, true);
     }
     return messages;
+  }
+  /** A cold read still projects the full native context, but never constructs its layout. */
+  threadMetadata(scope: Scope): ThreadMetadata {
+    this.owner(scope);
+    try {
+      const hasMessages = this.transcript(scope).size > 0;
+      return { contextRevision: this.contextRevision.get(scope.sessionId) ?? 0, hasMessages };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { contextRevision: this.contextRevision.get(scope.sessionId) ?? 0, hasMessages: null,
+        error: message.length > 512 ? `${message.slice(0, 509)}...` : message };
+    }
   }
   thread(scope: Scope): ThreadIndex {
     const owner = this.owner(scope);
@@ -233,6 +263,44 @@ export class AgentViews {
     for (const [id, message] of this.transient.get(scope.sessionId) ?? []) messages.set(id, message);
     return messages;
   }
+  /** Cold native source for window queries. The caller must select this only
+   * outside an active worker lease; cached display deltas are not native facts.
+   * Archive and current context are derived from the SAME parsed byte snapshot.
+   */
+  canonical(scope: Scope) {
+    this.owner(scope);
+    const row = this.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId);
+    const origins = this.origins(scope);
+    const native = row?.file ? readTranscriptSource(String(row.file), this.store.workspace(scope.workspaceId).path) : undefined;
+    const capture = native ? captureNativeCanonicalSources({ manager: native.manager, origins })
+      : captureCanonicalSources({ archive: { index: { revision: "empty", segments: [] }, messages: new Map() },
+        currentGroups: [], currentMessages: new Map(), transientMessages: new Map() });
+    for (const message of this.transient.get(scope.sessionId)?.values() ?? [])
+      if (message.streaming || !capture.message(message.id))
+        throw new AppError("SOURCE_PENDING", "运行中的输出尚未确认保存；请等待来源就绪。");
+    // Internal identity only, never a wire token. Do not attach a later stat to
+    // this fixed manager or silently mix a stale messages cache into its body.
+    return { capture, source: native?.source ?? null, origins,
+      contextRevision: this.contextRevision.get(scope.sessionId) ?? 0 };
+  }
+  retireWindow(scope: Scope) {
+    this.windows.get(scope.sessionId)?.close(); this.windows.delete(scope.sessionId);
+  }
+  closeWindows() {
+    for (const window of this.windows.values()) window.close();
+    this.windows.clear();
+  }
+  window(scope: Scope, requestId: string, query: unknown, available: () => boolean) {
+    this.owner(scope);
+    let window = this.windows.get(scope.sessionId);
+    if (!window) {
+      window = new CanonicalWindow(() => this.canonical(scope).capture, available, this.windowIdentity(scope));
+      this.windows.set(scope.sessionId, window);
+    } else { this.windows.delete(scope.sessionId); this.windows.set(scope.sessionId, window); }
+    // Small owner LRU, not a byte/RSS bound: each window still holds full captures.
+    while (this.windows.size > 4) this.retireWindow({ ...scope, sessionId: this.windows.keys().next().value! });
+    return window.read(requestId, query);
+  }
   private history(scope: Scope) {
     this.owner(scope);
     const row = this.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId);
@@ -286,13 +354,16 @@ export class AgentViews {
     return transcriptImage(openTranscript(String(row.file), workspace.path, { readOnly: true }), messageId, imageId, true);
   }
   changed(scope: Scope) {
+    this.retireWindow(scope);
     if (this.observed(threadScope(scope))) this.publish(threadScope(scope), this.thread(scope));
+    if (this.observed(threadMetadataScope(scope))) this.publish(threadMetadataScope(scope), this.threadMetadata(scope));
     if (this.observed(agentScope(scope))) this.publish(agentScope(scope), this.info(scope));
     this.publish(`sessions:${scope.workspaceId}`);
     this.publish(scopeKey(scope));
   }
   messageChanged(scope: Scope, message: ChatMessage) {
     this.owner(scope);
+    this.retireWindow(scope);
     message = this.source(scope, message);
     const messages = this.messages.peek(scope.sessionId) ??
       (this.observed(threadScope(scope)) || this.observed(`messages:${scope.workspaceId}:${scope.sessionId}`) ? this.transcript(scope) : undefined);
@@ -313,7 +384,8 @@ export class AgentViews {
         (!!previous && JSON.stringify(threadGroups([previous])) !== JSON.stringify(threadGroups([message])));
     // A completed final can settle archives before its native record is written.
     // Refresh their catalogue exactly on delivery transitions, not every delta.
-    if (!!previous && threadDelivery(previous) !== threadDelivery(message) || !previous && threadDelivery(message)) {
+    const contextChanged = !!previous && threadDelivery(previous) !== threadDelivery(message) || !previous && threadDelivery(message);
+    if (contextChanged) {
       this.contextRevision.set(scope.sessionId, (this.contextRevision.get(scope.sessionId) ?? 0) + 1);
       this.histories.delete(scope.sessionId);
     }
@@ -322,6 +394,8 @@ export class AgentViews {
       this.layouts.delete(messages);
       if (this.observed(threadScope(scope))) this.publish(threadScope(scope), this.thread(scope));
     }
+    if ((fresh || contextChanged) && this.observed(threadMetadataScope(scope)))
+      this.publish(threadMetadataScope(scope), this.threadMetadata(scope));
     const pending =
       this.changedMessages.get(scope.sessionId) ?? new Map<string, ChatMessage>();
     pending.set(message.id, message);
@@ -358,6 +432,7 @@ export class AgentViews {
     if (!active?.size) this.transient.delete(scope.sessionId);
   }
   forget(scope: Scope) {
+    this.retireWindow(scope);
     clearTimeout(this.timers.get(scope.sessionId));
     this.timers.delete(scope.sessionId); this.changedMessages.delete(scope.sessionId);
     this.transient.delete(scope.sessionId); this.originals.delete(scope.sessionId); this.histories.delete(scope.sessionId);
@@ -381,6 +456,7 @@ export class AgentViews {
   }
   settled(scope: Scope) { this.transient.delete(scope.sessionId); this.originals.delete(scope.sessionId); }
   refresh(scope: Scope) {
+    this.retireWindow(scope);
     this.flush(scope); // Old deltas must precede the compaction/reset snapshot.
     this.contextRevision.set(scope.sessionId, (this.contextRevision.get(scope.sessionId) ?? 0) + 1);
     this.counts.delete(scope.sessionId);

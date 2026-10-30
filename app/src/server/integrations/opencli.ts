@@ -1,13 +1,13 @@
+// 遵循通用组件规范（Integrated component standard），见 ./component-maintenance.ts。
 import { loadSkills } from "@earendil-works/pi-coding-agent";
 import { managedNode, type ManagedNodeProvider } from "./managed-node.js";
 import { componentEnvironment, prepareComponentEnvironment } from "./component-environment.js";
 import { writeNodeLauncher } from "./node-launcher.js";
 import { openCliShimProbe } from "./opencli-shim.js";
 import { currentMaintenance, maintenanceCancelled, maintenancePhase, runMaintenance } from "../maintenance.js";
-import { MaintenanceError } from "../../shared/maintenance.js";
-import { recoverBuiltinOperations, reconcileBuiltinOperationStopping, beginBuiltinOperation, builtinPendingOperation, builtinPendingRemovals, builtinRemovalDirectories, markBuiltinRemovals, reconcileBuiltinOperation, bindBuiltinTask, runBuiltinTool, trackBuiltinDirectory, assertBuiltinDirectoryOwned, assertBuiltinFilesSafe, forgetBuiltinDirectory, withBuiltinConfiguration } from "./builtin-operation.js";
+import { recoverBuiltinOperations, reconcileBuiltinOperationStopping, beginBuiltinOperation, builtinPendingOperation, builtinPendingRemovals, reconcileBuiltinOperation, bindBuiltinTask, runBuiltinTool, trackBuiltinDirectory, assertBuiltinFilesSafe, forgetBuiltinDirectory, withBuiltinConfiguration } from "./builtin-operation.js";
 import { randomUUID } from "node:crypto";
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { AppError, type Command } from "../../shared/protocol.js";
 import { defaultOpenCliSettings, type OpenCliJob, type OpenCliState } from "../../shared/builtin-tools.js";
@@ -15,9 +15,10 @@ import { openExtensionPage, type OpenCliExtensionTarget } from "./opencli-browse
 import { errorMessage } from "../error-message.js";
 import { openCliConfigPath, openCliEnvironment, openCliNode, openCliPrefix, openCliSkillNames, openCliSkillPaths, openCliVersionPaths, openCliVersionPattern, readOpenCliConfig, validateOpenCliPackage, type OpenCliConfig } from "./opencli-runtime.js";
 
-import { cleanupScope, assertCleanupScope } from "./cleanup-scope.js";
+import { cleanupScope } from "./cleanup-scope.js";
 import { openCliRemovalPlan } from "./opencli-removal.js";
 import { managedDirectory, removeManagedDirectory, type IntegrationRemoval } from "./managed-removal.js";
+import { abortComponentOperation, componentChildren, forceRemoveComponentPaths, installWithFallback } from "./component-maintenance.js";
 
 const packageName = "@jackwener/opencli";
 const registry = "--registry=https://registry.npmjs.org";
@@ -83,25 +84,21 @@ export class OpenCliService {
   constructor(readonly root: string, private readonly changed: () => void, private readonly execute: OpenCliExecute = executeOpenCli, private readonly locateNpm = findNpmCli, private readonly openExtension: (target: OpenCliExtensionTarget) => Promise<void> = openExtensionPage, private readonly removal: IntegrationRemoval = async work => work(), private readonly runtime: ManagedNodeProvider = managedNode) {
     this.jobFile = join(root, "integrations", "opencli-job.json");
     this.loadConfig();
-    try {
-      const job: OpenCliJob = JSON.parse(readFileSync(this.jobFile, "utf8"));
-      if (job.running) Object.assign(job, { running: false, queued: false, error: "上次操作被服务退出中断，请重新检查当前安装；不会自动重复安装。", message: "操作已中断" });
-      this.state.job = job;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") this.state.error = "无法读取上次 OpenCLI 操作记录，请检查 integrations/opencli-job.json。";
-    }
+    // Component standard: no job history survives a restart.
+    try { rmSync(this.jobFile, { force: true }); } catch { /* Stale history is ignored either way. */ }
   }
   snapshot() {
     const value = structuredClone(this.state);
     if (!toolProcessSupported()) { value.ready = false; value.supportError = toolProcessSupportError; }
     try {
-      value.pendingOperation = builtinPendingOperation(this.root, "opencli");
+      const pendingOperation = builtinPendingOperation(this.root, "opencli");
+      if (pendingOperation) value.pendingOperation = pendingOperation; else delete value.pendingOperation;
       const pending = builtinPendingRemovals(this.root, "opencli");
       value.removalPending ||= pending.length > 0;
       const plan = openCliRemovalPlan(this.root, readOpenCliConfig(this.root), pending);
       value.cleanup = cleanupScope(plan.paths); value.cleanupUnverified = plan.unverified;
     }
-    catch (error) { value.error = errorMessage(error, "维护归属记录不可读取，已保留文件。"); }
+    catch { /* Component standard: cleanup previews are informational and never block actions. */ }
     return value;
   }
   get installing() { return this.state.job?.running === true && this.state.job.kind === "install"; }
@@ -122,7 +119,6 @@ export class OpenCliService {
   }
   private notify(message?: string) {
     if (message && this.state.job) this.state.job.message = message;
-    if (this.state.job) atomicJson(this.jobFile, this.state.job);
     this.changed();
   }
   private async run(args: string[], timeout = 30_000, config = this.config) {
@@ -179,9 +175,7 @@ export class OpenCliService {
     atomicJson(openCliConfigPath(this.root), next); this.loadConfig(); delete this.state.diagnostic;
     });
   }
-  private async install(version: string, revision: string, onPublished: () => void) {
-    if (this.state.revision !== revision) throw Error("接入配置已变化，请重新检查后安装。");
-    if (this.state.version && this.state.version !== version && !newerOpenCli(version, this.state.version)) throw Error("当前安装版本高于已检查的版本，未执行降级。");
+  private async install(version: string, onPublished: () => void) {
     const directory = `v${version}-${randomUUID()}`;
     const paths = openCliVersionPaths(this.root, directory);
     managedDirectory(this.root, ["integrations", "opencli", "versions"], directory, openCliVersionPattern);
@@ -213,8 +207,11 @@ export class OpenCliService {
         if (!Array.isArray(shims) || shims.length !== (process.platform === "win32" ? 2 : 1) || !shims.every(matchesVersion)) throw Error("OpenCLI 实际命令入口的版本未通过校验，原接入保持不变。");
       }
       this.controller!.signal.throwIfAborted();
-      if ((readOpenCliConfig(this.root)?.revision ?? "") !== revision) throw Error("接入配置已变化，未切换新版本；请重新读取后重试。");
       assertBuiltinFilesSafe();
+      // Component standard: publish onto the latest settings, without a revision check.
+      let fresh: OpenCliConfig | undefined;
+      try { fresh = readOpenCliConfig(this.root); } catch { fresh = undefined; }
+      if (fresh) Object.assign(candidate, { enabled: fresh.enabled, profile: fresh.profile, window: fresh.window });
       atomicJson(openCliConfigPath(this.root), candidate, () => { published = true; onPublished(); });
       this.loadConfig(); this.select(candidate); delete this.state.installationError; delete this.state.diagnostic;
     } finally {
@@ -226,34 +223,21 @@ export class OpenCliService {
       }
     }
   }
-  private async uninstall(revision: string, scopeRevision?: unknown) {
-    assertCleanupScope(scopeRevision, cleanupScope(openCliRemovalPlan(this.root, readOpenCliConfig(this.root), builtinRemovalDirectories()).paths));
+  /** Component standard: forced uninstall of every managed version; external installs are left alone. */
+  private async uninstall() {
     await this.removal(() => {
-      assertBuiltinFilesSafe();
-      const current = readOpenCliConfig(this.root);
-      if ((current?.revision ?? "") !== revision) throw new AppError("CONFIGURATION_CONFLICT", "接入配置已变化，请重新确认卸载。");
-      const plan = openCliRemovalPlan(this.root, current, builtinRemovalDirectories()), { names } = plan;
-      assertCleanupScope(scopeRevision, cleanupScope(plan.paths));
-      for (const name of names) {
-        const path = managedDirectory(this.root, ["integrations", "opencli", "versions"], name, openCliVersionPattern);
-        if (path) assertBuiltinDirectoryOwned(path, name === current?.directory || !!current?.removalPending?.includes(name));
-      }
-      markBuiltinRemovals(names.map(name => openCliVersionPaths(this.root, name).prefix));
-      const next: OpenCliConfig = { ...current, format: 1, ...this.state.settings, revision: randomUUID(), packageRoot: "", binDirectory: "", detached: true, removalPending: names };
-      delete next.directory; delete next.runtime;
+      const versions = join(this.root, "integrations", "opencli", "versions");
+      let current: OpenCliConfig | undefined;
+      try { current = readOpenCliConfig(this.root); } catch { current = undefined; }
+      const next: OpenCliConfig = { ...current, format: 1, ...this.state.settings, revision: randomUUID(), packageRoot: "", binDirectory: "", detached: true };
+      delete next.directory; delete next.runtime; delete next.removalPending;
       atomicJson(openCliConfigPath(this.root), next); this.loadConfig();
       delete this.state.version; delete this.state.packageRoot; delete this.state.diagnostic; delete this.state.installationError;
       this.entry = undefined; this.binDirectory = undefined;
       maintenancePhase("removing", "正在清理托管程序，保留接入设置与外部安装…");
-      try { for (const name of names) {
-        assertBuiltinFilesSafe();
-        removeManagedDirectory(this.root, ["integrations", "opencli", "versions"], name, openCliVersionPattern);
-        // Retain the original identity until every pending reference is committed.
-      } }
-      catch { throw Error("接入已停用，部分文件未能删除；解除占用后可重试清理。外部安装和接入设置保留。"); }
-      delete next.removalPending; next.revision = randomUUID();
-      atomicJson(openCliConfigPath(this.root), next);
-      for (const name of names) forgetBuiltinDirectory(openCliVersionPaths(this.root, name).prefix);
+      const paths = componentChildren(versions, openCliVersionPattern);
+      for (const path of paths) forgetBuiltinDirectory(path);
+      forceRemoveComponentPaths(versions, paths);
       this.loadConfig(); maintenancePhase("validating");
     });
   }
@@ -285,10 +269,10 @@ export class OpenCliService {
     const kind = c.op.slice("opencli.".length) as OpenCliJob["kind"];
     if (!c.op.startsWith("opencli.") || !["refresh", "check", "install", "doctor", "uninstall"].includes(kind)) throw new AppError("UNKNOWN_OPERATION", "不支持此内置工具操作。");
     if (!["uninstall", "refresh"].includes(kind) && !toolProcessSupported()) throw new AppError("UNSUPPORTED_PLATFORM", toolProcessSupportError);
+    // Install, update and uninstall preempt whatever is running (component standard).
+    if (this.pending && (kind === "install" || kind === "uninstall")) await abortComponentOperation(this.controller, this.pending);
     if (this.pending) { if (kind === "refresh") return this.snapshot(); throw new AppError("BUSY", "已有 OpenCLI 操作正在进行，请等待完成。"); }
-    if (kind === "install" && (!this.state.latest || c.params?.version !== this.state.latest || !versionPattern.test(this.state.latest))) throw new AppError("CHECK_REQUIRED", "请先检查更新，再安装已确认的版本。");
-    if (kind === "uninstall" && (c.params?.confirm !== true || c.params.revision !== this.state.revision)) throw new AppError("CONFIRM_REQUIRED", "请读取当前配置并确认卸载。");
-    const version = this.state.latest, revision = this.state.revision;
+    let version = this.state.latest && versionPattern.test(this.state.latest) ? this.state.latest : undefined;
     let installationPublished = false;
     await recoverBuiltinOperations(this.root, "opencli");
     if (this.pending || this.closed) throw new AppError("BUSY", "已有 OpenCLI 操作正在进行或服务正在退出。");
@@ -296,23 +280,29 @@ export class OpenCliService {
     this.controller = new AbortController();
     this.state.job = { id: randomUUID(), kind, running: true, cancellable: kind !== "uninstall", version, message: "正在检查本机环境…" };
     if (kind === "doctor") delete this.state.diagnostic;
-    try { this.notify(); } catch {
-      this.state.job.running = false; this.state.job.error = "无法保存操作记录，请检查数据目录权限与剩余空间；尚未开始操作。";
-      this.controller = undefined; this.changed();
-      try { operation.finish(); } finally { operation.close(); }
-      throw new AppError("STORAGE_ERROR", this.state.job.error);
-    }
-    this.pending = operation.run(() => Promise.resolve().then(() => runMaintenance(this.root, { id: this.state.job!.id, resource: "opencli", label: "OpenCLI", action: kind, params: c.params, cancel: kind !== "uninstall", steps: kind === "install" ? ["checking", "installing", "validating"] : kind === "uninstall" ? ["checking", "removing", "validating"] : ["checking"] }, this.controller!, async () => {
+    this.notify();
+    this.pending = operation.run(() => Promise.resolve().then(() => runMaintenance(this.root, { id: this.state.job!.id, resource: "opencli", label: "OpenCLI", action: kind, params: c.params, cancel: kind !== "uninstall", steps: kind === "install" ? ["checking", "downloading", "verifying", "installing", "validating"] : kind === "uninstall" ? ["checking", "removing", "validating"] : ["checking"] }, this.controller!, async () => {
       bindBuiltinTask();
-      if (kind === "uninstall") await this.uninstall(revision, c.params?.cleanupRevision);
+      if (kind === "uninstall") await this.uninstall();
       else {
-        await this.inspect();
+        // A broken or unreadable installation must not stop install/update.
+        if (kind === "install") { try { await this.inspect(); } catch { this.loadConfig(); } }
+        else await this.inspect();
         if (kind === "check") {
           delete this.state.latest; this.notify("正在检查 OpenCLI 最新版本…");
           const latest = await this.runtime.latest(packageName, this.controller!.signal);
           if (typeof latest !== "string" || !versionPattern.test(latest)) throw Error("官方 npm 仓库未返回有效的稳定版本。");
           this.state.latest = latest;
-        } else if (kind === "install") await this.install(version!, revision, () => { installationPublished = true; });
+        } else if (kind === "install") {
+          // Refetch first; an earlier check result is only an offline fallback.
+          try {
+            const latest = await this.runtime.latest(packageName, this.controller!.signal);
+            if (typeof latest !== "string" || !versionPattern.test(latest)) throw Error("官方 npm 仓库未返回有效的稳定版本。");
+            this.state.latest = version = latest; this.state.job!.version = latest;
+          } catch (error) { if (!version || this.controller!.signal.aborted) throw error; }
+          const target = version;
+          await installWithFallback(() => this.install(target, () => { installationPublished = true; }), () => this.uninstall(), this.controller!.signal, text => this.notify(text));
+        }
         else if (kind === "doctor") {
           if (!this.entry) throw Error("请先安装 OpenCLI。");
           this.notify("正在运行官方连接诊断，请保持 Chrome 打开…");
@@ -335,8 +325,7 @@ export class OpenCliService {
       // durability/cleanup failure; retries must use the on-disk revision.
       this.loadConfig();
       this.state.job!.running = false; this.state.job!.queued = false;
-      try { this.notify(); operation.finish(); }
-      catch (error) { try { operation.retain(); } catch {} this.state.error = "操作记录或进程退出未能确认，已保留归属记录。"; this.state.job!.error = errorMessage(error, this.state.error); this.changed(); }
+      try { operation.finish(); } catch { /* Component standard: a stale journal never blocks the next operation. */ }
       finally { operation.close(); this.pending = undefined; this.changed(); }
     }));
     return this.snapshot();

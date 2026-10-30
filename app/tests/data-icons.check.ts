@@ -12,9 +12,10 @@ const root=createRoot(document.getElementById('root'));let seq=0;
 window.show=(options={})=>{const sessionId=options.sessionId??'parent';const scope={workspaceId:'fixture',sessionId};
 flushSync(()=>root.render(<><Icons/><main style={{height:'100dvh',boxSizing:'border-box',display:'flex',flexDirection:'column',justifyContent:'flex-end',padding:'20px 12px'}}>{options.memory === undefined ? <Usage scope={scope}/> : <MemoryToolbar scope={scope} workspaces={[]}>{tools=><Usage scope={scope} tools={tools}/>}</MemoryToolbar>}</main></>));
 acceptSnapshot({scope:'agent:fixture:'+sessionId,streamId:'fixture',seq:++seq,data:{task:sessionId==='child'?{id:'fixture-task',parentSessionId:'parent',status:'completed'}:undefined,selection:null,environment:null,run:options.active?{id:'fixture-run',status:'running',startedAt:Date.now()}:null,usage:options.usage??{input:90000,output:123,cacheRead:9000,cacheWrite:1000,total:100123,cost:0.1234,lastRequest:{input:56250,cacheRead:25000,cacheWrite:18750},context:{tokens:32000,window:128000,estimated:true}}}});if(options.memory!==undefined)acceptSnapshot({scope:'memory:fixture:'+sessionId,streamId:'fixture',seq:++seq,data:{...scope,revision:String(seq),entry:options.memory,progress:parseMemory(options.memory),files:[],deleted:false}});};window.show();connect();`;
-const server = await createServer({ configFile: false, root: resolve('src/client'), cacheDir: resolve('test-results/data-icons/vite-cache'), plugins: [{ name: 'data-fixture', resolveId(id) { if(id==='virtual:data-icons') return id; }, load(id) { if(id==='virtual:data-icons') return {code:fixture,loader:'tsx'}; }, transform(code,id){ if(id==='virtual:data-icons') return import('esbuild').then(e=>e.transform(code,{loader:'tsx',jsx:'automatic'})); } }], server: { host:'127.0.0.1',port:0,fs:{allow:[resolve('.')]}} });
+const output=resolve(process.env.AXIOM_TEST_ARTIFACTS || 'test-results/data-icons');
+const server = await createServer({ configFile: false, root: resolve('src/client'), cacheDir: resolve(output,'vite-cache'), plugins: [{ name: 'data-fixture', resolveId(id) { if(id==='virtual:data-icons') return id; }, load(id) { if(id==='virtual:data-icons') return {code:fixture,loader:'tsx'}; }, transform(code,id){ if(id==='virtual:data-icons') return import('esbuild').then(e=>e.transform(code,{loader:'tsx',jsx:'automatic'})); } }], server: { host:'127.0.0.1',port:0,fs:{allow:[resolve('.')]}} });
 await server.listen();const browser=await chromium.launch({executablePath:process.env.AXIOM_TEST_BROWSER});
-const output=resolve('test-results/data-icons');mkdirSync(output,{recursive:true});
+mkdirSync(output,{recursive:true});
 try {
   const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'}),errors:string[]=[];
   page.on('pageerror',e=>errors.push(e.message));
@@ -69,6 +70,15 @@ try {
   await escape();await page.screenshot({path:resolve(output,'mobile.png')});
   const show=async(usage:unknown,sessionId='parent',active=false)=>{await page.evaluate(({usage,sessionId,active})=>(window as any).show({usage,sessionId,active}),{usage,sessionId,active});};
   const base={input:5000,cacheRead:5000,cacheWrite:0,output:0,total:10000,cost:null,lastRequest:null,context:{tokens:0,window:128000,estimated:false}};
+  await show({...base,context:{tokens:175855,window:272000,source:'model-usage'}});
+  await context.click();
+  assert.match(await page.locator('.metric-detail').innerText(),/模型用量校准＋新增消息估算/);
+  assert.match(await page.locator('.metric-detail').innerText(),/与压缩时保存的快照可能不同/);
+  await show({...base,context:{tokens:180095,window:272000,source:'model-usage'}});
+  await page.waitForFunction(()=>document.querySelector('.metric-detail')?.textContent?.includes('180,095 / 272,000'));
+  await escape();
+  await show(base); await context.click();
+  assert.match(await page.locator('.metric-detail').innerText(),/历史估算（来源未记录）/); await escape();
   const request=(ratio:number)=>({...base,lastRequest:{input:100-ratio,cacheRead:ratio,cacheWrite:0}});
   for(const lastRequest of [undefined,null,{input:0,cacheRead:0,cacheWrite:0},{input:10,cacheWrite:0},{input:-1,cacheRead:1,cacheWrite:0}]) {
     await show({...base,lastRequest});

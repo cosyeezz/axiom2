@@ -1,7 +1,7 @@
 import { Select } from "../Select.js";
 import { ComboInput } from "../ComboInput.js";
 import { DeleteIcon } from "../DeleteIcon.js";
-import { bodyOverrideType, samplingKeys, type BodyOverrideType, type OverrideRow as Row } from "../../shared/models.js";
+import { bodyOverrideApis, bodyOverrideType, samplingKeys, type BodyOverrideType, type OverrideRow as Row } from "../../shared/models.js";
 
 const headerNames = ["Authorization", "Content-Type", "Accept", "OpenAI-Organization", "OpenAI-Project", "OpenAI-Beta", "x-api-key", "anthropic-version", "anthropic-beta", "User-Agent"];
 const headerValues: Record<string, string[]> = {
@@ -61,7 +61,7 @@ export function Headers({ rows, change, scope }: {
 export function BodyOverrides({ rows, change, api }: {
   rows: Row[]; change: (rows: Row[]) => void; api: string;
 }) {
-  const supported = ["openai-completions", "openai-responses", "azure-openai-responses"].includes(api);
+  const supported = bodyOverrideApis.includes(api);
   return (
     <section className="override-editor" aria-label="请求体覆盖">
       <div className="override-heading">

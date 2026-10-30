@@ -19,7 +19,7 @@ const verticalOnly = /^\s*[│┃║|↑↓^v]\s*$/u;
 export const diagramCell = { width: 8.5, height: 22, padding: 12 };
 export interface DiagramStroke { x: number; y: number; ports: number; arrow?: number; rounded?: boolean }
 export interface DiagramLabel { x: number; y: number; width: number; text: string }
-export interface AsciiDiagram { columns: number; rows: number; strokes: DiagramStroke[]; labels: DiagramLabel[]; alignment?: { rows: number; maxShift: number } }
+export interface AsciiDiagram { columns: number; rows: number; strokes: DiagramStroke[]; labels: DiagramLabel[]; fields?: { x: number; y: number; width: number }[]; alignment?: { rows: number; maxShift: number } }
 type Cell = { text: string; x: number; y: number; width: number; ports: number; strong: boolean; drawn: boolean; arrow?: number };
 
 /** Deterministic terminal-style width; box/arrow glyphs always occupy one cell. */
@@ -125,7 +125,7 @@ export function parseAsciiDiagram(source: string): AsciiDiagram | undefined {
   return original;
 }
 
-function parseDiagramGrid(source: string): AsciiDiagram | undefined {
+function parseDiagramGrid(source: string, panel = false): AsciiDiagram | undefined {
   // Cheap rejection precedes segmentation. Avoid control/bidi characters which
   // cannot be faithfully represented by this left-to-right grid.
   if (source.length > 24_000 || !lineHint.test(source) || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(source)) return;
@@ -140,7 +140,7 @@ function parseDiagramGrid(source: string): AsciiDiagram | undefined {
   // three vertical junctions, unlike two separate side-by-side node boxes.
   const tableRules = lines.filter(line => /^[+─┌┐┬┴┼└┘-]+$/u.test(line.trim()) &&
     Array.from(line).filter(char => (ports[char] & (U | D)) !== 0).length >= 3);
-  if (tableRules.length >= 2 && !/[←→↑↓➜➔<>]/u.test(source)) return;
+  if (!panel && tableRules.length >= 2 && !/[←→↑↓➜➔<>]/u.test(source)) return;
   const cells: Cell[] = [], grid = new Map<string, Cell>();
   let columns = 0;
   for (const [y, line] of lines.entries()) {
@@ -163,7 +163,7 @@ function parseDiagramGrid(source: string): AsciiDiagram | undefined {
       const word = /[\p{L}\p{N}]$/u.test(before) || /^[\p{L}\p{N}]/u.test(after);
       const textArrow = /[v^<>]/u.test(segment) && word &&
         !(segment === ">" && /[-─]$/u.test(before) || segment === "<" && /^[-─]/u.test(after));
-      const cell: Cell = { text: segment, x, y, width, ports: literal.has(index) || textArrow ? 0 : ports[segment] ?? 0, strong: boxLine.test(segment), drawn: false, arrow: arrowDirections[segment] };
+      const cell: Cell = { text: segment, x, y, width, ports: panel && !boxLine.test(segment) || literal.has(index) || textArrow ? 0 : ports[segment] ?? 0, strong: boxLine.test(segment), drawn: false, arrow: arrowDirections[segment] };
       cells.push(cell); grid.set(`${x}:${y}`, cell); x += width;
       if (x > 240 || cells.length > 16_000) return;
     }
@@ -309,6 +309,82 @@ export function asciiDiagramBlocks(source: string): DiagramBlock[] {
     while (i < lines.length && candidates[i]) { text += lines[i]; offset += lines[i++].length; }
     const diagram = parseAsciiDiagram(text);
     if (diagram) result.push({ start, end: offset, text, diagram });
+  }
+  return result;
+}
+
+/** Text-fence-only panels: matching Unicode top/bottom rules, vertical body
+ * rows, and no internal horizontal separators. This is deliberately separate
+ * from flow recognition: ordinary ASCII/Markdown/grid tables remain literal.
+ * Repair only trailing ASCII padding, never label text, indentation or topology.
+ * Every source boundary must be within two columns of its fixed rule anchor. */
+export function asciiPanelBlocks(source: string): DiagramBlock[] {
+  if (source.length > 24_000 || /[\t\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(source)) return [];
+  const raw = source.match(/[^\n]*(?:\n|$)/g)?.filter(Boolean) ?? [];
+  if (raw.length > 120) return [];
+  const lines = raw.map(line => line.replace(/\r?\n$/u, ""));
+  let cells = 0;
+  for (const line of lines) {
+    const width = diagramTextWidth(line);
+    cells += width;
+    if (width > 240 || cells > 16_000) return [];
+  }
+  const offsets = [0];
+  for (const line of raw) offsets.push(offsets.at(-1)! + line.length);
+  const result: DiagramBlock[] = [];
+  for (let start = 0; start < lines.length; start++) {
+    const top = /^( *)┌(─+(?:┬─+)*)┐ *$/u.exec(lines[start]);
+    if (!top) continue;
+    const originalWidths = top[2].split("┬").map(part => part.length);
+    const bottom = top[1] + "└" + top[2].replaceAll("┬", "┴") + "┘";
+    const body: string[][] = [];
+    let end = start + 1;
+    for (; end < lines.length; end++) {
+      if (lines[end].trimEnd() === bottom) break;
+      const row = lines[end];
+      if (!row.startsWith(top[1] + "│") || !/│ *$/u.test(row)) break;
+      const parts = row.slice(top[1].length + 1).replace(/│ *$/u, "").split("│");
+      if (parts.length !== originalWidths.length || parts.some(part => /[\u2500-\u257f]/u.test(part))) break;
+      body.push(parts);
+    }
+    if (!body.length || lines[end]?.trimEnd() !== bottom) continue;
+    // Do not detach a panel from an unsupported external vertical/diagonal flow.
+    const connector = (line: string | undefined) => !!line?.trim() &&
+      !/^ *[┌└]─+(?:[┬┴]─+)*[┐┘] *$/u.test(line) &&
+      (lineHint.test(line) || /[↗↘↙↖⤡⤢]/u.test(line) || /^\s*[\/\\]+(?:[ \t]+[\/\\]+)*\s*$/u.test(line));
+    if (connector(lines[start - 1]) || connector(lines[end + 1])) continue;
+    // A label may already touch its border (e.g. 缓存命中率). Use the unique
+    // smallest widths that preserve all non-padding text and the rule widths.
+    // Expansion is subject to the same absolute two-column boundary budget.
+    const widths = originalWidths.map((width, i) => Math.max(width, ...body.map(parts => diagramTextWidth(parts[i].replace(/ +$/u, "")))));
+    let ruleShift = 0;
+    for (let i = 0; i < widths.length; i++) ruleShift += widths[i] - originalWidths[i];
+    if (ruleShift > 2) continue;
+    const normalized = [top[1] + "┌" + widths.map(width => "─".repeat(width)).join("┬") + "┐"];
+    let changedRows = ruleShift ? 2 : 0, maxShift = ruleShift;
+    for (const parts of body) {
+      let actual = top[1].length, target = actual, rowShift = 0;
+      const corrected: string[] = [];
+      for (const [i, part] of parts.entries()) {
+        const width = diagramTextWidth(part), delta = widths[i] - width;
+        actual += width + 1; target += widths[i] + 1;
+        rowShift = Math.max(rowShift, Math.abs(target - actual));
+        const padding = / *$/u.exec(part)![0].length;
+        if (rowShift > 2 || delta < -padding) break;
+        corrected.push(delta >= 0 ? part + " ".repeat(delta) : part.slice(0, part.length + delta));
+      }
+      if (corrected.length !== parts.length) break;
+      if (rowShift) { changedRows++; maxShift = Math.max(maxShift, rowShift); }
+      normalized.push(top[1] + "│" + corrected.join("│") + "│");
+    }
+    if (normalized.length !== body.length + 1) continue;
+    normalized.push(top[1] + "└" + widths.map(width => "─".repeat(width)).join("┴") + "┘");
+    // Only this structurally validated panel may bypass the table gate.
+    const diagram = parseDiagramGrid(normalized.join("\n"), true);
+    if (!diagram) continue;
+    if (changedRows) diagram.alignment = { rows: changedRows, maxShift };
+    result.push({ start: offsets[start], end: offsets[end + 1], text: raw.slice(start, end + 1).join(""), diagram });
+    start = end;
   }
   return result;
 }

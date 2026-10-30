@@ -108,21 +108,23 @@ export default function Workbench() {
     }
   }, [isMobile, mobileOpen]);
   const workspace = workspaces.find((w) => w.id === workspaceId);
-  const creation = useSessionCreation({ view: selectedView, navigation, select: (next) => select(next), onError: setError });
+  const creation = useSessionCreation({ view: selectedView, navigation, select: (next, isCurrent) => select(next, isCurrent), onError: setError });
   const view = creation.preparing ? { workspaceId: creation.preparing.workspaceId, sessionId: "" } : selectedView;
   const viewedWorkspace = workspaces.find((w) => w.id === view?.workspaceId);
-  const select = (next: Scope) => {
-    navigate(() => { selectView(next); closeMobileHistory(); });
+  const select = (next: Scope, isCurrent: () => boolean = () => true) => {
+    navigate(() => { if (isCurrent()) { selectView(next); closeMobileHistory(); } });
   };
   const forking = useRef(false);
   const [forkBusy, setForkBusy] = useState(false);
   const fork = async (scope: Scope, params: Record<string, unknown>, requestId: string, openAfterCreate: boolean) => {
     if (forking.current) return;
     forking.current = true; setForkBusy(true); setError("");
+    if (openAfterCreate) navigation.current++;
     const startedAt = navigation.current;
     try {
       const session = await command<Session>("agent.fork", params, scope, requestId);
-      if (openAfterCreate && navigation.current === startedAt) select({ workspaceId: session.workspaceId, sessionId: session.id });
+      if (openAfterCreate && navigation.current === startedAt)
+        select({ workspaceId: session.workspaceId, sessionId: session.id }, () => navigation.current === startedAt);
     } catch (cause) { setError((cause as Error).message); throw cause; }
     finally { forking.current = false; setForkBusy(false); }
   };
@@ -204,7 +206,8 @@ export default function Workbench() {
           workspaces={workspaces}
           selected={view}
           preparing={!!creation.preparing}
-          recover={(next) => navigate(() => recoverSession(next))}
+          navigation={navigation}
+          recover={(next, isCurrent) => navigate(() => { if (isCurrent()) recoverSession(next); })}
           select={(next) => navigate(() => { selectSession(next); closeMobileHistory(); })}
           onError={setError}
         />

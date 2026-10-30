@@ -1,6 +1,7 @@
 import type { Agents } from "./agents.js";
 import type { ServiceRecovery } from "./service-recovery-records.js";
-import { AppError, type Scope, type Command } from "../shared/protocol.js";
+import { AppError, text, type Scope, type Command } from "../shared/protocol.js";
+import { TaskWindows } from "./task-windows.js";
 import { running, type Run } from "../shared/agent.js";
 import { tasksScope, taskToolNames } from "../shared/tasks.js";
 import {
@@ -20,9 +21,11 @@ export class Tasks {
   private readonly records: TaskRecords;
   private readonly delivery: TaskDelivery;
   private readonly scheduler: TaskScheduler;
+  private readonly windows: TaskWindows;
   readonly store;
   constructor(readonly agents: Agents) {
     this.store = agents.store;
+    this.windows = new TaskWindows(this.store, scope => agents.windowIdentity(scope));
     this.records = new TaskRecords(this.store);
     this.delivery = new TaskDelivery(agents, this.records);
     this.scheduler = new TaskScheduler(agents, this.records, this.delivery);
@@ -36,9 +39,10 @@ export class Tasks {
     agents.reloads.onReleased = scope => { this.delivery.notify(scope); this.scheduler.kick(); };
     agents.onEvent = (scope, run, event) => this.event(scope, run, event);
     agents.onSettled = (scope, run) => {
+      const recovering = !this.scheduler.closing && this.store.recoveries.get(scope.sessionId)?.runId === run.id;
       const row = this.records.child(scope);
-      if (row) this.scheduler.settle(row, run);
-      else this.delivery.parentSettled(scope, run);
+      if (row) this.scheduler.settle(row, run, recovering);
+      else if (!recovering) this.delivery.parentSettled(scope, run);
       this.scheduler.kick();
     };
     // Recoverable children are settled by recover() before entering the normal queue.
@@ -65,13 +69,13 @@ export class Tasks {
         if (!run || run.id !== recovery.runId) throw new AppError("RUN_MISMATCH", "恢复对象已变化");
         this.scheduler.settle(row, run, true);
       }
-      this.scheduler.recover(row, recovery);
-      return;
+      await this.scheduler.recoverAndStart(row, recovery);
+      return this.agents.info(scope).run?.id;
     }
-    // The coordinator keeps parents frozen until all child recoveries have settled.
+    // Children have reconnected first; their model work need not finish before the parent reconnects.
     this.delivery.reconcilePending(scope);
     this.store.db.prepare("UPDATE task_parents SET frozen=0 WHERE sessionId=?").run(scope.sessionId);
-    await this.delivery.notify(scope);
+    await this.delivery.notify(scope, true);
     const runId = this.agents.info(scope).run?.id;
     if ((runId ?? null) === recovery.runId && this.store.db.prepare(`SELECT 1 FROM task_results r JOIN tasks t ON t.id=r.taskId
       WHERE t.parentSessionId=? AND r.delivery NOT IN ('delivered','discarded') LIMIT 1`).get(scope.sessionId))
@@ -82,6 +86,14 @@ export class Tasks {
   list(scope: Scope) {
     return this.records.list(scope);
   }
+  window(c: Command, signal?: AbortSignal) {
+    return this.windows.read({ workspaceId: text(c.workspaceId, "工作空间标识"), sessionId: text(c.sessionId, "会话标识") }, c.requestId, c.params?.query, signal);
+  }
+  windowInvalidation(scope: Scope, revision: number) {
+    this.windows.check(scope);
+    return { revision };
+  }
+  invalidateWindows(changed: string) { this.windows.changed(changed); }
   child(scope: Scope) {
     return this.records.child(scope);
   }
@@ -165,7 +177,13 @@ export class Tasks {
     if (failed?.status === "rejected") throw failed.reason;
   }
   async stopProviders(providers: string[], confirmed: boolean) {
-    const affected = this.agents.affected(providers);
+    const recoveries = this.store.db.prepare(`SELECT r.sessionId,s.workspaceId,s.title,json_extract(a.selection,'$.provider') AS provider
+      FROM service_recoveries r JOIN sessions s ON s.id=r.sessionId
+      JOIN agent_sessions a ON a.sessionId=r.sessionId`).all()
+      .filter(row => providers.includes(String(row.provider)));
+    const affected = [...new Map([...this.agents.affected(providers), ...recoveries.map(row => ({
+      sessionId: String(row.sessionId), workspaceId: String(row.workspaceId), title: String(row.title),
+    }))].map(scope => [scope.sessionId, scope])).values()];
     // Check every affected kind before stopping anything without explicit confirmation.
     this.agents.compressions.checkProviders(providers, confirmed);
     // Archived workspaces retain history, but are not valid execution scopes.
@@ -182,6 +200,12 @@ export class Tasks {
         "ACTIVE_RUNS_CONFIRMATION_REQUIRED",
         `需先停止受影响会话／排队子任务：${[...affected.map((s) => s.title), ...queued.map((t) => t.description.slice(0, 120))].join("、")}。确认后才退出登录。`,
       );
+    // A confirmed provider stop also revokes interrupted/non-live intentions.
+    // Otherwise logging in again could revive work the user explicitly stopped.
+    for (const recovery of recoveries) {
+      this.store.recoveries.remove(String(recovery.sessionId));
+      this.store.db.prepare("UPDATE task_parents SET frozen=1 WHERE sessionId=?").run(recovery.sessionId);
+    }
     const children: Row[] = [];
     for (const row of rows) {
       const selection = this.agents.info(target(row)).selection;
@@ -224,6 +248,7 @@ export class Tasks {
     return this.agents.remove(c, position);
   }
   async close() {
+    this.windows.close();
     this.delivery.pause();
     await this.scheduler.close();
     await Promise.allSettled(this.calls);

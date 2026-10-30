@@ -51,6 +51,7 @@ test("pooled direct memory requests isolate bindings, record usage and cancel bo
     writeFileSync(join(root, "memory", "sessions", b.sessionId, "MEMORY.md"), "ONLY_BETA_PRIVATE");
     const execute = (scope: Scope, signal?: AbortSignal, kind: "query" | "organize" = "query", provider = "fixture") => runner.execute({ scope, signal, kind, selection: { provider, id: "fixture", thinking: "off" }, prompt: JSON.stringify(scope), read: (id, path, offset, limit) => { assert.equal(id, scope.sessionId); return memories.read(scope, path, offset, limit); } });
     const first = await execute(a); assert.match(first.answer, new RegExp(a.sessionId));
+    assert.deepEqual(runner.pool.requests.snapshot().providers, [{ providerId: 'fixture', current: 0, peak: 1, rpm: 1, callLevel: false }], 'real pooled worker emits physical HTTP statistics without counting auth/catalog preparation');
     const split = requests.length;
     const second = await execute(b); assert.match(second.answer, new RegExp(b.sessionId));
     assert.ok(!JSON.stringify(requests.slice(split)).includes("ONLY_ALPHA_PRIVATE"), "new bindings must not retain old messages or read permissions");
@@ -81,12 +82,16 @@ test("pooled direct memory requests isolate bindings, record usage and cancel bo
     const active = new AbortController(), waiting = new AbortController();
     const one = execute(a, active.signal); const oneDone = assert.rejects(one, /取消|中断|abort/i);
     await started;
+    // The fixture observes the same actual HTTP dispatch as the worker statistics.
+    for (let attempt = 0; attempt < 100 && runner.pool.requests.snapshot().providers.find(row => row.providerId === 'fixture')?.current !== 1; attempt++) await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(runner.pool.requests.snapshot().providers.find(row => row.providerId === 'fixture')?.current, 1);
     const two = execute(b, waiting.signal); const twoDone = assert.rejects(two, /取消|超时/);
     // Model preparation is asynchronous; wait for this request's actual admission
     // before submitting the overflow request so filesystem completion order is irrelevant.
     await waitForQueued();
     await assert.rejects(execute(b), { code: "MEMORY_BUSY" });
     waiting.abort(); active.abort(); await Promise.all([oneDone, twoDone]);
+    assert.equal(runner.pool.requests.snapshot().providers.find(row => row.providerId === 'fixture')?.current, 0, 'cancellation or process close releases inference concurrency');
     hanging = false; assert.ok((await execute(b)).answer.includes(b.sessionId));
     const configure = (params: Record<string, unknown>) => memories.command({ requestId: randomUUID(), op: "memory.configure", workspaceId: workspace.id, params });
     const noTools = await runner.execute({ scope: a, kind: "query", selection: { provider: "fixture", id: "fixture", thinking: "off" }, prompt: JSON.stringify(a), read: () => { throw Error("独立API不能调用读取工具"); } });

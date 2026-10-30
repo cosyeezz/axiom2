@@ -1,4 +1,4 @@
-import { KiroChatError } from "./kiro-chat-protocol.js";
+import { KiroChatError } from "./kiro-native-protocol.js";
 
 const LIMIT = 1024 * 1024;
 const high = (unit: number) => unit >= 0xd800 && unit <= 0xdbff;

@@ -4,6 +4,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 import { startServer } from "../src/server/index.js";
+import { recordMaintenanceInterruption } from "../src/server/maintenance.js";
+import { assertComponentTree, ensureComponentActions } from "./component-layout-helpers.js";
 import { openCliConfigPath } from "../src/server/integrations/opencli-runtime.js";
 import { atomicReaJson, reaConfigPath } from "../src/server/integrations/rea-runtime.js";
 import { listEngines } from "../src/server/integrations/rea-engines.js";
@@ -38,6 +40,15 @@ try {
         await page.setViewportSize({ width, height: 900 });
         await page.locator(`#${id}-heading`).scrollIntoViewIfNeeded();
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${id}/${theme}/${width} overflow`);
+        await assertComponentTree(page.locator(`#${id}`).getByRole("region", { name: `${id === "rea" ? "REA" : "OpenCLI"}维护`, exact: true }));
+        const selectedPalette = await page.locator(".supplier-option[aria-current=true]").evaluate(node => {
+          const probe = document.createElement("span"); node.appendChild(probe);
+          probe.style.backgroundColor = "color-mix(in srgb,var(--fg) 6%,transparent)";
+          probe.style.borderColor = "var(--border)";
+          const expected = { background: getComputedStyle(probe).backgroundColor, border: getComputedStyle(probe).borderTopColor };
+          probe.remove(); return { actual: { background: getComputedStyle(node).backgroundColor, border: getComputedStyle(node).borderTopColor }, expected };
+        });
+        assert.deepEqual(selectedPalette.actual, selectedPalette.expected, "selected tool row uses the neutral system grey, not an accent tint");
         assert.deepEqual(await page.locator(`#${id} svg use`).evaluateAll(nodes => nodes.map(node => node.getAttribute("href")!).filter(href => !document.querySelector(href))), []);
         await page.screenshot({ path: join(artifacts, `${id}-${theme}-${width}.png`), fullPage: true });
       }
@@ -45,6 +56,7 @@ try {
   };
   await page.goto(`${app.origin}/tools.html#opencli`);
   const cli = page.locator("#opencli"), cliPanel = cli.getByRole("region", { name: "OpenCLI维护", exact: true });
+  await ensureComponentActions(cliPanel);
   await cli.getByRole("button", { name: "检查更新", exact: true }).click();
   await page.waitForFunction(() => [...document.querySelectorAll("#opencli button")].some(button => button.textContent === "更新 OpenCLI" && !(button as HTMLButtonElement).disabled));
   await cli.getByRole("button", { name: "更新 OpenCLI", exact: true }).click();
@@ -52,15 +64,21 @@ try {
   assert.equal(opencli.calls.filter(args => args[1] === "install").length, 1, "active Agent does not globally queue installation");
   await page.reload();
   await cliPanel.getByRole("button", { name: "取消任务", exact: true }).click();
-  await cli.getByText("操作已取消，当前接入未切换。", { exact: true }).waitFor();
+  await cli.getByRole("button", { name: "更新 OpenCLI", exact: true }).and(page.locator(":enabled")).waitFor();
+  await cliPanel.locator(":scope > .maintenance-task").waitFor({ state: "detached" });
   assert.equal(opencli.calls.filter(args => args[1] === "install").length, 1, "reload does not repeat installation");
   assert.equal(JSON.parse(readFileSync(join(opencli.packageRoot, "package.json"), "utf8")).version, "1.8.7");
   release();
   await cli.getByRole("button", { name: "更新 OpenCLI", exact: true }).click();
-  await cli.getByText("安装与技能接入已完成", { exact: false }).waitFor();
+  await cli.getByRole("button", { name: "重新安装", exact: true }).and(page.locator(":enabled")).waitFor();
+  await cliPanel.locator(":scope > .maintenance-task").waitFor({ state: "detached" });
+  const cliSummary = cliPanel.locator(":scope > .maintenance-panel-heading");
+  assert.equal(await cliSummary.locator(".component-card-candidate").innerText(), "最新 v1.8.8", "candidate row shows the latest version with a two-character label");
+  assert.ok(await cliSummary.locator(".component-card-location .local-path").isVisible(), "installation location is visible directly below the name");
   const cliVersion = () => JSON.parse(readFileSync(join(JSON.parse(readFileSync(openCliConfigPath(root), "utf8")).packageRoot, "package.json"), "utf8")).version;
   assert.equal(cliVersion(), "1.8.8");
   await matrix("opencli");
+  await ensureComponentActions(cliPanel);
   active = false;
   await cli.getByRole("button", { name: "卸载 OpenCLI", exact: true }).click();
   const cliConfirm = cli.getByRole("group", { name: "确认移除 OpenCLI", exact: true });
@@ -73,8 +91,21 @@ try {
 
   await page.goto(`${app.origin}/tools.html#rea`);
   const section = page.locator("#rea"), panel = section.getByRole("region", { name: "REA维护", exact: true });
+  // Pin the fixture's initial release instead of depending on the app's bundled recommendation.
+  await ensureComponentActions(panel);
+  await section.getByRole("button", { name: "检查更新", exact: true }).click();
+  await panel.locator(":scope > .maintenance-panel-heading .component-card-candidate").filter({ hasText: /^\s*最新\s+v6\.7\.0\s*$/ }).waitFor();
   await section.getByRole("button", { name: "安装 REA", exact: true }).click();
-  await section.getByText("REA 与技能已接入；已有会话请重新加载技能与 MCP。", { exact: true }).waitFor();
+  await panel.getByRole("button", { name: "卸载 REA", exact: true }).waitFor();
+  await panel.locator(":scope > .maintenance-task").waitFor({ state: "detached" });
+  assert.ok(await panel.locator(":scope > .maintenance-panel-heading .component-card-location .local-path").isVisible());
+  assert.match(await panel.locator(":scope > .maintenance-panel-heading .component-card-version").innerText(), /当前\s+v6\.7\.0/);
+  for (const name of ["REA专属 Node.js 环境", "REA npm 环境", "REA Skill维护", "REA MCP维护", "JDK 21维护", "Ghidra维护", "Hopper维护", "JADX Headless维护", "WABT维护"]) {
+    const child = panel.getByRole("region", { name, exact: true });
+    assert.equal(await child.evaluate(node => node.parentElement!.closest(".component-card")?.getAttribute("aria-label")), "REA维护", `${name} is a real child card, not a sibling`);
+  }
+  assert.equal(await panel.getByRole("region", { name: "REA npm 环境", exact: true }).evaluate(node => node.parentElement!.closest(".component-card")?.getAttribute("aria-label")), "REA维护");
+  for (const child of await panel.locator(".component-card").all()) await ensureComponentActions(child);
   await section.getByRole("button", { name: "卸载 Skill", exact: true }).click();
   await section.getByText("Skill 已卸载；已有会话请在技能与 MCP 面板调整选择并重新加载。", { exact: true }).waitFor();
   await section.getByRole("button", { name: "安装 Skill", exact: true }).click();
@@ -90,6 +121,7 @@ try {
   await java.getByRole("button", { name: "确认下载安装", exact: true }).click();
   await java.getByRole("button", { name: "卸载托管组件", exact: true }).waitFor();
   await matrix("rea");
+  await ensureComponentActions(panel); await ensureComponentActions(java);
   await java.getByRole("button", { name: "卸载托管组件", exact: true }).click();
   await java.getByRole("button", { name: "暂不卸载", exact: true }).click(); assert.ok(existsSync(engineDirectory));
   await java.getByRole("button", { name: "卸载托管组件", exact: true }).click();
@@ -105,10 +137,12 @@ try {
   await section.getByRole("alert").filter({ hasText: "fixture engine failure" }).waitFor();
   assert.equal(await section.locator('[role="alert"]:visible').count(), 1, "one visible alert for an engine failure");
   await page.screenshot({ path: join(artifacts, "rea-engine-failed.png"), fullPage: true });
-  await java.getByRole("button", { name: "任务记录", exact: true }).click();
-  const history = page.getByRole("dialog", { name: "下载与维护", exact: true });
-  await history.getByRole("button", { name: "清理已结束记录", exact: true }).click();
-  await history.getByRole("button", { name: "关闭下载与维护", exact: true }).click();
+  assert.equal(await page.getByRole("button", { name: "任务记录", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("dialog", { name: "下载与维护", exact: true }).count(), 0);
+  const currentEngineTask = java.locator(":scope > .maintenance-task");
+  assert.equal(await currentEngineTask.getAttribute("data-status"), "failed", "failed engine stays on its own card");
+  assert.equal(await currentEngineTask.locator(".maintenance-task-details,.maintenance-record").count(), 0, "terminal engine status has no history/detail query");
+  assert.equal(await currentEngineTask.getByText("查看任务详情", { exact: true }).count(), 0);
   await panel.getByRole("button", { name: "卸载 REA", exact: true }).click();
   await panel.getByRole("button", { name: "暂不卸载", exact: true }).click();
   assert.equal(JSON.parse(readFileSync(reaConfigPath(root), "utf8")).installation.version, "6.7.0");
@@ -129,6 +163,28 @@ try {
   await assertIndependentErrors();
   assert.equal(JSON.parse(readFileSync(reaConfigPath(root), "utf8")).installation.version, "6.7.0");
   assert.ok(!(await section.innerText()).includes("secret-value"));
+  await panel.getByRole("button", { name: "检查更新", exact: true }).click();
+  await panel.getByRole("button", { name: "检查更新", exact: true }).and(page.locator(":enabled")).waitFor();
+  await panel.locator(':scope > .maintenance-task[data-status="running"]').waitFor({ state: "detached" });
+  assert.equal(await panel.locator('.maintenance-result[data-status="succeeded"]').count(), 0);
+  assert.equal(await panel.locator(".component-history,.component-logs,.maintenance-task-details").count(), 0, "no historical query or terminal task-details entry");
+  // Removing the query UI never erases the sanitized backend evidence.
+  const journal = JSON.parse(readFileSync(join(root, "maintenance/tasks.json"), "utf8"));
+  assert.ok(journal.tasks.some((task: any) => task.resource === "rea" && task.status === "failed" && task.error?.message === "操作未完成，请到来源页面核实安装结果。"));
+  assert.ok(journal.tasks.some((task: any) => task.resource === "rea:java" && task.status === "failed"), "engine failure evidence survives removal of the query UI");
+  await panel.screenshot({ path: join(artifacts, "rea-after-check.png") });
+  const old = journal.tasks.find((task: any) => task.resource === "rea" && task.status === "succeeded");
+  recordMaintenanceInterruption(root, { ...old, id: "layout-old-rea-install", attemptId: "layout-old-attempt", action: "rea.install", createdAt: Date.now() - 4308 * 60_000, startedAt: Date.now() - 4308 * 60_000, finishedAt: undefined });
+  await panel.locator('[data-task-id="layout-old-rea-install"]').waitFor();
+  assert.equal(await panel.locator('.maintenance-result[data-status="succeeded"]').count(), 0);
+  assert.match(await panel.locator(".component-unresolved").innerText(), /已中断，结果待核实.*原操作不会自动重试/s);
+  assert.equal(await panel.getByText(/用时.*分|查看任务详情/).count(), 0);
+  await matrix("rea");
+  await page.reload(); await panel.locator('[data-task-id="layout-old-rea-install"]').waitFor();
+  await panel.getByRole("button", { name: "检查更新", exact: true }).click();
+  await page.waitForFunction(() => !(document.querySelector('#rea button[aria-label="检查更新"]') as HTMLButtonElement)?.disabled);
+  assert.equal(await panel.locator('[data-task-id="layout-old-rea-install"]').count(), 1, "reload and later successful checks preserve the unresolved operation");
+  assert.equal(await panel.locator('.maintenance-result[data-status="succeeded"]').count(), 0);
   await panel.getByRole("button", { name: "卸载 REA", exact: true }).click();
   await panel.getByRole("button", { name: "确认卸载", exact: true }).click();
   await panel.getByRole("button", { name: "安装 REA", exact: true }).waitFor();

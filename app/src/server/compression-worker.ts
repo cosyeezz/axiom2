@@ -8,7 +8,6 @@ import {
   DefaultResourceLoader,
   SettingsManager,
   buildSessionProjection,
-  estimateTokens,
   type AgentSession,
   type SessionBeforeCompactEvent,
 } from "@earendil-works/pi-coding-agent";
@@ -26,6 +25,7 @@ import { kiroCompressionProjection, kiroSummaryUsage } from "./providers/kiro-us
 import { installKiroCompactionUsage } from "./kiro-compaction-usage.js";
 import { prepareFullCompression } from "./compression-context.js";
 import { streamNativeCompression } from "./compression-native.js";
+import { estimateContextMessages } from "./context-usage.js";
 
 export interface CompressionInput {
   executionGate?: boolean;
@@ -201,8 +201,11 @@ async function run(input: CompressionInput) {
     // Self-reference is the coordinator's retain-none marker. Only use it after
     // the entire snapshot was actually included in the native summary target.
     const output = { ...entry, ...(fullSummaryPrepared ? { firstKeptEntryId: entry.id } : {}), ...(kiroUsage ? { usage: kiroUsage } : {}) };
-    const after = fullSummaryPrepared ? buildSessionProjection([...transcript.getBranch().filter((item) => item.id !== entry.id), output])
-      .messages.reduce((total, message) => total + estimateTokens(message), 0) : result.estimatedTokensAfter ?? null;
+    // Estimate only the compacted snapshot, folding prompt deltas once. Retained
+    // assistant usage belongs to the old context and must never calibrate after.
+    const after = estimateContextMessages(buildSessionProjection([
+      ...transcript.getBranch().filter((item) => item.id !== entry.id), output,
+    ]).messages);
     send({
       type: "completed",
       entry: output,

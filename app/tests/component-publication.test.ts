@@ -101,7 +101,7 @@ test("REA updates retain dependency paths and downloads but invalidate checks ti
   } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
-for (const tool of ["rea", "opencli"] as const) test(`${tool} retains a published installation and reports the commit if directory sync fails`, { skip: process.platform === "win32" }, async t => {
+for (const tool of ["rea", "opencli"] as const) test(`${tool} recovers from a directory sync failure with one forced-clean reinstall`, { skip: process.platform === "win32" }, async t => {
   const f = openCliFixture(), rea = reaFixture();
   const service = tool === "rea" ? new ReaService(f.root, () => {}, { ...rea.dependencies, diagnose: async () => ({ text: "fixture", toolCount: 1, at: Date.now() }) }) : new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
   const sync = fs.fsyncSync; let injected = false;
@@ -113,8 +113,7 @@ for (const tool of ["rea", "opencli"] as const) test(`${tool} retains a publishe
   try {
     await service.command(command(`${tool}.check`)); await settle(service);
     await service.command(command(`${tool}.install`, { version: tool === "rea" ? "6.7.0" : "1.8.8" })); await settle(service);
-    assert.ok(injected); assert.match(service.snapshot().job!.error!, /已切换至/);
-    assert.match(service.snapshot().job!.message, /新版本已生效/);
+    assert.ok(injected); assert.equal(service.snapshot().job?.error, undefined, "component standard: the retry succeeds");
     const packageRoot = tool === "rea" ? reaPackageRoot(f.root) : readOpenCliConfig(f.root)?.packageRoot;
     assert.ok(packageRoot && existsSync(packageRoot));
     if (tool === "rea") assert.ok(existsSync(reaNode(f.root)));

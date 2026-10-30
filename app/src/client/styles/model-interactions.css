@@ -1,4 +1,11 @@
 /* Model configuration feedback stays visible beside the save controls. */
+.account-add-context{margin:16px 28px;padding:16px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface)}
+.account-add-context h2{font-size:16px;margin:0}
+.account-add-context .row-between{gap:12px;flex-wrap:wrap}
+.account-add-context .grid-2{margin-top:12px}
+.account-add-context .field{display:grid;gap:6px;min-width:0}
+.account-add-context .input{min-width:0;width:100%}
+@media(max-width:600px){.account-add-context{margin:14px}.account-add-context .grid-2{grid-template-columns:minmax(0,1fr)}}
 .provider-add-control{position:relative;flex-shrink:0}
 .provider-add-menu{position:fixed;inset:auto;margin:0;box-sizing:border-box;overflow:auto;overscroll-behavior:contain;padding:4px;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:0 8px 24px #0004}
 .provider-add-menu button{display:block;width:100%;min-height:40px;padding:8px 12px;text-align:left;border-radius:var(--radius-sm);font-size:13px}

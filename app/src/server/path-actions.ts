@@ -5,13 +5,14 @@ import { fileURLToPath } from "node:url";
 import { AppError, text, type Command } from "../shared/protocol.js";
 import type { Store } from "./storage.js";
 import { FileManagerError, type FileManager } from "./file-manager.js";
+import { Terminal, TerminalError } from "./terminal.js";
 
-/** UI-only filesystem navigation; files are never executed by their default handler. */
+/** UI-only navigation and terminal launch; path contents are never executed. */
 export class PathActions {
-  constructor(private readonly store: Store, private readonly manager: Pick<FileManager, "open">) {}
+  constructor(private readonly store: Store, private readonly manager: Pick<FileManager, "open">, private readonly terminal: Pick<Terminal, "open"> = new Terminal()) {}
   resolve(c: Command): string {
     const p = c.params ?? {};
-    if (Object.keys(p).some(key => key !== "path") || !["paths.resolve", "paths.reveal"].includes(c.op))
+    if (Object.keys(p).some(key => key !== "path") || !["paths.resolve", "paths.reveal", "paths.terminal"].includes(c.op))
       throw new AppError("INVALID_INPUT", "路径操作无效");
     text(p.path, "本地路径", 4096);
     let path = p.path as string;
@@ -36,7 +37,13 @@ export class PathActions {
   async command(c: Command, signal: AbortSignal): Promise<string> {
     signal.throwIfAborted();
     const path = this.resolve(c);
-    if (c.op === "paths.reveal") {
+    if (c.op === "paths.terminal") {
+      try { await this.terminal.open(path, signal); }
+      catch (error) {
+        if (error instanceof TerminalError) throw new AppError("TERMINAL_UNAVAILABLE", error.message);
+        throw error;
+      }
+    } else if (c.op === "paths.reveal") {
       signal.throwIfAborted();
       let directory: string, selection: string | undefined;
       try {

@@ -166,7 +166,7 @@ test("shutdown cancellation during recovery preparation preserves a pending inte
   } finally { await coordinator?.close(); f.store.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
-test("missing parent transcript keeps an undeliverable pending result visibly blocked", async () => {
+test("missing parent transcript preserves its result and a visible retryable recovery", async () => {
   const f = fixture(); let coordinator: ServiceRecoveryCoordinator | undefined;
   try {
     const id = f.records.create(f.scope, "anchor", "context", [{ task: "finished" }], selection).taskIds[0];
@@ -188,12 +188,12 @@ test("missing parent transcript keeps an undeliverable pending result visibly bl
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(commands, 0);
     assert.equal(f.store.db.prepare("SELECT delivery FROM task_results WHERE taskId=?").get(id)?.delivery, "pending");
-    assert.equal(f.store.recoveries.get(f.scope.sessionId)?.state, "blocked");
+    assert.equal(f.store.recoveries.get(f.scope.sessionId)?.state, "pending");
     assert.match(f.store.recoveries.get(f.scope.sessionId)?.error ?? "", /子任务结果通知未能确认启动/);
   } finally { await coordinator?.close(); f.store.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
-test("notification recovery shares the main-session admission bound", async () => {
+test("notification recovery is serial and cannot be reentered during preflight", async () => {
   const f = fixture(); let coordinator: ServiceRecoveryCoordinator | undefined;
   const jobs: Array<() => void> = [];
   try {
@@ -205,9 +205,9 @@ test("notification recovery shares the main-session admission bound", async () =
     const tasks = { recover: (_scope: Scope) => new Promise<void>(resolve => jobs.push(resolve)) } as unknown as Tasks;
     coordinator = new ServiceRecoveryCoordinator(agents, tasks);
     (coordinator as unknown as { tick(): void }).tick();
-    assert.equal(jobs.length, 3);
+    assert.equal(jobs.length, 1);
     (coordinator as unknown as { tick(): void }).tick();
-    assert.equal(jobs.length, 3, "pending notification preflight must retain its slot");
+    assert.equal(jobs.length, 1, "pending notification preflight must retain the sole launch slot");
     coordinator.pause(); jobs.forEach(resolve => resolve());
   } finally { await coordinator?.close(); f.store.close(); rmSync(f.root, { recursive: true, force: true }); }
 });

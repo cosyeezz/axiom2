@@ -16,7 +16,8 @@ import type { Command, Draft, Scope, Session, Workspace } from "../src/shared/pr
 
 const root = mkdtempSync(join(tmpdir(), "axiom-steering-ui-"));
 const project = join(root, "workspace"), pi = join(root, "pi");
-mkdirSync(project); mkdirSync(pi);
+const artifacts = process.env.AXIOM_QUEUE_RECALL_ARTIFACTS ?? "/tmp/axiom-queue-recall-ui";
+mkdirSync(project); mkdirSync(pi); mkdirSync(artifacts, { recursive: true });
 const selection: Selection = { provider: "steering-fixture", id: "fixture", thinking: "off" };
 writeFileSync(join(pi, "models.json"), JSON.stringify({ providers: {
   [selection.provider]: { api: "openai-completions", baseUrl: "http://127.0.0.1:1/v1",
@@ -62,12 +63,12 @@ async function doubleEscape(input: Locator) {
   await input.press("Escape");
 }
 
-async function fixture(nested: boolean) {
+async function fixture(nested: boolean, touch = false) {
   const savedDrafts = new SessionDrafts(app!.store);
   for (const scope of [owner, other, child]) savedDrafts.save(scope, {
     revision: savedDrafts.read(scope).revision, writer: randomUUID(), sequence: 1, draft: blank(),
   });
-  const page = await browser!.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+  const page = await browser!.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce", hasTouch: touch });
   page.setDefaultTimeout(5000);
   const errors: string[] = [], commands: Command[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -116,10 +117,12 @@ async function fixture(nested: boolean) {
       } else if (command.op === "agent.recall") {
         // Capture receipt content at request time, just like a server response.
         const drafts = structuredClone(recalledDrafts);
+        const inputId = command.params?.inputId as string | undefined;
+        const ids = inputId === undefined ? (queues.get(command.sessionId!) ?? []).map(item => item.id) : drafts.length ? [inputId] : [];
         const respond = () => {
-          queues.set(command.sessionId!, []);
+          queues.set(command.sessionId!, inputId === undefined ? [] : (queues.get(command.sessionId!) ?? []).filter(item => !ids.includes(item.id)));
           snapshot(agentScope({ workspaceId: command.workspaceId!, sessionId: command.sessionId! }));
-          receipt(command, { drafts });
+          receipt(command, { drafts, ids });
         };
         if (holdRecall) pendingRecall.push(respond); else respond();
       } else if (stops([command]).length) {
@@ -176,10 +179,10 @@ async function fixture(nested: boolean) {
   }
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
-async function check(name: string, nested: boolean, run: (f: Fixture) => Promise<void>) {
+async function check(name: string, nested: boolean, run: (f: Fixture) => Promise<void>, touch = false) {
   let f: Fixture | undefined;
   try {
-    f = await fixture(nested);
+    f = await fixture(nested, touch);
     await run(f);
     assert.deepEqual(f.errors, [], "no browser exceptions");
     passed.push(name);
@@ -228,9 +231,11 @@ try {
       await eventually(async () => await f.page.locator(".user-text").filter({ hasText: `${label} steering message` }).count() === 1, "consumed steering enters chat exactly once");
       assert.ok(!(await f.composer.innerText()).includes(`${label} steering message`), "consumed input leaves queue");
     });
-    await check(`${label}: stopped unknown steering can recover after explicit confirmation without resending`, nested, async (f) => {
+    for (const touch of [false, true]) await check(`${label}: ${touch ? "mobile tap" : "desktop click"} directly restores unknown steering without resending`, nested, async (f) => {
+      if (touch) await f.page.setViewportSize({ width: 390, height: 844 });
       const attachment = { id: "img1", kind: "image" as const, name: "original.png", path: "/original.png", text: "" };
-      await setDraft(f.page, f.scope, { text: "queued original [img1]", attachment: null, attachments: [attachment] });
+      const skill = { id: "recovery-fixture", name: "recovery-fixture", description: "保留技能引用" };
+      await setDraft(f.page, f.scope, { text: "queued original [img1]", attachment: null, attachments: [attachment], skills: [skill] });
       await f.input.press("Enter");
       await eventually(() => sends(f.commands).length === 1, "initial steering sent once");
       await eventually(async () => await f.input.inputValue() === "", "submitted draft cleared");
@@ -243,23 +248,20 @@ try {
       }, f.scope);
       await f.composer.getByText(/发送结果未确认，原文已保留/).waitFor();
       const recovery = f.composer.getByRole("button", { name: "恢复编辑", exact: true });
-      await recovery.click();
-      const dialog = f.page.getByRole("dialog", { name: "恢复未确认的消息？", exact: true });
-      await dialog.getByText(/再次发送可能造成重复执行/).waitFor();
-      await dialog.getByRole("button", { name: "取消", exact: true }).click();
-      assert.equal(await f.input.inputValue(), "new typing", "cancel preserves new typing");
-      assert.equal(await recovery.count(), 1, "cancel preserves the queued original");
-      await recovery.click();
-      await dialog.getByRole("button", { name: "确认恢复编辑", exact: true }).click();
-      await eventually(async () => await f.input.inputValue() === "queued original [img1]\n\nnew typing", "both drafts restored");
-      assert.deepEqual((await getDraft(f.page, f.scope)).attachments, [attachment]);
+      const dialogsBeforeRecovery = await f.page.getByRole("dialog").count();
+      if (touch) await recovery.tap(); else await recovery.click();
+      assert.equal(await f.page.getByRole("dialog").count(), dialogsBeforeRecovery, "recovery does not open an additional confirmation dialog");
+      await eventually(async () => await f.input.inputValue() === "queued original [img1]\n\nnew typing", "one action restores both drafts");
+      const restored = await getDraft(f.page, f.scope);
+      assert.deepEqual(restored.attachments, [attachment]);
+      assert.deepEqual(restored.skills, [skill]);
       await eventually(async () => await f.input.evaluate(input => document.activeElement === input), "restored composer gets focus");
       assert.equal(await recovery.count(), 0, "recovered row removed exactly once");
       await f.composer.getByText(/原消息已恢复编辑，尚未发送/).waitFor();
       assert.equal(sends(f.commands).length, 1, "recovery never resends");
       assert.equal(recalls(f.commands).length, 0, "recovery does not pretend to recall unknown input");
       assert.equal(stops(f.commands).length, 1);
-    });
+    }, touch);
     await check(`${label}: Shift+Enter, IME Enter and empty Enter do not submit`, nested, async (f) => {
       await f.input.fill("line"); await f.input.press("Shift+Enter");
       assert.equal(await f.input.inputValue(), "line\n");
@@ -272,8 +274,9 @@ try {
       await f.page.waitForTimeout(100);
       assert.equal(sends(f.commands).length, 0); assert.equal(stops(f.commands).length, 0);
     });
-    await check(`${label}: no extra follow-up/queue controls`, nested, async (f) => {
-      assert.equal(await f.composer.getByRole("button", { name: /发送追问|加入队列|添加队列|新建队列|排队发送|撤回|steer|follow.?up/i }).count(), 0);
+    await check(`${label}: no extra send/mode controls; queue text is actionable`, nested, async (f) => {
+      assert.equal(await f.composer.locator("form").getByRole("button", { name: /发送追问|加入队列|添加队列|新建队列|排队发送|撤回|steer|follow.?up/i }).count(), 0);
+      assert.equal(await f.composer.getByRole("button", { name: /^返回输入框编辑：/ }).count(), 2);
       assert.equal(await f.composer.locator(".append-button").count(), 0);
       assert.equal(await f.composer.getByRole("button", { name: "停止执行", exact: true }).count(), 1);
     });
@@ -287,6 +290,83 @@ try {
       assert.ok(!(await f.composer.innerText()).includes(initialQueue(f.scope)[0].text));
       f.setQueue([]);
       await eventually(async () => !(await f.composer.innerText()).includes(replacement), "empty queue removes stale entry");
+      assert.equal(sends(f.commands).length + stops(f.commands).length, 0);
+    });
+    await check(`${label}: click recalls only selected row, preserves attachments and newer typing`, nested, async (f) => {
+      const [keep, selected] = initialQueue(f.scope);
+      const existing = { id: "file1", name: "new.txt", path: join(project, "new.txt"), kind: "file" as const, text: "" };
+      const returned = { id: "file1", name: "old.txt", path: join(project, "old.txt"), kind: "file" as const, text: "" };
+      await setDraft(f.page, f.scope, { ...blank(), text: "NEW [file1]", attachments: [existing] });
+      f.holdRecall([{ ...blank(), text: `${selected.text} [file1]`, attachments: [returned] }]);
+      await f.page.screenshot({ path: join(artifacts, `${label}-desktop-before.png`) });
+      const row = f.composer.getByRole("button", { name: `返回输入框编辑：${selected.text}`, exact: true });
+      await row.click();
+      await eventually(() => recalls(f.commands).length === 1, "click must request single recall");
+      assert.deepEqual(recalls(f.commands)[0].params, { inputId: selected.id });
+      assert.equal(recalls(f.commands)[0].sessionId, f.scope.sessionId);
+      assert.equal(await row.isDisabled(), true, "pending recall disables every queue action");
+      await row.dispatchEvent("click");
+      await f.input.press("End"); await f.input.pressSequentially(" LATER");
+      await doubleEscape(f.input);
+      assert.equal(recalls(f.commands).length, 1, "click and keyboard cannot duplicate in-flight recall");
+      f.releaseRecall();
+      await eventually(async () => await f.input.inputValue() === `${selected.text} [file2]\n\nNEW [file1] LATER`, "selected message merges with current typing");
+      assert.deepEqual((await getDraft(f.page, f.scope)).attachments, [existing, { ...returned, id: "file2" }]);
+      assert.equal(await f.input.evaluate(input => document.activeElement === input), true, "click focuses owning input");
+      assert.equal(await f.composer.locator(".steering-queue-item").count(), 1);
+      assert.ok((await f.composer.locator(".steering-queue").innerText()).includes(keep.text));
+      assert.equal(sends(f.commands).length + stops(f.commands).length, 0, "recall never sends or stops");
+      await f.page.screenshot({ path: join(artifacts, `${label}-desktop-after.png`) });
+    });
+    await check(`${label}: mobile queue tap returns content without horizontal overflow`, nested, async (f) => {
+      await f.page.setViewportSize({ width: 390, height: 844 });
+      const selected = initialQueue(f.scope)[0];
+      f.holdRecall([{ ...blank(), text: selected.text }]);
+      const row = f.composer.getByRole("button", { name: `返回输入框编辑：${selected.text}`, exact: true });
+      assert.ok((await row.boundingBox())!.height >= 44, "touch target is at least 44px high");
+      assert.equal(await f.composer.locator(".steering-queue").evaluate(node => node.scrollWidth <= node.clientWidth + 1), true);
+      await f.page.screenshot({ path: join(artifacts, `${label}-mobile-before.png`) });
+      await row.click(); f.releaseRecall();
+      await eventually(async () => await f.input.inputValue() === selected.text, "mobile selected row restored");
+      assert.equal(await f.input.evaluate(input => document.activeElement === input), true);
+      assert.equal(await f.composer.locator(".steering-queue-item").count(), 1);
+      await f.page.screenshot({ path: join(artifacts, `${label}-mobile-after.png`) });
+    }, true);
+    await check(`${label}: queue supports keyboard activation`, nested, async (f) => {
+      const selected = initialQueue(f.scope)[0];
+      f.holdRecall([{ ...blank(), text: selected.text }]);
+      const row = f.composer.getByRole("button", { name: `返回输入框编辑：${selected.text}`, exact: true });
+      await row.focus(); await row.press("Enter");
+      await eventually(() => recalls(f.commands).length === 1, "keyboard activation recalls once");
+      f.releaseRecall();
+      await eventually(async () => await f.input.inputValue() === selected.text, "keyboard restores text");
+      assert.equal(await f.input.evaluate(input => document.activeElement === input), true);
+      assert.equal(sends(f.commands).length + stops(f.commands).length, 0);
+    });
+    await check(`${label}: accepted optimistic row recalls by receipt ID and disappears once`, nested, async (f) => {
+      f.setQueue([]);
+      await f.input.fill("accepted pending input"); await f.input.press("Enter");
+      await eventually(() => sends(f.commands).length === 1, "steering submitted once");
+      const row = f.composer.getByRole("button", { name: "返回输入框编辑：accepted pending input", exact: true });
+      await eventually(async () => await row.count() === 1 && !(await row.isDisabled()), "accepted placeholder is actionable");
+      f.holdRecall([{ ...blank(), text: "accepted pending input" }]);
+      await row.click();
+      await eventually(() => recalls(f.commands).length === 1, "accepted placeholder requests recall");
+      assert.deepEqual(recalls(f.commands)[0].params, { inputId: sends(f.commands)[0].requestId });
+      f.releaseRecall();
+      await eventually(async () => await f.input.inputValue() === "accepted pending input", "receipt restores pending message");
+      assert.equal(await f.composer.locator(".steering-queue-item").count(), 0);
+      assert.equal(sends(f.commands).length, 1, "recall does not resend");
+    });
+    await check(`${label}: consumed row cannot restore a stale local copy`, nested, async (f) => {
+      const selected = initialQueue(f.scope)[0];
+      await f.input.fill("keep draft"); f.holdRecall([]);
+      await f.composer.getByRole("button", { name: `返回输入框编辑：${selected.text}`, exact: true }).click();
+      await eventually(() => recalls(f.commands).length === 1, "recall requested before consumption");
+      f.setQueue([initialQueue(f.scope)[1]]); f.releaseRecall();
+      await f.composer.getByRole("status").filter({ hasText: "没有可撤回" }).waitFor();
+      assert.equal(await f.input.inputValue(), "keep draft");
+      assert.equal(await f.composer.locator(".steering-queue-item").count(), 1);
       assert.equal(sends(f.commands).length + stops(f.commands).length, 0);
     });
     await check(`${label}: single/expired Esc inert, double Esc once, pending deduplicated`, nested, async (f) => {
@@ -394,8 +474,8 @@ try {
       f.holdRecall([{ ...blank(), text: "late recalled text", attachments: [
         { id: "file1", name: "late.txt", path: join(project, "late.txt"), kind: "file", text: "" },
       ] }]);
-      await doubleEscape(f.input);
-      await eventually(() => recalls(f.commands).length === 1, "recall must be pending before navigation");
+      await f.composer.getByRole("button", { name: `返回输入框编辑：${initialQueue(f.scope)[0].text}`, exact: true }).click();
+      await eventually(() => recalls(f.commands).length === 1, "clicked recall must be pending before navigation");
       if (nested) await f.page.getByRole("button", { name: "关闭子代理会话，返回主对话", exact: true }).click();
       await f.page.locator("#history .history-item").filter({ hasText: "Steering B" }).click();
       await f.page.waitForFunction(id => JSON.parse(sessionStorage.getItem("view") || "null")?.sessionId === id, other.sessionId);

@@ -69,11 +69,9 @@ try {
       await page.screenshot({ path: join(artifacts, `parallel-${theme}-${width}.png`), fullPage: true });
     }
   }
-  await page.getByRole("button", { name: "任务记录", exact: true }).first().click();
-  const center = page.getByRole("dialog", { name: "下载与维护", exact: true });
-  await center.waitFor();
-  assert.equal(await center.getByRole("link", { name: "来源页面" }).getAttribute("href"), "/resources.html");
-  await center.getByRole("button", { name: "关闭下载与维护", exact: true }).click();
+  assert.equal(await page.getByRole("button", { name: "任务记录", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("dialog", { name: "下载与维护", exact: true }).count(), 0);
+  assert.equal(await page.locator('.component-card .maintenance-task[data-status="running"]').count(), 2, "each concurrent resource has its own in-place maintenance card");
   await page.locator("aside.supplier-panel").getByRole("button", { name: "添加 MCP", exact: true }).click();
   const draft = `draft-${randomUUID().slice(0, 8)}`;
   await page.locator("#resource-name").fill(draft);
@@ -92,7 +90,7 @@ try {
   assert.equal(await page.getByRole("alert").count(), 0);
   await page.screenshot({ path: join(artifacts, "draft-preserved-after-completion.png"), fullPage: true });
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ passed: true, artifacts, cases: ["two concurrent real backend jobs", "navigation during installation", "dark/light 320/390/1200", "task center source link", "out-of-order completion preserves new form", "configuration and job records merge", "no page errors"] }));
+  console.log(JSON.stringify({ passed: true, artifacts, cases: ["two concurrent real backend jobs", "navigation during installation", "dark/light 320/390/1200", "independent in-place task cards without a shared center", "out-of-order completion preserves new form", "configuration and job records merge", "no page errors"] }));
 } finally {
   await browser?.close();
   await app?.close();

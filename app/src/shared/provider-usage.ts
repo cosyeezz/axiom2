@@ -15,16 +15,23 @@ export const usageRefreshJitter = 10 * 60_000;
 
 /** Read-only upstream account information. Never contains credentials or raw upstream payloads. */
 export type ProviderUsageMetric =
-  | { id: string; label: string; kind: "window"; usedPercent: number | null; windowSeconds?: number; resetsAt?: number }
+  | { id: string; label: string; kind: "window"; usedPercent: number | null; windowSeconds?: number; resetsAt?: number; allowed?: boolean; limitReached?: boolean }
   /** Only adapters with an absolute Token balance contract may emit this metric. Model is an exact local identity, never inferred from a percentage. */
   | { id: string; label: string; kind: "tokens"; model: string; used: number | null; remaining: number | null; part?: CostPart }
-  | { id: string; label: string; kind: "balance"; balance: string | null; unlimited?: boolean }
-  | { id: string; label: string; kind: "count"; count: number | null; expiresAt?: number };
+  | { id: string; label: string; kind: "balance"; balance: string | null; unlimited?: boolean; hasCredits?: boolean }
+  | { id: string; label: string; kind: "count"; count: number | null; expiresAt?: number; expiries?: number[] };
+
+export type ProviderAccountState = "active" | "disabled" | "unauthorized" | "unknown";
+export const providerAccountStateLabel = (state: ProviderAccountState) => ({ active: "检查通过", disabled: "账号或工作区异常", unauthorized: "授权已失效", unknown: "状态未确认" })[state];
 
 export interface ProviderUsage {
   providerId: string;
   status: "ready" | "unavailable" | "unsupported";
   metrics: ProviderUsageMetric[];
+  /** Read-only preflight result, not model capability or the locally selected account. Non-active stops follow-up queries. */
+  accountStatus?: { state: ProviderAccountState; checkedAt: number };
+  /** Bounded provider-owned display metadata, not a credential or identity verification result. */
+  account?: { email?: string; plan?: string; accountId?: string; subscriptionExpiresAt?: number };
   updatedAt?: number;
   /** Server-owned deadline, shared by viewers and restored from the local cache. */
   nextRefreshAt?: number;

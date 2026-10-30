@@ -58,7 +58,21 @@ test("per-entry pagination and all-filter totals share a stable snapshot, includ
     f.history(f.session(), Array.from({ length: 30 }, (_, i) => entry(`a-${i}`, "fixture", 1700000000000 + i)));
     f.history(f.session(f.b), Array.from({ length: 15 }, (_, i) => entry(`b-${i}`, "other", 1700000001000 + i)), f.b);
     writeFileSync(join(f.models, "models.json"), JSON.stringify({ providers: { fixture: { models: [{ id: "local-model", name: "Readable model" }] } } }));
-    const ledger = f.ledger(), first = await ledger.read(), second = await ledger.read({ snapshot: first.snapshot, page: 2 });
+    const ledger = f.ledger(), first = await ledger.read({ analytics: true, timeZone: "Asia/Shanghai" }), second = await ledger.read({ snapshot: first.snapshot, page: 2, analytics: true, timeZone: "Asia/Shanghai" });
+    assert.deepEqual(first.analytics, second.analytics, "charts cover all matching rows, independent of pagination");
+    assert.equal(first.analytics?.trend.reduce((sum, bucket) => sum + bucket.count, 0), 45);
+    const trendTotal = sumCosts(first.analytics!.trend.map(bucket => bucket.total));
+    assert.deepEqual(trendTotal.tokens, first.total.tokens); assert.equal(trendTotal.records, first.total.records);
+    assert.ok(Math.abs(trendTotal.knownCost - first.total.knownCost) < 1e-12, "SQL and JS aggregation may differ only by floating-point rounding");
+    for (const part of ["input", "output", "cacheRead", "cacheWrite"] as const) assert.ok(Math.abs(trendTotal.parts[part] - first.total.parts[part]) < 1e-12);
+    const filteredCharts = await ledger.read({ providerId: "fixture", query: "Readable model", rootSessionId: first.rows.find(row => row.provider === "fixture")?.rootSessionId, requestType: "main", from: 1700000000000, to: 1700000000029, analytics: true, timeZone: "Asia/Shanghai", pageSize: 1 });
+    assert.equal(filteredCharts.rows.length, 1); assert.equal(filteredCharts.count, 30);
+    const rankedTotal = sumCosts(filteredCharts.analytics!.models.tokens.map(group => group.total));
+    assert.deepEqual(rankedTotal.tokens, filteredCharts.total.tokens); assert.equal(rankedTotal.records, filteredCharts.total.records);
+    assert.ok(Math.abs(rankedTotal.knownCost - filteredCharts.total.knownCost) < 1e-12);
+    assert.equal(filteredCharts.analytics?.trend[0].from, "2023-11-15");
+    assert.throws(() => ledger.read({ analytics: true, timeZone: "Invalid/Zone" }), /时区/);
+    assert.throws(() => ledger.read({ analytics: "true" }), /参数/);
     assert.equal(first.count, 45); assert.equal(first.rows.length, 20); assert.equal(first.total.tokens.input, 4500); assert.equal(second.total.tokens.input, 4500);
     assert.equal(second.snapshot, first.snapshot); assert.equal(second.page, 2); assert.equal(second.rows.length, 20);
     assert.equal(first.rows.some(row => second.rows.some(next => row.id === next.id)), false);
@@ -71,6 +85,40 @@ test("per-entry pagination and all-filter totals share a stable snapshot, includ
     assert.equal((await ledger.read({ query: "%" })).count, 0, "search treats LIKE wildcards literally");
     assert.equal((await ledger.read({ query: "none", page: 99 })).page, 1);
     assert.equal(ledger.workspaces().length, 2);
+  } finally { await f.close(); }
+});
+test("snapshot memo reuses totals and lazy analytics across pages without sharing response mutations", async () => {
+  const f = fixture(); try {
+    f.history(f.session(), Array.from({ length: 45 }, (_, i) => entry(`memo-${i}`, "fixture", 1700000000000 + i)));
+    const ledger = f.ledger(), first = await ledger.read({ pageSize: 1 });
+    const db = [...Reflect.get(ledger, "cache").values()][0].db;
+    const prepare = db.prepare.bind(db); let aggregates = 0, scans = 0, providerReads = 0;
+    db.prepare = (sql: string) => {
+      if (sql.includes("sum(json_extract")) aggregates++;
+      if (sql.startsWith("SELECT data FROM records") && !sql.includes("LIMIT")) scans++;
+      if (sql.startsWith("SELECT DISTINCT provider")) providerReads++;
+      return prepare(sql);
+    };
+    const second = await ledger.read({ snapshot: first.snapshot, page: 2, pageSize: 1 });
+    assert.equal(aggregates, 0); assert.equal(scans, 0); assert.equal(providerReads, 0);
+    assert.deepEqual(second.total, first.total); assert.notEqual(second.rows[0].id, first.rows[0].id);
+    const charts = await ledger.read({ analytics: true, page: 2 });
+    assert.equal(aggregates, 0, "lazy analytics retains already computed totals"); assert.equal(scans, 1);
+    charts.total.tokens.input = -1; charts.analytics!.trend[0].total.tokens.input = -1; charts.providers.push("poison");
+    const repeated = await ledger.read({ analytics: true, snapshot: first.snapshot, page: 3, pageSize: 10 });
+    assert.equal(aggregates, 0); assert.equal(scans, 1); assert.equal(providerReads, 0);
+    assert.deepEqual(repeated.total, first.total); assert.equal(repeated.analytics!.trend[0].total.tokens.input, 4500);
+    assert.deepEqual(repeated.providers, ["fixture"]);
+    assert.equal((await ledger.read({ analytics: false })).analytics, undefined);
+    const unknown = await ledger.read({ providerId: null, analytics: true });
+    assert.equal(unknown.count, 0); assert.equal(aggregates, 1); assert.equal(scans, 2);
+    await ledger.read({ analytics: true, timeZone: "America/New_York" });
+    assert.equal(aggregates, 2); assert.equal(scans, 3, "timezone is part of the memo key");
+    const again = await ledger.read({ analytics: true, timeZone: "UTC" });
+    assert.equal(aggregates, 2); assert.equal(scans, 3); assert.equal(again.count, 45);
+    f.store.db.prepare("UPDATE workspaces SET archived=1 WHERE id=?").run(f.a.id);
+    await assert.rejects(ledger.read({ workspaceId: f.a.id }), /工作空间不存在/);
+    await assert.rejects(ledger.read({ rootSessionId: first.rows[0].rootSessionId }), /会话不存在/);
   } finally { await f.close(); }
 });
 test("paging never rescans a changed transcript; explicit refresh resets an obsolete snapshot to page one", async () => {
@@ -143,7 +191,24 @@ test("session and agent filters share one snapshot, including tool, compression,
       const whole = await ledger.read({ rootSessionId: main.id, agentRole, pageSize: 100 });
       assert.deepEqual(new Set(whole.rows.map(row => row.category)), new Set([agentRole, "tool", "compression", "other"]));
       assert.ok(whole.rows.every(row => expected.some(next => next.id === row.id)));
+      const request = await ledger.read({ rootSessionId: main.id, requestType: agentRole, pageSize: 100, snapshot: all.snapshot });
+      assert.deepEqual(request.rows, whole.rows, "request types preserve existing main/subagent ownership semantics");
+      assert.deepEqual(request.total, whole.total);
     }
+    const compressionRows = all.rows.filter(row => row.category === "compression");
+    const compressions = await ledger.read({ requestType: "compression", snapshot: all.snapshot, pageSize: 1 });
+    assert.equal(compressions.snapshot, all.snapshot); assert.equal(compressions.count, 3); assert.equal(compressions.rows.length, 1);
+    assert.equal(compressions.total.records, 4, "compression aggregates keep their accounting record count");
+    assert.deepEqual(compressions.total.tokens, sumCosts(compressionRows).tokens);
+    assert.ok(Math.abs(compressions.total.knownCost - sumCosts(compressionRows).knownCost) < 1e-10);
+    const compressionPage = await ledger.read({ requestType: "compression", snapshot: all.snapshot, pageSize: 1, page: 2 });
+    assert.equal(compressionPage.page, 2); assert.notEqual(compressionPage.rows[0].id, compressions.rows[0].id);
+    assert.deepEqual(compressionPage.total, compressions.total, "compression totals are independent of pagination");
+    const childCompression = await ledger.read({ workspaceId: f.a.id, rootSessionId: main.id, requestType: "compression", agentRole: "subagent", query: "原生摘要", from: 1700000000000, to: 1700000000000 });
+    assert.equal(childCompression.count, 1); assert.equal(childCompression.rows[0].sessionId, child.id);
+    assert.equal(childCompression.total.tokens.input, 3);
+    const noCompressions = await ledger.read({ rootSessionId: other.id, requestType: "compression", page: 99 });
+    assert.equal(noCompressions.count, 0); assert.equal(noCompressions.page, 1);
     const combined = await ledger.read({ rootSessionId: main.id, agentRole: "subagent", providerId: "fixture", query: "会话标题", from: 1700000000000, to: 1700000000000 });
     assert.equal(combined.count, 1); assert.equal(combined.total.tokens.input, 4); assert.equal(combined.rows[0].sessionId, child.id);
     assert.equal((await ledger.read({ rootSessionId: other.id, agentRole: "subagent", page: 99 })).page, 1);
@@ -295,9 +360,30 @@ test("row, file, line and cumulative database budgets produce explicit partial r
     const partial = await f.ledger().read(); assert.equal(partial.partial, true); assert.deepEqual(readFileSync(malformed), before);
   } finally { await f.close(); }
 });
+test("index byte budgets stop native SQLite growth with an explicit partial result", async () => {
+  const f = fixture(); try {
+    f.history(f.session(), Array.from({ length: 20 }, (_, i) => entry(`bounded-${i}`)));
+    const empty = await f.ledger({ indexBytes: 1 }).read(); assert.equal(empty.count, 0); assert.equal(empty.partial, true);
+    const ledger = f.ledger({ indexBytes: 2048 }), bounded = await ledger.read();
+    assert.ok(bounded.count > 0 && bounded.count < 20); assert.equal(bounded.partial, true); assert.ok(bounded.warnings.some(value => value.includes("容量上限")));
+    const db = [...Reflect.get(ledger, "cache").values()][0].db;
+    assert.ok(Number(db.prepare("SELECT coalesce(sum(length(CAST(data AS BLOB))+length(CAST(search AS BLOB))),0) AS bytes FROM records").get().bytes) <= 2048);
+  } finally { await f.close(); }
+});
+
+test("conflicting fork accounting versions retain attribution but explicitly invalidate billing certainty", async () => {
+  const f = fixture(); try {
+    const original = f.session(), fork = f.session(); f.store.db.prepare("UPDATE sessions SET forkParentSessionId=? WHERE id=?").run(original.id, fork.id);
+    const corrected = entry("same-native-id"); corrected.message.usage = usage(700, .7);
+    f.history(original, [entry("same-native-id")]); f.history(fork, [corrected]);
+    const report = await f.ledger().read(); assert.equal(report.count, 2, "performance migration must not silently choose an accounting version or rewrite historical attribution");
+    assert.equal(report.partial, true); assert.ok(report.warnings.some(value => value.includes("不同账务版本")));
+  } finally { await f.close(); }
+});
+
 test("invalid filter values are rejected, never coerced into scans or unbounded pages", async () => {
   const f = fixture(); try {
-    const ledger = f.ledger(); for (const input of [{ page: 0 }, { page: "2" }, { pageSize: 101 }, { workspaceId: "" }, { providerId: 7 }, { from: Infinity }, { from: 2, to: 1 }, { query: "x".repeat(201) }, { refresh: "true" }, { continue: "true" }, { rootSessionId: "" }, { rootSessionId: "x".repeat(161) }, { rootSessionId: 7 }, { agentRole: "all" }, { agentRole: null }, { agentRole: "tool" }]) assert.throws(() => ledger.read(input));
+    const ledger = f.ledger(); for (const input of [{ page: 0 }, { page: "2" }, { pageSize: 101 }, { workspaceId: "" }, { providerId: 7 }, { from: Infinity }, { from: 2, to: 1 }, { query: "x".repeat(201) }, { refresh: "true" }, { continue: "true" }, { rootSessionId: "" }, { rootSessionId: "x".repeat(161) }, { rootSessionId: 7 }, { agentRole: "all" }, { agentRole: null }, { agentRole: "tool" }, { requestType: "all" }, { requestType: null }, { requestType: "tool" }, { requestType: 7 }]) assert.throws(() => ledger.read(input));
   } finally { await f.close(); }
 });
 test("balance estimate uses exact local current prices and absolute tokens only, not credits or historical charges", async () => {

@@ -6,11 +6,12 @@ import type { DeliveryTiming } from "../shared/latency.js";
 import { PathActions } from "./path-actions.js";
 import { WorkspaceGit } from "./workspace-git.js";
 import { MaintenanceService } from "./maintenance.js";
-import { IntegrationMaintenanceQueue } from "./integration-maintenance.js";
 import { stopMaintenanceProcesses } from "./maintenance-process.js";
 import { Resources } from "./resources.js";
 import { SkillFiles } from "./skill-files.js";
 import { OutgoingQueue } from "./outgoing.js";
+import { assertReadRequestAvailable, claimReadRequest, releaseReadRequest } from "./read-request-owner.js";
+import { validRequestId as validWindowRequestId, windowFieldErrorReceipt } from "../shared/window-frame-budget.js";
 import { remoteDirectory, remoteSelection } from "./remote-files.js";
 import { RemoteAccess } from "./remote-access.js";
 import { createServer, type IncomingMessage } from "node:http";
@@ -24,6 +25,8 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket, type RawData } from "ws";
 import { Store } from "./storage.js";
 import { SessionDrafts } from "./session-drafts.js";
+import { SessionLists } from "./session-list.js";
+import { sessionListScope, type SessionListCount, type SessionListCounts, type SessionListPage } from "../shared/session-list.js";
 import type { DraftStamp } from "../shared/drafts.js";
 import { SessionAttention } from "./session-attention.js";
 import { Files } from "./files.js";
@@ -32,6 +35,7 @@ import { hasFileLink, type FilePreview } from "../shared/file-preview.js";
 import { FolderPicker, FolderPickerError, type PickFolder } from "./folder-picker.js";
 import { OpenDialog, OpenDialogError, type PickPaths } from "./open-dialog.js";
 import { FileManager, FileManagerError } from "./file-manager.js";
+import { Terminal } from "./terminal.js";
 import { AttachmentPicker, AttachmentPickerError, type PickAttachments } from "./attachment-picker.js";
 import { imagePayloadLimit } from "./images.js";
 import { configuration } from "./models.js";
@@ -40,12 +44,13 @@ import { Logins } from "./auth.js";
 import { Agents } from "./agents.js";
 import type { OpenMemoryFile } from "./memory-open.js";
 import { Costs } from "./costs.js";
-import { ModelUsageStatistics } from "./model-usage-statistics.js";
-import { ModelUsageLedger } from "./model-usage-ledger.js";
-import { usageModelNames, usageModelPricing } from "./model-metadata.js";
-import { UsageAccounts } from "./usage-accounts.js";
-import { usageAuthScope, usageProviderId, usageProvidersScope } from "../shared/model-usage.js";
+import { UsageSidecar } from "./usage-sidecar.js";
+import type { UsageSidecarOptions } from "./usage-sidecar-engine.js";
+import { usageModelPricing } from "./model-metadata.js";
+import { usageProvidersScope } from "../shared/model-usage.js";
+import { ModelAccountService } from "./model-accounts.js";
 import { Tasks } from "./tasks.js";
+import { taskWindowInvalidations } from "./task-windows.js";
 import { ServiceRecoveryCoordinator } from "./service-recovery.js";
 import { Preferences } from "./preferences.js";
 import { ModelProxyService } from "./integrations/model-proxy.js";
@@ -66,7 +71,7 @@ import {
 } from "../shared/protocol.js";
 
 export async function startServer(
-  options: { backendUpdates?: BackendUpdateOptions; rea?: ReaDependencies; rtk?: RtkDependencies; root?: string; port?: number; dev?: boolean; openMemoryFile?: OpenMemoryFile; pickFolder?: PickFolder; pickPaths?: PickPaths; pickResources?: PickPaths; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string; openExtension?: (target: "store" | "download") => Promise<void>; runtime?: import("./integrations/managed-node.js").ManagedNodeProvider } } = {},
+  options: { usageSidecar?: UsageSidecarOptions; backendUpdates?: BackendUpdateOptions; rea?: ReaDependencies; rtk?: RtkDependencies; root?: string; port?: number; dev?: boolean; openMemoryFile?: OpenMemoryFile; pickFolder?: PickFolder; pickPaths?: PickPaths; pickResources?: PickPaths; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string; openExtension?: (target: "store" | "download") => Promise<void>; runtime?: import("./integrations/managed-node.js").ManagedNodeProvider } } = {},
 ) {
   let remoteAccess: RemoteAccess | undefined;
   const store = new Store(options.root ?? dataRoot());
@@ -74,7 +79,6 @@ export async function startServer(
   const deliverySamples = new Map<string, number>();
   const updates = new BackendUpdates(store.db, options.backendUpdates?.version !== undefined ? options.backendUpdates.version : await runningBackendVersion(), () => publish(backendUpdatesScope), options.backendUpdates);
   const costs = new Costs(store);
-  const usageStatistics = new ModelUsageStatistics(store, costs);
   const drafts = new SessionDrafts(store);
   const files = new Files(store, (scope, id) => agents.message(scope, id, true),
     (path, directory, signal) => fileManager.open(directory ? path : dirname(path), signal, directory ? undefined : path),
@@ -93,15 +97,18 @@ export async function startServer(
   });
   const openDialog = new OpenDialog();
   const fileManager = new FileManager();
-  const pathActions = new PathActions(store, fileManager);
+  const terminal = new Terminal();
+  const pathActions = new PathActions(store, fileManager, terminal);
   const workspaceGit = new WorkspaceGit(store);
   const folderPicker = new FolderPicker(options.pickFolder, undefined, openDialog);
   const attachmentPicker = new AttachmentPicker(options.pickAttachments, undefined, openDialog);
   const streamId = randomUUID();
+  const sessionLists = new SessionLists(store, streamId);
   let seq = 0,
     origin = "";
   const models = new ModelService(store.root);
-  const usageLedger = new ModelUsageLedger(store, models.dir);
+  const usageLedger = new UsageSidecar(store, models.dir, options.usageSidecar);
+  const usageStatistics = { read: (workspaceId?: string) => usageLedger.statistics(workspaceId) };
   const preferences = new Preferences(store);
   let config: Configuration = { revision: "", providerCount: 0, modelCount: 0, available: [], dataRoot: store.root };
   let configurationRead = 0,
@@ -117,6 +124,7 @@ export async function startServer(
       if (editable) preferences.prune(editable);
       publish("configuration");
       publish(usageProvidersScope);
+      publish("model-accounts");
       publish("favorites");
     }
   };
@@ -127,9 +135,11 @@ export async function startServer(
   const sockets = new WebSocketServer({ noServer: true, maxPayload: imagePayloadLimit });
   const subscriptions = new Map<WebSocket, Set<string>>();
   const subscriptionLifetimes = new WeakMap<WebSocket, Map<string, object>>();
-  const sessionCounts = (sessions: import("../shared/protocol.js").Session[]) => sessions.map(session => ({
+  const sessionCounts = <T extends import("../shared/protocol.js").Session>(sessions: T[]) => sessions.map(session => ({
     ...session, messageCount: agents.messageCount({ workspaceId: session.workspaceId, sessionId: session.id }, { cachedOnly: true }),
   }));
+  const countedSummary = (session: import("../shared/protocol.js").Session | null) => session ? sessionCounts([session])[0] : null;
+  const countedPage = (page: SessionListPage): SessionListPage => ({ ...page, items: sessionCounts(page.items) });
   const snapshots = (scope: string): unknown => {
     if (scope === backendUpdatesScope) return updates.snapshot();
     if (scope === "workspaces") return store.workspaces();
@@ -138,6 +148,7 @@ export async function startServer(
     if (scope === compressionPreferencesScope) return store.compressionPreferences();
     if (scope === taskPreferencesScope) return tasks.settings();
     if (scope === "pinned-sessions") return sessionCounts(store.pinnedSessions());
+    if (scope === sessionListScope) return { revision: sessionLists.revision() };
     // Invalidation only: deleted summaries are fetched in bounded, searchable pages.
     if (scope === "deleted-sessions") return { revision: seq };
     if (scope === "favorites") return preferences.favorites();
@@ -149,8 +160,8 @@ export async function startServer(
     if (scope === "builtin-tools:rtk") return rtk.snapshot();
     if (scope === "builtin-tools:model-proxy") return modelProxy.snapshot();
     if (scope === "capability-preferences") return { revision: agents.capabilities.preferences().revision };
-    if (scope === "authentication" || scope === usageAuthScope) return null;
-    if (scope === "usage:account" || scope === usageProvidersScope) return { revision: seq };
+    if (scope === "authentication") return null;
+    if (scope === usageProvidersScope || scope === "model-accounts") return { revision: seq };
     const parts = scope.split(":");
     if (parts.length === 2 && parts[0] === "processing") return agents.memories.records.invalidation(parts[1]);
     if (parts.length === 2 && parts[0] === "memory-tree") return agents.memories.tree(parts[1]);
@@ -158,7 +169,7 @@ export async function startServer(
     if (parts.length === 2 && parts[0] === "sessions")
       return sessionCounts(store.sessions(parts[1]));
     if (parts.length === 3 && parts[0] === "session")
-      return store.session(parts[1], parts[2]);
+      return countedSummary(sessionLists.summary(parts[1], parts[2]));
     const target = { workspaceId: parts[1], sessionId: parts[2] };
     if (parts.length === 3 && parts[0] === "reload") return agents.reloads.state(target);
     if (parts.length === 3 && parts[0] === "capabilities") return agents.capabilities.state(target);
@@ -169,6 +180,7 @@ export async function startServer(
       // already performs an authoritative read on mount and reconnect.
       return { revision: 0 };
     }
+    if (parts.length === 3 && parts[0] === "task-window") return tasks.windowInvalidation(target, seq);
     if (parts.length === 3 && parts[0] === "tasks") return tasks.list(target);
     if (parts.length === 3 && parts[0] === "agent") return agents.info(target);
     if (parts.length === 3 && parts[0] === "compression")
@@ -177,6 +189,8 @@ export async function startServer(
       return agents.messages(target);
     if (parts.length === 3 && parts[0] === "thread")
       return agents.thread(target);
+    if (parts.length === 3 && parts[0] === "thread-meta")
+      return agents.threadMetadata(target);
     if (parts.length === 4 && parts[0] === "message")
       return agents.message(target, parts[3]);
     throw new AppError("INVALID_SCOPE", "订阅范围无效");
@@ -245,7 +259,11 @@ export async function startServer(
       }
     }, 100);
   };
+  let invalidateTaskWindows: ((changed: string) => void) | undefined;
   const publish = (scope: string, data?: unknown, accountingUpdate = false) => {
+    invalidateTaskWindows?.(scope);
+    for (const key of taskWindowInvalidations(scope, () => [...subscriptions.values()].flatMap(scopes => [...scopes])))
+      publish(key, { revision: seq + 1 });
     // Explicit memory charges use the same owner routing as transcript and task changes.
     if (scope.startsWith("costs:") && !accountingUpdate) { scheduleCosts(scope.split(":")[1]); return; }
     if (scope.startsWith("sessions:")) attention?.observe(scope.slice("sessions:".length));
@@ -281,8 +299,19 @@ export async function startServer(
       const event: Snapshot = { type: "snapshot", scope, streamId, seq: version, data: data === undefined ? snapshots(scope) : data, ...(timing ? { latency: timing } : {}) };
       for (const ws of targets) send(ws, event);
     }
-    // All session summary changes (including background runs/tasks) refresh pins.
-    if (scope.startsWith("sessions:")) publish("pinned-sessions");
+    // Refresh only individually observed summaries, not the workspace collection.
+    // This also carries count-only changes to a selected session outside its page.
+    if (scope.startsWith("sessions:")) {
+      const prefix = `session:${scope.slice("sessions:".length)}:`;
+      const selected = new Set([...subscriptions.values()].flatMap(scopes => [...scopes]).filter(key => key.startsWith(prefix)));
+      for (const key of selected) {
+        try { publish(key); } catch { /* An unavailable summary is not absence; keep other summaries and invalidations flowing. */ }
+      }
+      // Keep full attention observation above and the legacy pins route intact.
+      publish("pinned-sessions");
+    }
+    // Count changes intentionally retain the metadata revision; seq still advances.
+    if (scope === "pinned-sessions" || scope === "workspaces") publish(sessionListScope);
     // Only changed accounting sources invalidate an open report. Progress alone
     // neither queries costs nor scans transcripts; siblings share one source check.
     if (/^(agent|compression|tasks|sessions|session):/.test(scope)) scheduleCosts(scope.split(":")[1]);
@@ -291,14 +320,6 @@ export async function startServer(
   let proxyReady = false, proxyRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   const maintenance = new MaintenanceService(store.root, () => publish("maintenance"));
   let agents: Agents;
-  const integrationMaintenance = new IntegrationMaintenanceQueue(() => [
-    ...(shuttingDown ? ["服务正在退出"] : []),
-    ...(!agents || agents.maintenancePending ? ["Agent 启动或后台操作"] : []),
-    ...(resources.busy ? ["资源操作"] : []),
-    ...(workspaceOperations.size ? ["工作空间操作"] : []),
-    ...(store.db.prepare("SELECT 1 FROM tasks WHERE status IN ('queued','starting','running','stopping') LIMIT 1").get() ? ["已准入的子代理任务"] : []),
-  ], (work, signal) => agents.pool.maintenance(work, signal));
-  const removeIntegration = integrationMaintenance.run;
   const modelProxy = new ModelProxyService(store.root, () => {
     publish("builtin-tools:model-proxy");
     if (!proxyReady || shuttingDown) return;
@@ -309,14 +330,16 @@ export async function startServer(
       const update = refreshConfiguration().catch(() => {}).finally(() => inFlight.delete(update));
       inFlight.add(update);
     }, 150);
-  }, { removal: removeIntegration });
-  const rea = new ReaService(store.root, () => publish("builtin-tools:rea"), { ...options.rea, removal: removeIntegration });
-  const rtk = new RtkService(store.root, () => publish("builtin-tools:rtk"), { ...options.rtk, removal: removeIntegration });
-  const opencli = new OpenCliService(store.root, () => publish("builtin-tools:opencli"), options.openCli?.execute, options.openCli?.locateNpm, options.openCli?.openExtension, removeIntegration, options.openCli?.runtime);
+  });
+  // Component mutations never reserve session admission or retire Agent workers.
+  const rea = new ReaService(store.root, () => publish("builtin-tools:rea"), options.rea);
+  const rtk = new RtkService(store.root, () => publish("builtin-tools:rtk"), options.rtk);
+  const opencli = new OpenCliService(store.root, () => publish("builtin-tools:opencli"), options.openCli?.execute, options.openCli?.locateNpm, options.openCli?.openExtension, undefined, options.openCli?.runtime);
   agents = new Agents(store, models, publish, options.openMemoryFile, (scope) => receivers(scope).length > 0);
   const resources = new Resources(store, models.dir, () => { publish("resources"); publish("capability-preferences"); }, async () => {});
   const skillFiles = new SkillFiles(agents.capabilities, (directory, signal) => fileManager.open(directory, signal), options.openMemoryFile);
   const tasks = new Tasks(agents);
+  invalidateTaskWindows = changed => tasks.invalidateWindows(changed);
   const recovery = new ServiceRecoveryCoordinator(agents, tasks);
   attention = new SessionAttention(store, publish);
   store.beforeArchiveWorkspace = (workspaceId) => {
@@ -344,10 +367,15 @@ export async function startServer(
     const visible = store.workspaces().some((w) => w.id === id);
     const affected = new Set([...subscriptions.values()].flatMap((scopes) => [...scopes]).filter((scope) => scope.split(":")[1] === id));
     for (const scope of affected) {
+      // Partial task data is never erased by a workspace visibility hint.
+      if (scope.startsWith("task-window:")) { publish(scope, { revision: seq + 1 }); continue; }
       if (!visible) publish(scope, scope.startsWith("sessions:") ? [] : null);
       else {
         // A previously removed session can have been deleted before the workspace reopened.
         try { publish(scope); } catch (error) {
+          // Only a successful summary query can establish absence. Do not turn a
+          // read failure into null or fail an already committed workspace change.
+          if (scope.startsWith("session:")) continue;
           if (!(error instanceof AppError)) throw error;
           publish(scope, scope.startsWith("sessions:") ? [] : null);
         }
@@ -358,9 +386,7 @@ export async function startServer(
     await agents.memories.runner?.stopProviders?.(providers, confirmed);
     await tasks.stopProviders(providers, confirmed);
   };
-  const usageAccounts = new UsageAccounts(store.root, models,
-    (owner, state) => send(owner as WebSocket, { type: "snapshot", scope: usageAuthScope, streamId, seq: ++seq, data: state }),
-    async () => { publish("usage:account"); });
+  const modelAccounts = new ModelAccountService(models);
   const logins = new Logins(
     models,
     (owner, state) =>
@@ -372,9 +398,6 @@ export async function startServer(
         data: state,
       }),
     refreshConfiguration,
-    undefined,
-    undefined,
-    () => { if (usageAccounts.authActive) throw new AppError("AUTH_BUSY", "已有用量账号授权流程，请先完成或取消，再登录模型服务。"); },
   );
   sockets.on("connection", (ws) => {
     subscriptions.set(ws, new Set());
@@ -390,17 +413,24 @@ export async function startServer(
       subscriptions.delete(ws);
       attention?.disconnect(ws);
       logins.disconnect(ws);
-      usageAccounts.disconnect(ws);
     });
     ws.on("error", () => ws.close());
     const handle = async (raw: RawData) => {
       let requestId = "";
       let operationWorkspace: string | undefined;
       let releaseRead: (() => void) | undefined;
+      let readController: AbortController | undefined;
+      let windowRead = false;
       let subscribing: string | undefined, subscriptionIntent: object | undefined;
       try {
         const value = object(JSON.parse(raw.toString()));
+        windowRead = typeof value.op === "string" && ["agent.window", "task.window"].includes(value.op.trim());
+        if (windowRead && !validWindowRequestId(value.requestId)) {
+          send(ws, windowFieldErrorReceipt(value.requestId, "INVALID_REQUEST_ID").frame);
+          return;
+        }
         requestId = text(value.requestId, "请求标识");
+        assertReadRequestAvailable(reads, requestId);
         const c: Command = {
           requestId,
           op: text(value.op, "操作类型"),
@@ -442,10 +472,11 @@ export async function startServer(
           subscriptionReads.get(subscribing)?.abort();
           subscriptionIntent = {}; intents.set(subscribing, subscriptionIntent);
         }
-        const historyRead = ["agent.history.index", "agent.history.read", "agent.original", "agent.editable", "message.get", "message.part", "files.document", "message.image"].includes(c.op) ||
-          c.op === "subscribe" && /^(messages|thread):/.test(String(c.params!.scope));
+        const historyRead = ["agent.window", "task.window", "agent.history.index", "agent.history.read", "agent.original", "agent.editable", "message.get", "message.part", "files.document", "message.image",
+          "session-list.page", "session-list.initial", "session-list.first", "session-list.counts"].includes(c.op) ||
+          c.op === "subscribe" && /^(messages|thread|thread-meta|session):/.test(String(c.params!.scope));
         if (historyRead) {
-          const controller = new AbortController(); reads.set(requestId, controller);
+          const controller = readController = claimReadRequest(reads, requestId);
           if (subscribing) subscriptionReads.set(subscribing, controller);
           releaseRead = await channel(ws).reserveRead(controller.signal);
           if (controller.signal.aborted) throw new AppError("CANCELLED", "读取已取消");
@@ -478,12 +509,6 @@ export async function startServer(
           send(ws, { type: "receipt", requestId, ok: true, data: {} });
           return;
         }
-        // This is external/root admission only. Already-admitted delegates and
-        // scheduler work use the internal path and must drain normally.
-        if (integrationMaintenance.pending && (c.op === "prompt" ||
-            ["agent.resume", "agent.model", "agent.reload", "agent.skills", "task.append", "compression.start", "memory.run"].includes(c.op) ||
-            c.op.startsWith("resources.") && !["resources.get", "resources.detail"].includes(c.op)))
-          throw new AppError("MAINTENANCE_BUSY", "组件维护已预约；现有任务继续执行，维护完成或取消等待后可开始新操作。");
         // Register before an async service queues admission through model locks.
         // A workspace deletion is synchronous and must not overtake an admitted operation.
         if (c.workspaceId && c.op !== "workspace.delete") {
@@ -491,7 +516,28 @@ export async function startServer(
           workspaceOperations.set(operationWorkspace, (workspaceOperations.get(operationWorkspace) ?? 0) + 1);
         }
         let data: unknown;
-        if (c.op.startsWith("maintenance.")) {
+        if (c.op.startsWith("session-list.")) {
+          const workspaceId = text(c.workspaceId, "工作空间标识");
+          if (c.op === "session-list.page") data = countedPage(sessionLists.page(workspaceId, c.params!.group, c.params!.query, c.params!.cursor));
+          else if (c.op === "session-list.initial") {
+            const initial = sessionLists.initial(workspaceId, c.params!.query);
+            data = { ...initial, top: countedPage(initial.top), workspace: countedPage(initial.workspace) };
+          } else if (c.op === "session-list.first") data = countedSummary(sessionLists.first(workspaceId));
+          else if (c.op === "session-list.counts") {
+            const scopes = sessionLists.countScopes(workspaceId, c.params!.sessionIds);
+            const signal = reads.get(requestId)!.signal, items: SessionListCount[] = [];
+            for (const scope of scopes) {
+              // Yield between files so queued cancellation/other UI reads can run.
+              // A currently executing synchronous transcript scan is NOT interruptible.
+              await new Promise<void>(resolve => setImmediate(resolve));
+              if (signal.aborted) throw new AppError("CANCELLED", "读取已取消");
+              store.session(scope.workspaceId, scope.sessionId); // revalidate after yielding
+              items.push({ sessionId: scope.sessionId, messageCount: agents.messageCount(scope) });
+            }
+            if (signal.aborted) throw new AppError("CANCELLED", "读取已取消");
+            data = { workspaceId, items } satisfies SessionListCounts;
+          } else throw new AppError("UNKNOWN_OPERATION", "未知的会话列表读取操作");
+        } else if (c.op.startsWith("maintenance.")) {
           data = c.op === "maintenance.get" ? maintenance.command(c) : await store.external(c, async () => maintenance.command(c));
         } else if (c.op.startsWith("resources.")) {
           if (c.workspaceId || c.sessionId) throw new AppError("INVALID_INPUT", "资源管理使用应用级范围。");
@@ -520,10 +566,10 @@ export async function startServer(
           try { data = await agents.memories.command(c, controller.signal); }
           finally { ws.off("close", abort); }
         } else if (c.op === "git.branch") {
-          const controller = new AbortController(), abort = () => controller.abort();
-          reads.set(requestId, controller); ws.once("close", abort);
+          const controller = readController = claimReadRequest(reads, requestId), abort = () => controller.abort();
+          ws.once("close", abort);
           try { data = await workspaceGit.command(c, controller.signal); }
-          finally { reads.delete(requestId); ws.off("close", abort); }
+          finally { ws.off("close", abort); }
         } else if (c.op === "costs.get") {
           data = costs.get({ workspaceId: text(c.workspaceId, "工作空间"), sessionId: text(c.sessionId, "会话") });
         } else if (c.op.startsWith("paths.")) {
@@ -532,56 +578,55 @@ export async function startServer(
           try { data = await pathActions.command(c, controller.signal); }
           finally { ws.off("close", abort); }
         } else if (c.op.startsWith("preview.")) {
-          const controller = new AbortController(), abort = () => controller.abort();
-          reads.set(requestId, controller); ws.once("close", abort);
+          const controller = readController = claimReadRequest(reads, requestId), abort = () => controller.abort();
+          ws.once("close", abort);
           try { data = await previews.command(c, AbortSignal.any([controller.signal, AbortSignal.timeout(30000)])); }
-          finally { reads.delete(requestId); ws.off("close", abort); }
+          finally { ws.off("close", abort); }
         } else if (c.op.startsWith("files.")) {
           const controller = new AbortController();
           const abort = () => controller.abort();
           ws.once("close", abort);
           try { data = await files.command(c, controller.signal); }
           finally { ws.off("close", abort); }
+        } else if (c.op === "agent.accountUsage.cached") {
+          // Synchronous, scope-owned cache projection: no network, refresh, index import or credential mutation.
+          if (Object.keys(c.params ?? {}).length) throw new AppError("INVALID_INPUT", "会话额度缓存只接受会话范围，不接受账号或刷新参数。");
+          const scope = { workspaceId: text(c.workspaceId, "工作空间"), sessionId: text(c.sessionId, "会话") };
+          const target = agents.accountUsageTarget(scope);
+          data = target ? modelAccounts.cachedBinding(target) : null;
         } else if (c.op.startsWith("usage.")) {
           if (c.workspaceId || c.sessionId) throw new AppError("INVALID_INPUT", "模型用量与统计使用应用级范围。");
           if (c.op === "usage.statistics") {
             const report = await usageStatistics.read(c.params!.workspaceId === undefined ? undefined : text(c.params!.workspaceId, "工作空间"));
-            data = { ...report, models: usageModelNames(models.dir, report.models) };
+            data = report;
           } else if (c.op === "usage.ledger") data = await usageLedger.read(c.params);
+          else if (c.op === "usage.requests") data = agents.pool.requests.snapshot();
           else if (c.op === "usage.workspaces") data = usageLedger.workspaces();
           else if (c.op === "usage.sessions") data = await usageLedger.sessions(c.params);
           else if (c.op === "usage.pricing") data = usageModelPricing(models.dir, text(c.params!.providerId, "供应商 ID"));
-          else if (c.op === "usage.providers") {
-            const providers = await models.usageProviders();
-            if (!providers.some(provider => provider.id === "openai" || provider.id === usageProviderId))
-              providers.push({ id: usageProviderId, name: "Codex", configured: false, query: "codex", revision: "independent" });
-            data = providers;
-          } else if (c.op === "usage.account.get") data = await usageAccounts.state();
-          else if (c.op === "usage.account.proxy") {
-            try { data = await store.external(c, () => usageAccounts.configureProxy(c.params!.proxy, c.params!.revision)); }
-            finally { publish("usage:account"); }
-          } else if (c.op === "usage.auth.start") data = await store.external(c, () =>
-            usageAccounts.start(ws, c.params!.providerId, c.params!.type, c.params!.revision, c.params!.proxy));
-          else if (c.op === "usage.auth.open") data = await usageAccounts.logins.open(ws, text(c.params!.id, "认证流程"));
-          else if (c.op === "usage.auth.answer") data = usageAccounts.logins.answer(ws, text(c.params!.id, "认证流程"), c.params!.promptId, c.params!.answer);
-          else if (c.op === "usage.auth.cancel") data = await usageAccounts.logins.cancel(ws, text(c.params!.id, "认证流程"));
-          else if (c.op === "usage.provider" || c.op === "usage.account.logout") {
-            const providerId = c.params!.providerId === undefined ? usageProviderId : text(c.params!.providerId, "供应商 ID");
-            if (c.op === "usage.account.logout" && providerId !== usageProviderId)
-              throw new AppError("AUTH_UNSUPPORTED", "仅可退出独立的 Codex 用量授权。");
+          else if (c.op === "usage.providers") data = await models.usageProviders();
+          else if (c.op === "usage.provider") {
+            const providerId = text(c.params!.providerId, "供应商 ID");
             const controller = new AbortController(), abort = () => controller.abort();
             ws.once("close", abort);
             try {
-              data = c.op === "usage.provider"
-                ? providerId === usageProviderId
-                  ? await usageAccounts.query(c.params!.refresh === true, controller.signal)
-                  : await models.usage(providerId, c.params!.refresh === true, controller.signal)
-                : await store.external(c, () => usageAccounts.logout(c.params!.revision, c.params!.generation, controller.signal));
-            } finally {
-              ws.off("close", abort);
-              if (c.op === "usage.account.logout") publish("usage:account");
-            }
+              // The selected model connection owns both auth and routing. Never
+              // query a second account or consult the retired model-usage store.
+              data = await models.usage(providerId, c.params!.refresh === true, controller.signal);
+            } finally { ws.off("close", abort); }
           } else throw new AppError("UNKNOWN_OPERATION", "未知的用量统计操作。");
+        } else if (c.op.startsWith("accounts.")) {
+          if (c.workspaceId || c.sessionId) throw new AppError("INVALID_INPUT", "模型账号使用应用级范围。");
+          if (c.op === "accounts.list") data = await modelAccounts.list();
+          else if (c.op === "accounts.activate") {
+            data = await store.external(c, () => modelAccounts.activate(c.params!.accountId, c.params!.revision));
+            await refreshConfiguration();
+          } else if (c.op === "accounts.usage") {
+            // The connection already aborts all registered reads on close; avoid one
+            // extra socket listener per visible card and honor explicit read.cancel.
+            const controller = readController = claimReadRequest(reads, requestId);
+            data = await modelAccounts.usage(c.params!.accountId, c.params!.refresh === true, controller.signal, c.params!.cache === true);
+          } else throw new AppError("UNKNOWN_OPERATION", "未知的账号管理操作。");
         } else if (c.op === "configuration.get") {
           // The editor needs local configuration, not a second global availability
           // pass. Save/login already publish their own configuration invalidations.
@@ -599,6 +644,7 @@ export async function startServer(
               c.params!.type,
               c.params!.revision,
               c.params!.proxy,
+              c.params!.account,
             ),
           );
         else if (c.op === "auth.open")
@@ -618,6 +664,12 @@ export async function startServer(
           } finally {
             await refreshConfiguration();
           }
+        } else if (c.op === "agent.window" || c.op === "task.window") {
+          const signal = reads.get(requestId)!.signal;
+          const frame = c.op === "agent.window" ? await agents.window(c, signal) : tasks.window(c, signal);
+          // The producer already budgeted the ACTUAL receipt. Never wrap it in data.
+          send(ws, frame, true, releaseRead);
+          releaseRead = undefined; return;
         } else if (c.op.startsWith("compression.")) {
           data = await agents.compressions.command(c);
         } else if (c.op.startsWith("favorites.")) {
@@ -665,15 +717,18 @@ export async function startServer(
           if (c.op === "session.read")
             publish(`thread:${c.workspaceId}:${c.sessionId}`);
           if ((c.op === "session.rename" || c.op === "session.delete") && scope) agents.titles.cancel(scope);
+          // The sessions route also refreshes each observed single-session scope.
           publish(`sessions:${c.workspaceId}`);
-          if (c.op === "session.delete")
-            publish(`session:${c.workspaceId}:${c.sessionId}`, null);
-          else if (c.op !== "session.create")
-            publish(`session:${c.workspaceId}:${c.sessionId}`);
         }
         send(ws, { type: "receipt", requestId, ok: true, data }, historyRead, releaseRead);
         releaseRead = undefined;
       } catch (error) {
+        if (windowRead) {
+          const code = error instanceof AppError && error.code === "CANCELLED" ? "STALE"
+            : error instanceof AppError && error.code === "DUPLICATE_REQUEST" ? "INVALID_REQUEST_ID" : "UNAVAILABLE";
+          send(ws, windowFieldErrorReceipt(requestId, code).frame, !!releaseRead, releaseRead);
+          releaseRead = undefined; return;
+        }
         if (subscribing && (reads.get(requestId)?.signal.aborted || intents.get(subscribing) !== subscriptionIntent)) {
           send(ws, { type: "receipt", requestId, ok: true, data: { superseded: true } }, !!releaseRead, releaseRead);
           releaseRead = undefined; return;
@@ -698,7 +753,7 @@ export async function startServer(
           else intents.delete(subscribing);
         }
         if (subscribing && subscriptionReads.get(subscribing) === reads.get(requestId)) subscriptionReads.delete(subscribing);
-        releaseRead?.(); reads.delete(requestId);
+        releaseRead?.(); releaseReadRequest(reads, requestId, readController);
         if (operationWorkspace) {
           const remaining = (workspaceOperations.get(operationWorkspace) ?? 1) - 1;
           if (remaining) workspaceOperations.set(operationWorkspace, remaining);
@@ -1034,7 +1089,7 @@ export async function startServer(
       server.listen(options.port ?? 4317, "127.0.0.1", resolve);
     });
   } catch (error) {
-    await Promise.all([previews.close(), openDialog.close(), fileManager.close(), modelProxy.close(), closeModelNetworks(store.root)]);
+    await Promise.all([previews.close(), openDialog.close(), fileManager.close(), terminal.close(), modelProxy.close(), closeModelNetworks(store.root)]);
     sockets.close();
     await vite?.close();
     attention.close();
@@ -1046,6 +1101,7 @@ export async function startServer(
   await remoteAccess.initialize();
   recovery.start();
   updates.start();
+  usageLedger.start();
   return {
     origin,
     accessUrl: `${origin}/`,
@@ -1053,13 +1109,12 @@ export async function startServer(
     refreshConfiguration,
     agents,
     tasks,
-    usageAccounts,
     usageStatistics,
     usageLedger,
     close: async () => {
       shuttingDown = true;
+      const usageClosed = usageLedger.close();
       updates.close();
-      integrationMaintenance.close();
       recovery.pause();
       clearTimeout(proxyRefreshTimer);
       clearTimeout(costTimer); costWorkspaces.clear();
@@ -1070,15 +1125,14 @@ export async function startServer(
       await opencli.close();
       await rea.close();
       await rtk.close();
-      await Promise.all([openDialog.close(), fileManager.close()]);
+      await Promise.all([openDialog.close(), fileManager.close(), terminal.close()]);
       for (const ws of sockets.clients) {
         logins.disconnect(ws);
-        usageAccounts.disconnect(ws);
         ws.terminate();
       }
       sockets.close();
       await Promise.allSettled(inFlight);
-      await Promise.all([logins.close(), usageAccounts.close()]);
+      await logins.close();
       store.db.exec("BEGIN IMMEDIATE");
       try { store.recoveries.capture(); store.db.exec("COMMIT"); }
       catch (error) { store.db.exec("ROLLBACK"); throw error; }
@@ -1095,7 +1149,7 @@ export async function startServer(
         // must not keep the service and its storage lock alive indefinitely.
         server.closeAllConnections();
       });
-      await usageLedger.close();
+      await usageClosed;
       store.close();
     },
   };

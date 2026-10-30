@@ -15,7 +15,9 @@ const fixtureFetch = async (input, init) => {
   const body = url.pathname === '/backend-api/wham/usage'
     ? { rate_limit: { primary_window: { used_percent: 37, limit_window_seconds: 18000 } }, credits: { balance: '4.2500', has_credits: true } }
     : url.pathname === '/backend-api/wham/rate-limit-reset-credits'
-      ? { available_count: 2, credits: [{ id: 'PRIVATE_CARD', expires_at: '2099-01-01T00:00:00Z' }] } : undefined;
+      ? { available_count: 2, credits: [{ id: 'PRIVATE_CARD', expires_at: '2099-01-01T00:00:00Z' }] }
+      : url.pathname === '/backend-api/accounts/check/v4-2023-04-27'
+        ? { accounts: { PRIVATE_ACCOUNT: { account: { account_id: 'PRIVATE_ACCOUNT', plan_type: 'pro' }, entitlement: { expires_at: '2098-06-01T00:00:00Z' } } } } : undefined;
   if (!body) throw Error('Unexpected endpoint');
   return new Response(JSON.stringify(body));
 };

@@ -24,8 +24,8 @@ export function useSubmissionError(scope: Scope) {
   }, [key]), () => errors.get(key) ?? "");
 }
 
-// Confirmed rejections may be restored directly. Unknown outcomes require a
-// separate, explicit risk confirmation; neither path sends or changes a receipt.
+// Both outcomes restore directly for editing; neither sends or changes a receipt.
+// Unknown outcomes keep their non-blocking reminder in the composer.
 export function restoreFailedSubmission(scope: Scope, id: string) {
   return restoreSubmission(scope, id, "failed");
 }

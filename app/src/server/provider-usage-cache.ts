@@ -12,7 +12,7 @@ const canonical = (path: string) => { try { return realpathSync(path); } catch {
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 
 /** Reconstruct the public DTO field-by-field; never persist credentials, unknown fields or raw responses. */
-function publicUsage(input: unknown, providerId: string): ProviderUsage | undefined {
+export function publicUsage(input: unknown, providerId: string): ProviderUsage | undefined {
   const value = object(input);
   if (!value || value.providerId !== providerId || !["ready", "unavailable", "unsupported"].includes(value.status as string) || !Array.isArray(value.metrics) || value.metrics.length > 128) return;
   const metrics: ProviderUsageMetric[] = [];
@@ -23,21 +23,38 @@ function publicUsage(input: unknown, providerId: string): ProviderUsage | undefi
     if (metric.kind === "window") {
       if (metric.usedPercent !== null && !number(metric.usedPercent)) return;
       metrics.push({ ...common, kind: "window", usedPercent: metric.usedPercent as number | null,
-        ...(number(metric.windowSeconds) ? { windowSeconds: metric.windowSeconds } : {}), ...(date(metric.resetsAt) ? { resetsAt: metric.resetsAt } : {}) });
+        ...(number(metric.windowSeconds) ? { windowSeconds: metric.windowSeconds } : {}), ...(date(metric.resetsAt) ? { resetsAt: metric.resetsAt } : {}),
+        ...(typeof metric.allowed === "boolean" ? { allowed: metric.allowed } : {}), ...(typeof metric.limitReached === "boolean" ? { limitReached: metric.limitReached } : {}) });
     } else if (metric.kind === "count") {
       if (metric.count !== null && !number(metric.count)) return;
-      metrics.push({ ...common, kind: "count", count: metric.count as number | null, ...(date(metric.expiresAt) ? { expiresAt: metric.expiresAt } : {}) });
+      metrics.push({ ...common, kind: "count", count: metric.count as number | null, ...(date(metric.expiresAt) ? { expiresAt: metric.expiresAt } : {}),
+        ...(Array.isArray(metric.expiries) ? { expiries: metric.expiries.filter(date).sort((a, b) => a - b).slice(0, 64) } : {}) });
     } else if (metric.kind === "tokens") {
       if (!text(metric.model) || !metric.model || metric.used !== null && !number(metric.used) || metric.remaining !== null && !number(metric.remaining) || metric.part !== undefined && !costParts.includes(metric.part as CostPart)) return;
       metrics.push({ ...common, kind: "tokens", model: metric.model, used: metric.used as number | null, remaining: metric.remaining as number | null, ...(metric.part !== undefined ? { part: metric.part as CostPart } : {}) });
     } else if (metric.kind === "balance") {
       if (metric.balance !== null && !(text(metric.balance, 512) && /^[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(metric.balance))) return;
-      metrics.push({ ...common, kind: "balance", balance: metric.balance as string | null, ...(typeof metric.unlimited === "boolean" ? { unlimited: metric.unlimited } : {}) });
+      metrics.push({ ...common, kind: "balance", balance: metric.balance as string | null, ...(typeof metric.unlimited === "boolean" ? { unlimited: metric.unlimited } : {}), ...(typeof metric.hasCredits === "boolean" ? { hasCredits: metric.hasCredits } : {}) });
     } else return;
   }
   const result: ProviderUsage = { providerId, status: value.status as ProviderUsage["status"], metrics,
     ...(date(value.updatedAt) ? { updatedAt: value.updatedAt } : {}), ...(typeof value.stale === "boolean" ? { stale: value.stale } : {}),
     ...(text(value.message, 2048) ? { message: value.message } : {}), ...(typeof value.refreshable === "boolean" ? { refreshable: value.refreshable } : {}) };
+  const accountStatus = object(value.accountStatus);
+  if (value.accountStatus !== undefined) {
+    if (!accountStatus || !["active", "disabled", "unauthorized", "unknown"].includes(accountStatus.state as string) || !date(accountStatus.checkedAt)) return;
+    result.accountStatus = { state: accountStatus.state as NonNullable<ProviderUsage["accountStatus"]>["state"], checkedAt: accountStatus.checkedAt };
+    if (accountStatus.state !== "active") { result.status = "unavailable"; result.metrics = []; delete result.stale; }
+  }
+  const account = object(value.account);
+  if (account) {
+    const email = text(account.email, 254) && /^[^\s@<>\x00-\x1f\x7f]+@[^\s@<>\x00-\x1f\x7f]+\.[^\s@<>\x00-\x1f\x7f]+$/.test(account.email) ? account.email : undefined;
+    const plan = text(account.plan, 64) && /^[a-zA-Z0-9_-]+$/.test(account.plan) ? account.plan : undefined;
+    const accountId = text(account.accountId, 160) && /^[a-zA-Z0-9._:-]+$/.test(account.accountId) ? account.accountId : undefined;
+    const subscriptionExpiresAt = date(account.subscriptionExpiresAt) ? account.subscriptionExpiresAt : undefined;
+    if (email || plan || accountId || subscriptionExpiresAt) result.account = { ...(email ? { email } : {}), ...(plan ? { plan } : {}),
+      ...(accountId ? { accountId } : {}), ...(subscriptionExpiresAt ? { subscriptionExpiresAt } : {}) };
+  }
   const management = object(value.management);
   if (management && text(management.label, 160) && text(management.url, 2048)) {
     try {
@@ -52,7 +69,7 @@ function publicUsage(input: unknown, providerId: string): ProviderUsage | undefi
 export class ProviderUsageCache {
   private root: string;
   private namespace: string;
-  constructor(root: string, dir: string) {
+  constructor(root: string, dir: string, private minimum = usageRefreshMinimum, private jitter = usageRefreshJitter) {
     this.root = canonical(root);
     this.namespace = digest(JSON.stringify([this.root, canonical(dir)]));
   }
@@ -86,9 +103,9 @@ export class ProviderUsageCache {
       if (length !== stat.size || end.size !== stat.size || end.mtimeMs !== stat.mtimeMs || after.ino !== stat.ino || after.dev !== stat.dev) return;
       const stored = object(JSON.parse(bytes.subarray(0, length).toString("utf8")));
       if (!stored || stored.version !== 1 || stored.key !== key || !/^[a-f0-9]{64}$/.test(key) || !date(stored.checkedAt) || !date(stored.nextRefreshAt)) return;
-      if (stored.checkedAt > now || stored.nextRefreshAt - stored.checkedAt < usageRefreshMinimum || stored.nextRefreshAt - stored.checkedAt > usageRefreshMinimum + usageRefreshJitter) return;
+      if (stored.checkedAt > now || stored.nextRefreshAt - stored.checkedAt < this.minimum || stored.nextRefreshAt - stored.checkedAt > this.minimum + this.jitter) return;
       const value = publicUsage(stored.value, providerId);
-      if (!value || value.updatedAt && value.updatedAt > stored.checkedAt) return;
+      if (!value || value.updatedAt && value.updatedAt > stored.checkedAt || value.accountStatus && value.accountStatus.checkedAt > stored.checkedAt) return;
       return { key, value, checkedAt: stored.checkedAt, nextRefreshAt: stored.nextRefreshAt };
     } catch { return; }
     finally { if (file !== undefined) { try { closeSync(file); } catch { /* Disposable cache. */ } } }

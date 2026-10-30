@@ -15,7 +15,7 @@ function fixture() {
   writeFileSync(auth, JSON.stringify({ openai: credential })); writeFileSync(models, '{"providers":{}}');
   return { root, dir, auth, models, credential, close: () => rmSync(root, { recursive: true, force: true }) };
 }
-const ready = (): ProviderUsage => ({ providerId: "openai", status: "ready", updatedAt: Date.now(), metrics: [{ id: "balance", label: "剩余点数", kind: "balance", balance: "1.2500" }] });
+const ready = (): ProviderUsage => ({ providerId: "openai", status: "ready", accountStatus: { state: "active", checkedAt: Date.now() }, updatedAt: Date.now(), metrics: [{ id: "balance", label: "剩余点数", kind: "balance", balance: "1.2500" }] });
 const cacheFiles = (root: string) => { const base = join(root, "model-usage-cache"); return readdirSync(base).flatMap(name => readdirSync(join(base, name)).map(file => join(base, name, file))).filter(path => path.endsWith(".json")); };
 const cachedFile = (root: string) => cacheFiles(root)[0]!;
 
@@ -52,10 +52,25 @@ test("manual refresh retains the five second guard, resets the automatic deadlin
   assert.deepEqual(await fresh.read("openai"), manual); assert.equal(calls, 2);
 });
 
+test("preferCache returns any same-identity cache regardless of age, queries only when missing and still honours explicit refresh", async t => {
+  const f = fixture(); t.after(f.close); let now = Date.now(), calls = 0;
+  t.mock.method(Date, "now", () => now); t.mock.method(Math, "random", () => 0);
+  const query = async () => { calls++; return ready(); };
+  const first = await new ProviderUsageService(f.root, f.dir, query).read("openai", false, undefined, true); assert.equal(calls, 1);
+  now = first.nextRefreshAt! + 3600000;
+  assert.deepEqual(await new ProviderUsageService(f.root, f.dir, query).read("openai", false, undefined, true), first); assert.equal(calls, 1);
+  const service = new ProviderUsageService(f.root, f.dir, query);
+  await service.read("openai", true, undefined, true); assert.equal(calls, 2);
+  writeFileSync(f.auth, "{}");
+  const signedOut = await service.read("openai", false, undefined, true); assert.deepEqual(signedOut.metrics, []); assert.equal(calls, 2);
+});
+
 test("automatic failure preserves only same-identity old numbers and persists a full retry interval, including after restart", async t => {
   const f = fixture(); t.after(f.close); let now = Date.now(), calls = 0, fail = false;
   t.mock.method(Date, "now", () => now); t.mock.method(Math, "random", () => 0);
-  const originalAuth = readFileSync(f.auth, "utf8"), query = async () => { calls++; if (fail) throw Error("PRIVATE_FAILURE"); return ready(); };
+  const originalAuth = readFileSync(f.auth, "utf8"), query = async (): Promise<ProviderUsage> => { calls++; return fail
+    ? { providerId: "openai", status: "unavailable", accountStatus: { state: "active", checkedAt: now }, metrics: [], message: "状态检查通过，额度查询暂不可用。" }
+    : ready(); };
   const service = new ProviderUsageService(f.root, f.dir, query), initial = await service.read("openai");
   now = initial.nextRefreshAt!; fail = true;
   const stale = await service.read("openai"); assert.equal(stale.stale, true); assert.equal(stale.updatedAt, initial.updatedAt); assert.equal(calls, 2);
@@ -81,22 +96,22 @@ test("a first failed attempt is also cached and throttled after restart without 
   assert.doesNotMatch(readFileSync(cachedFile(f.root), "utf8"), /PRIVATE/);
 });
 
-test("expired, logged out, direct, and mid-flight naturally expired credentials never expose persisted numbers", async t => {
+test("direct grants query normally; expired, logged out and mid-flight expired credentials hide persisted numbers", async t => {
   const f = fixture(); t.after(f.close); let now = Date.now(), calls = 0;
   t.mock.method(Date, "now", () => now);
   const query = async () => { calls++; return ready(); }, first = new ProviderUsageService(f.root, f.dir, query);
   await first.read("openai");
   writeFileSync(f.auth, JSON.stringify({ openai: { ...f.credential, scopes: ["chatgpt.tokens.use.direct"] } }));
   const direct = await new ProviderUsageService(f.root, f.dir, query).read("openai");
-  assert.equal(direct.refreshable, false); assert.deepEqual(direct.metrics, []); assert.equal(calls, 1);
-  assert.equal(cacheFiles(f.root).length, 0);
+  assert.equal(direct.status, "ready"); assert.notEqual(direct.refreshable, false); assert.equal(calls, 2);
+  assert.equal(cacheFiles(f.root).length, 1);
   writeFileSync(f.auth, JSON.stringify({ openai: { ...f.credential, expires: now + 1 } }));
   let release!: (value: ProviderUsage) => void;
   const pending = new ProviderUsageService(f.root, f.dir, async () => { calls++; return new Promise(resolve => { release = resolve; }); }).read("openai");
   now += 2; release(ready()); const expired = await pending;
   assert.match(expired.message!, /过期/); assert.deepEqual(expired.metrics, []); assert.equal(expired.updatedAt, undefined);
   writeFileSync(f.auth, "{}");
-  const logout = await first.read("openai"); assert.deepEqual(logout.metrics, []); assert.equal(logout.stale, undefined); assert.equal(calls, 2);
+  const logout = await first.read("openai"); assert.deepEqual(logout.metrics, []); assert.equal(logout.stale, undefined); assert.equal(calls, 3);
 });
 
 test("persistent cache is private, whitelisted, bounded and rejects identity, time, file-link and directory-link confusion", t => {

@@ -7,6 +7,7 @@ import { capabilityExtensions, capabilityRuntime, discoverCapabilities, type Cap
 import { environmentResourceOptions } from "./environment-resources.js";
 import { installAxiomPrompt } from "./axiom-prompt.js";
 import { runtimeEnvironment } from "./session-environment.js";
+import { installSessionRetryPolicy } from "./session-retry-policy.js";
 import { applySkillDiscovery } from "./skill-discovery.js";
 import { resourceSnapshot } from "./reload-resources.js";
 import { resumeReloadedSession } from "./reload-resume.js";
@@ -43,12 +44,13 @@ import {
   type CompactionEntry,
   type CompactionEntryDraft,
 } from "@earendil-works/pi-coding-agent";
-import type { AgentInfo, Selection, RetryInfo, RunPhase } from "../shared/agent.js";
+import type { AgentInfo, Selection, RetryInfo, RunPhase, RunOrigin } from "../shared/agent.js";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { getCurrentSystemMessage, getSystemMessageText, type Model, type Api } from "@earendil-works/pi-ai";
 import { executionOutcome } from "./execution-outcome.js";
 import { isResumeControl, omitResumeControls, resumeSession } from "./resume-session.js";
 import { ModelService } from "./model-service.js";
+import { createSessionAccountObserver, type AccountRequestContext } from "./session-account-observer.js";
 import { ensureModelProvider, invalidModelDefinition } from "./model-runtime.js";
 import { rtkExtension } from "./integrations/rtk-runtime.js";
 import { openCliResources } from "./integrations/opencli-resources.js";
@@ -63,6 +65,9 @@ import { compressionError } from "./compression-error.js";
 import { captureCompressionPrefix, forgetCompressionPrefix, observeCompressionPayload, readCompressionPrefix, saveCompressionPrefix, type CompressionPrefix } from "./compression-request.js";
 import { errorMessage } from "./error-message.js";
 import { chatMessage, openTranscript, toolKey } from "./transcript.js";
+import { prepareCanonicalLiveSource, type CanonicalLiveSource, type CanonicalLiveRun } from "./canonical-live-source.js";
+import { CanonicalWindow } from "./canonical-window.js";
+import { canonicalWindowResponse } from "./canonical-window-worker.js";
 import { continuationInputIds } from "./input-continuation.js";
 import { lastRequestSelection, requestSelection, selectionChange } from "./request-selection.js";
 import { taskTools } from "./task-tools.js";
@@ -72,7 +77,7 @@ import {
   compressionPersisted, hasCompression, type CompressionSnapshot,
 } from "./compression-context.js";
 import { taskToolNames, type TaskTool } from "../shared/tasks.js";
-import { taskDisplayText } from "./task-output.js";
+import { createCanonicalToolDisplay } from "./canonical-tool-display.js";
 import { AppError, type ImageAttachment } from "../shared/protocol.js";
 import { contextImages, imagesInput, imageContent, imageMetadata, nativeImages, requireImageModel } from "./images.js";
 
@@ -99,6 +104,10 @@ export interface WorkerInput {
   memoryPath?: string;
   memoryTopics?: MemoryTopicSnapshot;
   runId: string;
+  /** Host-owned immutable run provenance, not body authority or a window query. */
+  canonicalOrigins?: [string, RunOrigin][];
+  /** Scope-private display identity seed; never forward in a client response. */
+  canonicalIdentity?: string;
   selection: Selection;
   skills?: SkillReference[];
   prompt: string;
@@ -117,6 +126,9 @@ let session: AgentSession | undefined,
   started = false,
   accepting = false,
   inputClosed = false;
+let canonicalSource: CanonicalLiveSource | undefined;
+let canonicalRun: CanonicalLiveRun | undefined;
+let canonicalWindow: CanonicalWindow | undefined;
 let sdkStream: AgentSession["agent"]["streamFunction"] | undefined;
 let lastCompressionPrefix: CompressionPrefix | undefined;
 let activeInput: WorkerInput | undefined;
@@ -132,6 +144,7 @@ let reloading = false;
 let reloadPause: { id: string; settled: Promise<void>; resume: boolean } | undefined;
 let pendingModel: { revision: number; selection: Selection; modelsRaw: string } | undefined;
 let modelRevision = 0;
+let appliedModelRevision = 0;
 let modelChanged = false;
 let switchingModel = false;
 let currentModelsRaw: string | undefined;
@@ -153,6 +166,7 @@ async function applyPendingModel(source: SafePointSource) {
     const configChanged = scopedRaw !== currentModelsRaw || previousModel?.provider !== selection.provider || !!modelRequestError;
     if (!configChanged && previousModel?.provider === selection.provider && previousModel.id === selection.id && previousThinking === selection.thinking) {
       activeInput.selection = { ...selection };
+      appliedModelRevision = revision;
       send({ type: "model-applied", revision, selection, changed: modelChanged });
       continue;
     }
@@ -223,6 +237,7 @@ async function applyPendingModel(source: SafePointSource) {
         session.sessionManager.appendModelChange(selection.provider, selection.id);
       if (projected.thinkingLevel !== selection.thinking)
         session.sessionManager.appendThinkingLevelChange(selection.thinking);
+      appliedModelRevision = revision;
       send({ type: "model-applied", revision, selection, changed: true });
     } finally { switchingModel = false; }
   }
@@ -316,6 +331,9 @@ async function shutdown() {
   budgetReminder?.dispose();
   await session?.abort();
   await session?.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+  canonicalWindow?.close(); canonicalWindow = undefined;
+  canonicalRun?.end(); canonicalRun = undefined;
+  canonicalSource?.dispose(); canonicalSource = undefined;
   session?.dispose();
   if (process.connected) process.send?.({ type: "closed", runId: activeInput?.runId, lease: activeLease }, () => process.exit(0));
   else process.exit(0);
@@ -506,6 +524,12 @@ process.on("message", (value: any) => {
   }
   if (value.type === "start" && !acceptsLease(value.lease)) return;
   if (value.type !== "start" && (value.runId !== activeInput?.runId || workerInstance && !sameLease(value.lease, activeLease))) return;
+  if (value.type === "window-read") {
+    const owner = { lease: activeLease, runId: activeInput?.runId, available: !cancelled, window: canonicalWindow };
+    const response = canonicalWindowResponse(value, owner);
+    if (response) leaseSender(owner.lease, owner.runId)(response);
+    return;
+  }
   if (value.type === "model" && Number.isSafeInteger(value.revision) && value.revision > modelRevision && value.selection && typeof value.modelsRaw === "string") {
     if (!cancelled && !inputClosed) {
       modelRevision = value.revision;
@@ -696,6 +720,7 @@ process.on("message", (value: any) => {
     reloadPause = undefined;
     pendingModel = undefined;
     modelRevision = 0;
+    appliedModelRevision = 0;
     modelChanged = false;
     switchingModel = false;
     modelRequestError = undefined;
@@ -747,6 +772,8 @@ async function run(input: WorkerInput) {
   const runSend = leaseSender(activeLease, input.runId);
   const latency = new ModelLatency(input.runId, record => runSend({ type: "latency", record }));
   let restoreStream: (() => void) | undefined;
+  let sourceRun: CanonicalLiveRun | undefined;
+  let windowRun: CanonicalWindow | undefined;
   let reusable = false, requestAttempted = false;
   try {
     process.chdir(input.cwd);
@@ -801,7 +828,7 @@ async function run(input: WorkerInput) {
       // Extensions execute arbitrary JS, may shadow read tools or add commands.
       // Only the host's inline lifecycle/permission hooks run in a child.
       ...(input.task ? { noExtensions: true, noPromptTemplates: true } : {}),
-      extensionFactories: [rtkExtension(input.root, input.task ? "subagent" : "main"), ...(!input.task && input.capabilities ? capabilityExtensions(input.capabilities, input.root) : []), (pi) => {
+      extensionFactories: [...(!input.task && input.capabilities ? capabilityExtensions(input.capabilities, input.root) : []), (pi) => {
         const spawnHook: BashSpawnHook = context => ({ ...context, env: toolEnvironment(context.env) });
         pi.registerTool({ ...createBashToolDefinition(input.cwd, { spawnHook,
           shellPath: settingsManager.getShellPath(), commandPrefix: settingsManager.getShellCommandPrefix() }), defaultActive: false });
@@ -870,7 +897,16 @@ async function run(input: WorkerInput) {
         });
         pi.on("turn_end", (event) => compressionBoundary(event));
         pi.on("agent_before_settle", (event) => compressionBoundary(event));
-      }],
+      }, rtkExtension(input.root, input.task ? "subagent" : "main", {
+        rewriteAllowed: () => !settingsManager.getShellPath() && !settingsManager.getShellCommandPrefix(),
+        // Last inline gate: disk/capability/host hooks first approve the ORIGINAL.
+        // Replaying the public runner checks the managed rewrite with those same
+        // hooks, without nesting or executing a second business command.
+        authorizeRewrite: event => {
+          if (!session) throw Error("会话权限系统尚未就绪，未执行 RTK 改写。");
+          return session.extensionRunner.emitToolCall(event);
+        },
+      })],
     }, () => send({ type: "warning", text: "资源包尚未安装或版本不匹配。请到资源页安装或更新后重载，会话不会自动下载。" }));
     prepareReload = async (capabilities) => {
       if (input.task) await projectSettings.reload();
@@ -892,6 +928,8 @@ async function run(input: WorkerInput) {
     };
     await loader.reload();
     settingsManager.applyOverrides({ cacheWarming: "off" });
+    const manager = openTranscript(input.file, input.cwd);
+    canonicalSource = prepareCanonicalLiveSource(manager);
     const result = await createAgentSession({
       cwd: input.cwd,
       agentDir: join(input.root, "pi"),
@@ -900,7 +938,7 @@ async function run(input: WorkerInput) {
       thinkingLevel: input.selection.thinking,
       settingsManager,
       resourceLoader: loader,
-      sessionManager: openTranscript(input.file, input.cwd),
+      sessionManager: manager,
       customTools: input.task ? [] : [...taskTools(callTask), memoryQueryTool((id, params, signal) => callTask("memory_query", id, params, signal))],
       ...(input.task
         ? { tools: subagentTools, excludeTools: [...taskToolNames] }
@@ -910,6 +948,8 @@ async function run(input: WorkerInput) {
           : {}),
     });
     session = result.session;
+    canonicalSource.attach(session);
+    installSessionRetryPolicy(session);
     installAxiomPrompt(session);
     installKiroCompactionUsage(session);
     installNativeCompactionUsage(session);
@@ -983,13 +1023,20 @@ async function run(input: WorkerInput) {
     }
     send({ type: "execution_phase", stage: "history", durationMs: performance.now() - historyStarted });
     const baseStream = session.agent.streamFunction;
+    const accountObserver = createSessionAccountObserver(session.modelRuntime, join(process.env.AXIOM_PI_DIR || join(input.root, "pi"), "auth.json"),
+      proof => runSend({ type: "model-account-proof", ...proof }));
     const observedStream = latency.wrap((model, context, options) => {
       if (modelRequestError) throw modelRequestError;
+      let quotaRequest: AccountRequestContext | undefined;
       if (options?.sessionId === session!.sessionManager.getSessionId()) {
         // Report application only when a real session request is about to start.
         // Routed models retain their logical selection; revoke by actual provider too.
         const selection = { provider: session!.model!.provider, id: session!.model!.id, thinking: session!.thinkingLevel };
-        runSend({ type: "model-request", selection, provider: model.provider });
+        quotaRequest = { selection, sessionId: session!.sessionManager.getSessionId(), requestId: randomUUID(), modelRevision: appliedModelRevision,
+          originalStream: baseStream === sdkStream && !session!.resourceLoader.getExtensions().extensions.some(extension => extension.handlers.has("before_provider_headers")) };
+        // This event precedes SDK auth. A later proof must match this physical
+        // request and applied model revision, not just the provider/model name.
+        runSend({ type: "model-request", selection, provider: model.provider, api: model.api, requestId: quotaRequest.requestId, modelRevision: quotaRequest.modelRevision });
         try {
           const prefix = captureCompressionPrefix(session!.sessionManager, selection, model, context, options);
           if (session!.resourceLoader.getExtensions().extensions.some((extension) => extension.handlers.has("before_provider_headers")))
@@ -1005,7 +1052,7 @@ async function run(input: WorkerInput) {
           runSend({ type: "warning", text: "本次请求的缓存前缀未能完整保存；聊天继续，压缩时可改用原生摘要。" });
         }
       }
-      return baseStream(model, context, options);
+      return quotaRequest ? accountObserver.observe(quotaRequest, () => baseStream(model, context, options)) : baseStream(model, context, options);
     }, {
       sessionId: session.sessionManager.getSessionId(),
       defaultFetch: model => baseStream === sdkStream &&
@@ -1013,7 +1060,10 @@ async function run(input: WorkerInput) {
         !session!.modelRuntime.getRegisteredNativeProvider(model.provider),
     });
     session.agent.streamFunction = observedStream;
-    restoreStream = () => { if (session?.agent.streamFunction === observedStream) session.agent.streamFunction = baseStream; };
+    restoreStream = () => {
+      accountObserver.restore();
+      if (session?.agent.streamFunction === observedStream) session.agent.streamFunction = baseStream;
+    };
     let previousSelection = lastRequestSelection(session.sessionManager.getBranch());
     send({ type: "ready", environment });
     let currentId = "",
@@ -1039,6 +1089,14 @@ async function run(input: WorkerInput) {
       environment = next;
       send({ type: "system-prompt", systemPrompt: next.systemPrompt, environment: next });
     };
+    sourceRun = canonicalSource!.begin();
+    canonicalRun = sourceRun;
+    const ownedSource = sourceRun;
+    const toolDisplay = createCanonicalToolDisplay(input.runId, ownedSource.observeTool);
+    canonicalWindow?.close();
+    const sourceOrigins = new Map(input.canonicalOrigins ?? []);
+    windowRun = new CanonicalWindow(() => ownedSource.capture(sourceOrigins), () => ownedSource.active() && !cancelled, input.canonicalIdentity);
+    canonicalWindow = windowRun;
     unsubscribeRun = session.subscribe((event) => {
       const send = runSend;
       if ((event.type === "message_start" || event.type === "message_update" || event.type === "message_end") && isResumeControl(event.message)) return;
@@ -1130,6 +1188,7 @@ async function run(input: WorkerInput) {
           }
         }
         if (message) {
+          ownedSource.observe(m, message);
           if (m.role === "assistant") message.deliveryTiming = latency.delivery();
           send({ type: "message", message });
         }
@@ -1140,28 +1199,7 @@ async function run(input: WorkerInput) {
         event.type === "tool_execution_end"
       ) {
         if (event.type === "tool_execution_start") phase("executing_tools");
-        const result = event.type === "tool_execution_update" ? event.partialResult
-          : event.type === "tool_execution_end" ? event.result : undefined;
-        const displayText = taskDisplayText(event.toolName, result?.details,
-          event.type === "tool_execution_end" && event.isError);
-        send({
-          type: "tool",
-          id: toolKey(input.runId, event.toolCallId),
-          name: event.toolName,
-          durationMs: event.type === "tool_execution_end" ? event.durationMs : undefined,
-          status:
-            event.type === "tool_execution_end"
-              ? event.isError
-                ? "failed"
-                : "completed"
-              : "running",
-          output: {
-            content: displayText !== undefined ? [{ type: "text", text: displayText }]
-              : result?.content?.filter((c: any) => c.type === "text")
-                .map((c: any) => ({ type: "text", text: c.text })),
-
-          },
-        });
+        send(toolDisplay(event));
       }
       if (event.type === "turn_end") {
         delivered();
@@ -1384,6 +1422,10 @@ async function run(input: WorkerInput) {
         "pi 初始化或执行失败，未收到具体错误原因。"),
     });
   } finally {
+    windowRun?.close();
+    if (canonicalWindow === windowRun) canonicalWindow = undefined;
+    sourceRun?.end();
+    if (canonicalRun === sourceRun) canonicalRun = undefined;
     restoreStream?.();
     budgetReminder?.dispose();
     closeCompressionRequests();

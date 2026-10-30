@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 import { startServer } from "../src/server/index.js";
+import { assertComponentHeader, ensureComponentActions } from "./component-layout-helpers.js";
 import { atomicProxyJson, proxyConfigPath, proxyDirectory, readProxyConfig } from "../src/server/integrations/model-proxy-config.js";
 import { xrayImporterDirectory, xrayImporterRelease } from "../src/server/integrations/model-proxy-xray-installer.js";
 const artifacts = resolve(process.env.AXIOM_TEST_ARTIFACTS ?? "test-results/proxy-maintenance"); mkdirSync(artifacts, { recursive: true });
@@ -24,6 +25,8 @@ try {
       page.on("pageerror", error => errors.push(error.message));
       await page.goto(`${app.origin}/tools.html#model-proxy`);
       const proxy = page.locator("#model-proxy");
+      const xray = proxy.getByRole("region", { name: "Xray-core维护", exact: true });
+      await ensureComponentActions(xray);
       const remove = proxy.getByRole("button", { name: withCore ? "卸载内核" : "清理残留文件", exact: true });
       await remove.waitFor(); await page.waitForFunction(() => [...document.querySelectorAll("#model-proxy button")].some(b => /卸载内核|清理残留文件/.test(b.textContent || "") && !(b as HTMLButtonElement).disabled));
       for (const name of ["核实本机版本", "安装导入组件", "卸载导入组件", "修复固定兼容版本"]) assert.equal(await proxy.getByRole("button", { name, exact: true }).count(), 0);
@@ -36,6 +39,7 @@ try {
         await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
         for (const width of [320, 390, 1200]) {
           await page.setViewportSize({ width, height: 900 });
+          await assertComponentHeader(xray);
           assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `overflow: ${theme}/${width}`);
           const icons = await proxy.locator("svg use").evaluateAll(nodes => nodes.map(n => n.getAttribute("href")!).filter(href => !document.querySelector(href)));
           assert.deepEqual(icons, []);
@@ -43,6 +47,7 @@ try {
         }
       }
       const before = readProxyConfig(root);
+      await ensureComponentActions(xray);
       await remove.click();
       const confirm = proxy.getByRole("group", { name: "确认卸载 xray", exact: true });
       await confirm.waitFor(); assert.match(await confirm.innerText(), /及节点识别所需文件/);
@@ -54,7 +59,9 @@ try {
         assert.equal(await proxy.getByRole("alert").count(), 1, "one visible failure alert");
         assert.ok(existsSync(core)); assert.ok(existsSync(xrayImporterDirectory(root))); assert.deepEqual(readProxyConfig(root), before);
       } else {
-        await proxy.getByText("内核已卸载；相关线路已停止，订阅和供应商绑定保留。", { exact: true }).waitFor();
+        await remove.waitFor({ state: "detached" });
+        await proxy.locator('.maintenance-task[data-status="running"]').waitFor({ state: "detached" });
+        assert.equal(await proxy.locator('.maintenance-result[data-status="succeeded"]').count(), 0, "completed removal leaves no task panel");
         assert.equal(existsSync(core), false); assert.equal(existsSync(xrayImporterDirectory(root)), false);
         assert.equal(readProxyConfig(root).installations.xray, undefined);
       }

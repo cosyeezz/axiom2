@@ -17,7 +17,7 @@ async function settle(service: { snapshot(): { job?: { running: boolean } } }) {
   const deadline = Date.now() + 5000;
   while (service.snapshot().job?.running) { assert.ok(Date.now() < deadline); await turn(); }
 }
-for (const tool of ["rea", "opencli"] as const) test(`${tool} uninstall repairs a stopped parent and preserves unproven old versions`, async () => {
+for (const tool of ["rea", "opencli"] as const) test(`${tool} uninstall ignores a stopped parent and removes every managed version`, async () => {
   const root = fs.mkdtempSync(join(tmpdir(), "builtin-recovery-"));
   const selected = `v6.7.0-${randomUUID()}`, orphan = `v6.7.0-${randomUUID()}`;
   const paths = [selected, orphan].map(name => join(root, "integrations", tool, "versions", name));
@@ -30,31 +30,30 @@ for (const tool of ["rea", "opencli"] as const) test(`${tool} uninstall repairs 
   const service = tool === "rea" ? new ReaService(root, () => {}, { removal: async work => work() }) : new OpenCliService(root, () => {});
   try {
     const before = service.snapshot();
-    assert.ok(before.pendingOperation); assert.deepEqual(before.cleanupUnverified, [paths[1]]);
+    assert.equal(before.pendingOperation, undefined, "component standard: no persisted operation history");
     await service.command({ requestId: randomUUID(), op: `${tool}.uninstall`, params: { confirm: true, revision: before.revision, cleanupRevision: before.cleanup!.revision } });
     await settle(service);
     assert.equal(service.snapshot().job?.error, undefined); assert.equal(service.snapshot().pendingOperation, undefined);
-    assert.equal(fs.existsSync(paths[0]), false); assert.ok(fs.existsSync(paths[1])); assert.ok(fs.existsSync(engine));
+    assert.equal(fs.existsSync(paths[0]), false); assert.equal(fs.existsSync(paths[1]), false); assert.ok(fs.existsSync(engine));
     if (tool === "rea") assert.equal(readReaConfig(root).installation, undefined);
   } finally { await service.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test("global and scoped pending journals can be reconciled without dropping the cross-scope barrier", () => {
+test("stale global and scoped journals never block the next operation", () => {
   const root = fs.mkdtempSync(join(tmpdir(), "builtin-dual-pending-"));
   try {
     const global = beginBuiltinOperation(root, "rea"); global.finish(); global.close();
     const scoped = beginBuiltinOperation(root, "rea", undefined, "java"); scoped.close();
     const path = join(root, "integrations", ".maintenance", "rea", "current.json");
     const record = JSON.parse(fs.readFileSync(path, "utf8")); record.state = "active"; fs.writeFileSync(path, JSON.stringify(record));
-    assert.throws(() => beginBuiltinOperation(root, "rea"));
+    assert.equal(builtinPendingOperation(root, "rea"), undefined); assert.equal(builtinPendingOperation(root, "rea", "java"), undefined);
+    const next = beginBuiltinOperation(root, "rea"); next.finish(); next.close();
+    const engine = beginBuiltinOperation(root, "rea", undefined, "java"); engine.finish(); engine.close();
     reconcileBuiltinOperation(root, "rea", record.id);
-    assert.ok(builtinPendingOperation(root, "rea", "java"));
-    reconcileBuiltinOperation(root, "rea", builtinPendingOperation(root, "rea", "java"), "java");
-    assert.equal(builtinPendingOperation(root, "rea"), undefined);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-for (const tamper of [false, true]) test(`controlled recovery ${tamper ? "rejects changed owner identity without signalling" : "stops its TERM-resistant owned group"}`, { skip: process.platform !== "darwin", timeout: 15000 }, async () => {
+for (const tamper of [false, true]) test(`recovery discards a stale journal without signalling ${tamper ? "a changed owner identity" : "its old process"}`, { skip: process.platform !== "darwin", timeout: 15000 }, async () => {
   const root = fs.mkdtempSync(join(tmpdir(), "builtin-force-"));
   const operation = beginBuiltinOperation(root, "rea"), path = join(operation.directory, `.axiom-command-${randomUUID()}.json`);
   const journal = createProcessOwner(path); operation.register(path);
@@ -63,17 +62,12 @@ for (const tamper of [false, true]) test(`controlled recovery ${tamper ? "reject
   try {
     const message = Promise.race([once(owned.child, "message"), once(owned.child, "exit").then(() => { throw Error("fixture exited before ready"); })]); await owned.ready; await message;
     journal.revoke(); operation.close();
-    const id = builtinPendingOperation(root, "rea");
-    await assert.rejects(recoverBuiltinOperations(root, "rea"), { code: "stop-unconfirmed" });
-    assert.equal(owned.child.exitCode, null, "automatic recovery only verifies; force must be explicit");
-    assert.equal(owned.child.signalCode, null); assert.equal(builtinPendingOperation(root, "rea"), id);
-    if (tamper) {
-      const record = JSON.parse(fs.readFileSync(path, "utf8")); record.identity.started = "changed"; fs.writeFileSync(path, JSON.stringify(record));
-      await assert.rejects(reconcileBuiltinOperationStopping(root, "rea", id), { code: "stop-unconfirmed" });
-      assert.equal(owned.child.exitCode, null); assert.equal(owned.child.signalCode, null); assert.equal(builtinPendingOperation(root, "rea"), id);
-    } else {
-      await reconcileBuiltinOperationStopping(root, "rea", id);
-      assert.equal(builtinPendingOperation(root, "rea"), undefined); assert.equal(fs.existsSync(path), false);
-    }
+    const id = JSON.parse(fs.readFileSync(join(operation.directory, "current.json"), "utf8")).id;
+    if (tamper) { const record = JSON.parse(fs.readFileSync(path, "utf8")); record.identity.started = "changed"; fs.writeFileSync(path, JSON.stringify(record)); }
+    await recoverBuiltinOperations(root, "rea");
+    await reconcileBuiltinOperationStopping(root, "rea", id);
+    await turn();
+    assert.equal(owned.child.exitCode, null, "discarding history never signals a process"); assert.equal(owned.child.signalCode, null);
+    assert.equal(builtinPendingOperation(root, "rea"), undefined); assert.equal(fs.existsSync(path), false);
   } finally { operation.close(); await owned.close().catch(() => {}); fs.rmSync(root, { recursive: true, force: true }); }
 });

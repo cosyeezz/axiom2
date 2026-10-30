@@ -8,6 +8,9 @@ import { ModelService } from "./model-service.js";
 import { AppError, text } from "../shared/protocol.js";
 import type { AuthState } from "../shared/models.js";
 import { openAuthBrowser } from "./auth-browser.js";
+import { ModelAccountService } from "./model-accounts.js";
+import { readModelCredential } from "./model-account-storage.js";
+import { loginPromptDefault } from "./model-account-info.js";
 
 type Flow = {
   owner: object;
@@ -43,7 +46,7 @@ export class Logins {
     private changed: () => Promise<void>,
     private openBrowser = openAuthBrowser,
     private network = modelNetwork,
-    private admit?: () => void,
+    private accounts = new ModelAccountService(models, network),
   ) {}
   get(owner: object, id: string) {
     const flow = this.flows.get(id);
@@ -60,16 +63,16 @@ export class Logins {
     type: unknown,
     revision: unknown,
     proxy?: unknown,
+    account?: unknown,
   ) {
     if (this.models.authActive)
       throw new AppError("AUTH_BUSY", "已有认证流程，请先完成或取消");
     const providerId = text(provider, "供应商 ID", 160);
     if (type !== "api_key" && type !== "oauth")
       throw new AppError("INVALID_INPUT", "认证方式无效");
-    // A separate usage account shares native callback ports, never its credential store.
-    this.admit?.();
     // Set before awaiting so concurrent starts/saves cannot cross the login boundary.
     this.models.authActive = true;
+    let staged: ReturnType<ModelAccountService["prepare"]> | undefined;
     try {
       const {
         config,
@@ -89,10 +92,14 @@ export class Logins {
           : runtime.getProvider(providerId)?.auth.apiKey;
       if (!method?.login)
         throw new AppError("AUTH_UNSUPPORTED", "该供应商不支持所选认证方式");
+      // Snapshot only for visible preference defaults; no secret is sent to the page.
+      const previousCredential = readModelCredential(providerId, join(this.models.dir, "auth.json"));
+      if (account !== undefined) staged = this.accounts.prepare(providerId, account);
       if (proxy !== undefined) {
         if (type !== "oauth") throw new AppError("INVALID_INPUT", "仅 OAuth 登录支持在授权时选择代理。");
         await this.models.configureLoginProxy(providerId, proxy, current);
       }
+      if (staged) await this.accounts.configure(staged);
       if (this.disconnected.has(owner))
         throw new AppError("AUTH_CANCELLED", "连接已关闭，未启动认证");
       const id = randomUUID(),
@@ -145,10 +152,12 @@ export class Logins {
             },
           };
           flow.state.message = "请完成 pi 认证提示；输入仅发送到本地服务。";
+          const defaultValue = loginPromptDefault(providerId, p, previousCredential);
           flow.state.prompt = {
             id: promptId,
             type: p.type,
             message: p.message.slice(0, 1000),
+            ...(defaultValue ? { defaultValue } : {}),
             ...(p.type !== "select" && p.placeholder ? { placeholder: p.placeholder.slice(0, 1000) } : {}),
             ...(p.type === "select"
               ? {
@@ -167,23 +176,27 @@ export class Logins {
           flow.state.userCode = event.userCode.slice(0, 200);
         }
         // Only recognize a known native stage; arbitrary provider text may contain secrets.
-        if (providerId === "openai" && event.type === "progress" && event.message === "Exchanging authorization code for tokens...")
+        if ((providerId === "openai" || providerId === "openai-codex") && event.type === "progress" && event.message === "Exchanging authorization code for tokens...")
           exchangingTokens = true;
         flow.state.message = exchangingTokens
           ? "已收到授权回调，正在通过所选网络获取并保存凭据…"
           : "按 pi 认证提示完成登录；关闭或取消会终止当前流程。";
         send();
       };
-      const operation = this.network(this.models.root, this.models.dir, providerId, join(this.models.dir, "models.json"), "login", { type },
+      const loginDir = staged?.dir ?? this.models.dir;
+      const operation = this.network(this.models.root, loginDir, providerId, join(loginDir, "models.json"), "login", { type },
         { signal: controller.signal, prompt, notify })
         .then(async () => {
-          const persisted = await this.models.runtime();
-          if (!(await persisted.listCredentials()).some((c) => c.providerId === providerId && c.type === type))
-            throw new CredentialSynchronizationError(providerId, "login", undefined, { cause: Error("Credential not persisted") });
+          if (staged) await this.accounts.commit(staged, type, true);
+          else {
+            const persisted = await this.models.runtime();
+            if (!(await persisted.listCredentials()).some((c) => c.providerId === providerId && c.type === type))
+              throw new CredentialSynchronizationError(providerId, "login", undefined, { cause: Error("Credential not persisted") });
+          }
           flow.state.status = "completed";
-          flow.state.message = "pi 已保存认证；这不代表模型调用已验证。";
+          flow.state.message = staged ? "账号已独立保存；已有供应商的账号选择不变，新供应商首个账号可直接使用。" : "pi 已保存认证；这不代表模型调用已验证。";
         })
-        .catch((error) => {
+        .catch(async (error) => {
           flow.state.status = "failed";
           flow.state.message =
             error instanceof CredentialSynchronizationError
@@ -195,9 +208,17 @@ export class Logins {
                   : exchangingTokens
                     ? "已收到授权回调，但获取或保存凭据未完成。请检查所选代理能否连接 OpenAI 认证服务，再重新读取认证状态。"
                     : "认证未完成。若浏览器已授权，请检查此供应商的代理能否连接认证服务；若本机回调页无法打开，请重新登录并按提示提交完整回调地址。";
+          if (staged) {
+            try {
+              if (await this.accounts.recover(staged, type))
+                flow.state.message = "认证已写入并保存为独立账号，但登录流程未正常结束；请重新读取账号列表，勿重复添加。当前账号未改变。";
+            } catch { flow.state.message += " 已落盘的账号目录将保留以便恢复。"; }
+          }
         })
         .finally(async () => {
           clearTimeout(timeout);
+          try { if (staged) this.accounts.discard(staged); }
+          catch { flow.state.message += " 暂存账号目录清理失败，已保留以便恢复。"; }
           flow.pending = undefined;
           flow.state.prompt = undefined;
           flow.state.url = undefined;
@@ -213,6 +234,7 @@ export class Logins {
       void operation.finally(() => this.running.delete(operation));
       return { id, status: "accepted" };
     } catch (error) {
+      try { if (staged) this.accounts.discard(staged); } catch { /* Keep original failure; never leave authentication locked. */ }
       this.models.authActive = false;
       throw error;
     }

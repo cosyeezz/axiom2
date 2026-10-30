@@ -77,11 +77,25 @@ test("worker steering: original drafts, request dedupe, scope isolation, consume
     assert.equal(app.agents.info(scope).queue?.length, 1);
     await assert.rejects(call("prompt", { text: "conflict" }, scope, requestId), { code: "REQUEST_CONFLICT" });
     await assert.rejects(call("agent.recall", {}, { ...scope, workspaceId: "wrong" }));
+    const keepId = randomUUID();
+    await call("prompt", params, scope, keepId); // Identical text must not identify the message.
+    const ids = () => app.agents.info(scope).queue!.map((item) => item.id);
+    assert.deepEqual(ids(), [requestId, keepId]);
+    for (const invalid of [{ inputId: "" }, { inputId: 1 }, { inputId: requestId, extra: true }])
+      await assert.rejects(call("agent.recall", invalid), { code: "INVALID_INPUT" });
+    assert.deepEqual(await call("agent.recall", { inputId: "missing" }), { drafts: [] });
+    assert.deepEqual(ids(), [requestId, keepId]);
     const recallId = randomUUID();
-    const recalled = await call("agent.recall", {}, scope, recallId) as any;
+    const recalled = await call("agent.recall", { inputId: requestId }, scope, recallId) as any;
     assert.equal(recalled.drafts[0].text, params.text);
     assert.deepEqual(recalled.drafts[0].attachments, attachments);
-    assert.deepEqual(await call("agent.recall", {}, scope, recallId), recalled);
+    assert.deepEqual(recalled.ids, [requestId]);
+    assert.deepEqual(ids(), [keepId], "single recall preserves the other same-text input");
+    assert.deepEqual(await call("agent.recall", { inputId: requestId }, scope, recallId), recalled);
+    await assert.rejects(call("agent.recall", { inputId: keepId }, scope, recallId), { code: "REQUEST_CONFLICT" });
+    assert.deepEqual(await call("agent.recall", { inputId: requestId }), { drafts: [] });
+    assert.deepEqual(ids(), [keepId], "a stale input ID never falls back to recalling all");
+    assert.deepEqual((await call("agent.recall") as any).ids, [keepId], "empty params still recall all");
     assert.equal(app.agents.info(scope).queue?.length, 0);
     await call("prompt", { text: "consume this" });
     assert.ok(!app.agents.messages(scope).some((m) => m?.text.includes("consume this")), "accepted steering must not enter transcript before consumption");
@@ -91,6 +105,7 @@ test("worker steering: original drafts, request dedupe, scope isolation, consume
     assert.doesNotMatch(JSON.stringify(bodies[1].messages), /retain exact text/);
     await wait(() => app.agents.info(scope).queue?.length === 0, "consumed queue removed");
     await wait(() => app.agents.messages(scope).filter((m) => m?.role === "user" && m.text === "consume this").length === 1, "consumed steering appears exactly once in transcript");
+    assert.deepEqual(await call("agent.recall", { inputId: requestId }), { drafts: [] });
     assert.deepEqual(await call("agent.recall"), { drafts: [] });
     releases[1]();
     await wait(() => !running(app.agents.info(scope).run), "settled");
@@ -111,9 +126,18 @@ test("worker steering: original drafts, request dedupe, scope isolation, consume
     await wait(() => app.agents.info(child).queue?.length === 1, "child native queue projection");
     const childRecall = await call("agent.recall", {}, child) as any;
     assert.equal(childRecall.drafts[0].text, "queued child draft");
-    await call("prompt", { text: "live child draft", attachments }, child);
-    await wait(() => app.agents.info(child).queue?.length === 1, "running child draft shown");
-    assert.equal((await call("agent.recall", {}, child) as any).drafts[0].text, "live child draft");
+    const liveChild = await call("prompt", { text: "live child draft", attachments }, child) as any;
+    const otherChild = await call("prompt", { text: "keep child draft" }, child) as any;
+    await wait(() => app.agents.info(child).queue?.length === 2, "running child drafts shown");
+    await assert.rejects(call("agent.recall", { inputId: "" }, child), { code: "INVALID_INPUT" });
+    await assert.rejects(call("agent.recall", { inputId: liveChild.inputId, extra: true }, child), { code: "INVALID_INPUT" });
+    assert.deepEqual(await call("agent.recall", { inputId: requestId }, child), { drafts: [] }, "other-scope ID recalls nothing");
+    const singleChild = await call("agent.recall", { inputId: liveChild.inputId }, child) as any;
+    assert.equal(singleChild.drafts[0].text, "live child draft");
+    assert.deepEqual(singleChild.drafts[0].attachments, attachments);
+    assert.deepEqual(singleChild.ids, [liveChild.inputId]);
+    assert.deepEqual(app.agents.info(child).queue?.map((input) => input.id), [otherChild.inputId]);
+    assert.deepEqual((await call("agent.recall", {}, child) as any).ids, [otherChild.inputId]);
     releases[3]();
     await wait(() => !running(app.agents.info(child).run), "child settled without recalled work");
     assert.equal(bodies.length, 4);

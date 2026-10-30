@@ -7,6 +7,8 @@ import { createAgentSession, DefaultPackageManager, SessionManager, SettingsMana
 import { previewEnvironment, runtimeEnvironment } from "../src/server/session-environment.js";
 import { environmentResourceOptions } from "../src/server/environment-resources.js";
 import { installAxiomPrompt } from "../src/server/axiom-prompt.js";
+import { installSessionRetryPolicy } from "../src/server/session-retry-policy.js";
+import { sessionRetryDelaysMs } from "../src/shared/retry-policy.js";
 import { memoryInstruction } from "../src/shared/memory.js";
 import { createInstalledResourceLoader } from "../src/server/installed-resource-loader.js";
 import { discoverCapabilities, capabilityRuntime } from "../src/server/capability-resources.js";
@@ -63,6 +65,9 @@ test("session-free preview uses native prompt generation and identical execution
       const preview = await previewEnvironment(input);
       assert.equal(existsSync(join(f.pi, "sessions")), false, "preview never creates transcript storage");
       assert.equal(preview.source, "preview");
+      assert.equal(preview.retry?.maxRetries, 9);
+      assert.deepEqual(preview.retry?.delaysMs, [...sessionRetryDelaysMs]);
+      assert.equal(preview.retry?.maxAgentDelayMs, 1_800_000);
       assert.match(preview.systemPrompt!, /LOCAL_APPEND_CONTEXT/);
       assert.match(preview.systemPrompt!, /LOCAL_PROJECT_CONTEXT/);
       assert.ok(preview.systemPrompt!.includes(memoryInstruction(input.memoryPath)), "preview includes the entire current memory instruction");
@@ -82,6 +87,7 @@ test("session-free preview uses native prompt generation and identical execution
         sessionManager: SessionManager.inMemory(f.cwd), customTools: [...taskTools(noExecute), memoryQueryTool(noExecute)],
         ...(process.platform === "win32" && !settingsManager.getSettings().defaultTools ? { tools: ["-bash", "+powershell"] } : {}) });
       try {
+        installSessionRetryPolicy(session);
         installAxiomPrompt(session);
         session.setActiveToolsByName([...new Set([...session.getActiveToolNames(), ...taskTools(noExecute).map(tool => tool.name), "memory_query", "memory_detail"])]);
         ensureTopicSnapshot(session.sessionManager, f.memoryTopics);
@@ -91,6 +97,7 @@ test("session-free preview uses native prompt generation and identical execution
         const ordered = (value: SessionEnvironment) => value.toolDefinitions!.map(tool => JSON.parse(JSON.stringify(tool))).sort((a, b) => a.name.localeCompare(b.name));
         assert.deepEqual(ordered(preview), ordered(actual), "schema and descriptions match real SDK tools");
         assert.deepEqual(preview.skillDetails, actual.skillDetails);
+        assert.deepEqual(preview.retry, actual.retry, "preview and execution expose the same session retry policy");
         assert.equal(actual.memory?.topics, f.memoryTopics.text);
         assert.equal(session.messages.length, 0, "no model request or user message used for comparison");
       } finally { session.dispose(); }

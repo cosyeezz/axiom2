@@ -145,7 +145,7 @@ test("cached Ghidra failures preserve the original package and clean unpublished
   }
 });
 
-test("Ghidra cached installation survives restart without a token; validation, version drift and cancellation cannot publish it", mac, async () => {
+test("Ghidra cached installation survives restart without a token or server confirmation; validation, version drift and cancellation cannot publish it", mac, async () => {
   for (const mode of ["success", "verify", "version", "cancel"]) {
     const root = temporary(), fixture = await ghidraFixture(root, mode), before = readReaConfig(root); let preparations = 0;
     const dependencies: ReaDependencies = {
@@ -159,9 +159,7 @@ test("Ghidra cached installation survives restart without a token; validation, v
       const item = service.snapshot().engines!.find(item => item.id === "ghidra")!;
       assert.equal(item.available, undefined); assert.ok(item.download);
       const params = { engine: "ghidra", revision: item.revision, version: fixture.release.version, downloaded: true, confirm: true };
-      await assert.rejects(call(service, "rea.engine-install", { ...params, confirm: false }), /确认/);
-      await assert.rejects(call(service, "rea.engine-install", { ...params, version: "12.1.0" }), /确认/);
-      await assert.rejects(call(service, "rea.engine-install", { ...params, revision: "stale" }), /变化/);
+      // Component standard: confirmation is a client dialog; the server does not re-check revision or version.
       await call(service, "rea.engine-install", params);
       if (mode === "cancel") {
         const deadline = Date.now() + 5000;
@@ -170,17 +168,21 @@ test("Ghidra cached installation survives restart without a token; validation, v
       }
       const state = await settle(service), saved = readReaConfig(root), job = state.job!;
       assert.deepEqual(saved.downloads, before.downloads); assert.deepEqual(readFileSync(fixture.cached.path), fixture.data);
-      assert.equal(preparations, mode === "version" ? 0 : 1);
+      assert.equal(preparations, mode === "version" || mode === "verify" ? 2 : 1, "a failed install is force-cleaned and retried once");
       if (mode === "success") {
         assert.equal(job.error, undefined); assert.equal(job.message, "组件已安装。"); assert.equal(saved.managedEngines!.ghidra!.length, 1);
         assert.ok(existsSync(saved.engines!.ghidra!));
         const latest = state.engines!.find(item => item.id === "ghidra")!;
-        await call(service, "rea.engine-install", { ...params, revision: latest.revision }); await settle(service);
-        assert.equal(preparations, 1, "already ready version is checked and reused");
+        await call(service, "rea.engine-install", { ...params, revision: latest.revision }); const reinstalled = await settle(service);
+        assert.equal(reinstalled.job?.error, undefined);
+        assert.equal(preparations, 2, "explicit cached installation prepares a fresh tree even at the same version");
+        assert.notEqual(readReaConfig(root).engines?.ghidra, saved.engines?.ghidra);
+        assert.deepEqual(readReaConfig(root).downloads, before.downloads);
+        assert.deepEqual(readFileSync(fixture.cached.path), fixture.data);
       } else {
         assert.equal(saved.engines?.ghidra, undefined); assert.equal(saved.managedEngines?.ghidra, undefined);
         const engines = join(root, "integrations", "rea", "engines"); assert.deepEqual(existsSync(engines) ? readdirSync(engines) : [], []);
-        if (mode === "cancel") { assert.equal(job.error, undefined); assert.match(job.message, /已取消/); } else assert.match(job.error!, mode === "version" ? /推荐版本不同/ : /检测未通过/);
+        if (mode === "cancel") { assert.equal(job.error, undefined); assert.match(job.message, /已取消/); } else assert.match(job.error!, mode === "version" ? /安装包缺失或校验失败/ : /检测未通过/);
       }
     } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
   }
@@ -239,8 +241,8 @@ test("Hopper service confirms the cached version after restart and reports syste
       assert.equal(state.job?.kind, "engine-open-installer"); assert.equal(state.job?.error, undefined);
       assert.match(state.job!.message, mode === "success" ? /已打开.*完成安装后检查更新/ : /已取消.*可能已打开/);
       assert.deepEqual(readReaConfig(root), before); assert.deepEqual(readFileSync(fixture.cached.path), fixture.data);
-      const tasks = JSON.parse(readFileSync(join(root, "maintenance", "tasks.json"), "utf8")).tasks;
-      assert.equal(tasks.at(-1).resource, "rea:hopper"); assert.equal(tasks.at(-1).status, mode === "success" ? "succeeded" : "cancelled");
+      const history = join(root, "maintenance", "tasks.json");
+      if (existsSync(history)) assert.deepEqual(JSON.parse(readFileSync(history, "utf8")).tasks, [], "no task history is persisted");
       atomicReaJson(reaConfigPath(root), { ...before, installation: { ...before.installation!, version: "6.9.0" } });
       await assert.rejects(call(service, "rea.engine-open-installer", params), /尚未适配/);
     } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }

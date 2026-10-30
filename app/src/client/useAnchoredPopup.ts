@@ -54,7 +54,12 @@ export function useAnchoredPopup(anchor: HTMLElement | null, {
     };
     const disposePopover = node.hasAttribute("popover") ? openPopover(node, { source: anchor }) : undefined;
     position();
-    const observer = new ResizeObserver(position);
+    // Positioning changes the measured panel. Defer observer-driven writes to
+    // the next frame instead of triggering another resize delivery in this one.
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      if (!frame) frame = requestAnimationFrame(() => { frame = 0; position(); });
+    });
     observer.observe(anchor);
     observer.observe(node);
     const composer = anchor.closest(".composer-area");
@@ -65,6 +70,7 @@ export function useAnchoredPopup(anchor: HTMLElement | null, {
     window.visualViewport?.addEventListener("scroll", position);
     return () => {
       observer.disconnect();
+      cancelAnimationFrame(frame);
       window.removeEventListener("resize", position);
       window.removeEventListener("scroll", position, true);
       window.visualViewport?.removeEventListener("resize", position);

@@ -1,0 +1,56 @@
+Additional Axiom component maintenance glyphs — user-confirmed selections
+
+Modification notice: The six SVGs below retain their original geometry, proportions and currentColor paint. Axiom fitted square viewBoxes to the visible painted bounds and added a stroke="none" isolation group. Measurement evidence: artifacts/component-maintenance-implementation/icon-measure/measurements.json. No paths were redrawn.
+
+P-02 / cleanup-package — lucide:package-x
+Source: https://icon-sets.iconify.design/lucide/package-x/
+Original SVG SHA-256: 931639771fc3db2bd26ca4d92eb18e2c4c8e70da4c70cc9c64760a322d56b517
+K-01 / install-cached — lucide:package-check
+Source: https://icon-sets.iconify.design/lucide/package-check/
+Original SVG SHA-256: f8d788e7546257a5e7c8ae46b57a9cb58c989063f509c1dad8af88719900995f
+Lucide contributors, ISC; the full Lucide copyright and permission notices are reproduced in the accompanying component-glyphs-LICENSE.txt and combined with this notice in the distributed bundle.
+
+D-23 / download-package — hugeicons:package-receive-01
+Source: https://icon-sets.iconify.design/hugeicons/package-receive-01/
+Original SVG SHA-256: f106beb2e49a2338e7bed3a8b926c449901c6ab622f1df7f3e6fe36fbee90b73
+Hugeicons, MIT. Copyright (c) 2025 Hugeicons.
+
+O-26 / open-installer — ri:share-box-line
+Source: https://icon-sets.iconify.design/ri/share-box-line/
+Original SVG SHA-256: d114a4371fada79f5625f7cc223764e30f65312c45b659f1fa9da79a32f0adb2
+V-02 / switch-version — ri:swap-box-line
+Source: https://icon-sets.iconify.design/ri/swap-box-line/
+Original SVG SHA-256: 62cf559f8eb383ae3b327fd97f68e00799bda9dc0c31fe5b39bdc67c267ee71b
+Remix Icon by Remix Design, Apache License 2.0.
+Collection and license snapshot source: https://github.com/cyberalien/RemixIcon
+https://github.com/cyberalien/RemixIcon/blob/master/License
+The full Apache License 2.0 is reproduced in the accompanying component-glyphs-LICENSE.txt and combined with this notice in the distributed bundle. The exact local collection snapshot is also preserved in docs/component-icon-options-licenses/ri.txt.
+
+F-46 / repair — heroicons:wrench-screwdriver
+Source: https://icon-sets.iconify.design/heroicons/wrench-screwdriver/
+Original SVG SHA-256: f096e9c9c5ba070d27b649b170cd2ce8716658fc485e0a0f8a37c41f88a84865
+Heroicons, collection author Refactoring UI Inc.; MIT license copyright below.
+Copyright (c) Tailwind Labs, Inc.
+
+MIT License — Hugeicons and Heroicons
+
+Copyright (c) 2025 Hugeicons
+Copyright (c) Tailwind Labs, Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -14,7 +14,9 @@ import { CacheUsageIcon, CostUsageIcon } from "./UsageIcons.js";
 import { costLevel, costLevelLabels } from "./cost-level.js";
 import { useCostReport } from "../useCostReport.js";
 import { ContextMemoryIcon, cacheRatio, validRatio } from "../DataIcons.js";
+import { contextSourceLabel } from "../../shared/context-usage.js";
 import { SessionReload } from "./SessionReload.js";
+import { SessionAccountUsage } from "./SessionAccountUsage.js";
 import { MetricDetail } from "./MetricDetail.js";
 import "../styles/data-icons.css";
 export type ContextMemoryInfo = { percent: number | null; label: string; detail: ReactNode };
@@ -43,11 +45,11 @@ export function Usage({ scope, tools }: { scope?: Scope; tools?: UsageTools }) {
   const level = !completeCost && measuredLevel === 0 ? null : measuredLevel;
   const costLabel = `${label}累计预计费用（已记录价格／公开价估算）：${sessionCosts ? costAmount(sessionCosts) : costs.loading && costs.connected ? "读取中…" : "未知"}；${durationTooltip(info)}：${formatDuration(elapsed)}；${level == null ? "等级待统计" : `${completeCost ? "" : "至少"}${costLevelLabels[level]}`}（费用美元或运行分钟先达阈值）${!completeCost ? "；费用数据不完整，仅按已知下限分档" : ""}${costs.error ? "；费用读取失败，已显示金额可能尚未更新" : !costs.connected ? "；连接已断开，费用可能尚未更新" : ""}`;
   const percent = validRatio(context?.tokens, context?.window), cache = cacheRatio(request);
-  const estimate = context?.estimated ? "压缩后按当前消息估算，待模型用量校准" : "pi 估算";
+  const estimate = contextSourceLabel(context?.source ?? (context?.estimated ? "message-estimate" : undefined));
   const contextLabel = percent == null ? "上下文占用率未知" : `上下文占用率 ${Math.round(percent)}%（${estimate}）`;
   const cacheLabel = `最近一次请求缓存命中率 ${cache == null ? "未知" : `${Math.round(cache)}%`}`;
   const number = (n: number | null | undefined) => n != null && Number.isFinite(n) && n >= 0 ? n.toLocaleString("zh-CN") : "未知";
-  const contextDetail = <><div className="metric-summary"><span>上下文占用</span><strong>{percent == null ? "—" : `${percent.toFixed(1)}%`}</strong></div><dl className="metric-facts"><dt>已用 / 容量</dt><dd>{number(context?.tokens)} / {number(context?.window)}</dd><dt>当前会话累计 Token</dt><dd>{number(usage?.total)}</dd></dl><p className="metric-note">当前{label} · {estimate}。上下文占用与累计用量分别统计。</p>{percent != null && percent > 100 && <p className="metric-note" role="status">已超出上下文容量 {number(context!.tokens! - context!.window)} tokens；图标最多显示满圈。</p>}</>;
+  const contextDetail = <><div className="metric-summary"><span>上下文占用</span><strong>{percent == null ? "—" : `${percent.toFixed(1)}%`}</strong></div><dl className="metric-facts"><dt>已用 / 容量</dt><dd>{number(context?.tokens)} / {number(context?.window)}</dd><dt>当前会话累计 Token</dt><dd>{number(usage?.total)}</dd></dl><p className="metric-note">当前{label} · {estimate}。当前上下文随会话更新，与压缩时保存的快照可能不同；上下文占用与累计用量分别统计。</p>{percent != null && percent > 100 && <p className="metric-note" role="status">已超出上下文容量 {number(context!.tokens! - context!.window)} tokens；图标最多显示满圈。</p>}</>;
   const inputTotal = cache == null ? null : request!.input + request!.cacheRead + request!.cacheWrite;
   const contextInfo: ContextMemoryInfo = { percent, label: contextLabel, detail: contextDetail };
   const metric = (key: Metric, title: string) => ({ type: "button" as const, "aria-label": `查看${title}`, "aria-haspopup": "dialog" as const, "aria-expanded": detail?.key === key, onClick: (event: React.MouseEvent<HTMLButtonElement>) => { setCostWindow(null); setDetail(detail?.key === key ? null : { key, scope: scopeKey, trigger: event.currentTarget }); } });
@@ -63,6 +65,7 @@ export function Usage({ scope, tools }: { scope?: Scope; tools?: UsageTools }) {
         onClick={event => { setDetail(null); setCostWindow(costWindow || !scope ? null : { scope, trigger: event.currentTarget }); }} data-od-id="estimated-cost" data-tooltip={`${costLabel}；点击查看费用与耗时明细`}>
         <CostUsageIcon level={level} />
       </button>
+      <SessionAccountUsage key={`quota:${scopeKey}`} scope={scope} />
       <SessionReload key={scopeKey} scope={scope} />
       {costWindow && costWindow.scope.workspaceId === scope?.workspaceId && costWindow.scope.sessionId === scope?.sessionId && <CostsPopover scope={costWindow.scope} costs={costs} trigger={costWindow.trigger} onClose={() => setCostWindow(null)} sessionSummary={totals => <section className="cost-session-duration" aria-label="当前会话用量"><dl className="cost-session-facts"><div><dt>当前{label}预计费用</dt><dd>{totals ? costAmount(totals) : "读取中…"}</dd></div><div><dt>当前{label}调用 Token</dt><dd>{totals ? costTokens(totals) : "读取中…"}</dd></div><div><dt>运行耗时</dt><dd data-od-id="run-duration" data-tooltip={durationTooltip(info)}>{formatDuration(elapsed)}</dd></div></dl><p>{durationTooltip(info)}；不叠加子会话耗时。</p></section>} />}
       {detail && detail.scope === scopeKey && <MetricDetail trigger={detail.trigger} className={detail.key === "cache" ? "cache-detail" : ""} title={{ context: "上下文占用", cache: "缓存命中率" }[detail.key]} subtitle={`当前${label} · ${detail.key === "cache" ? "最近一次请求" : "实时容量"}`} onClose={() => setDetail(null)}>

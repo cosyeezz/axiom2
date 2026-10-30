@@ -1,6 +1,6 @@
 import { useRef, useState, type RefObject } from "react";
-import { AppError, type Scope, type Session } from "../../shared/protocol.js";
-import { command, scopeSnapshot } from "../transport.js";
+import { AppError, scopeKey, type Scope, type Session } from "../../shared/protocol.js";
+import { command, scopeAuthority } from "../transport.js";
 import { getDraft, updateDraft } from "../drafts.js";
 import { paintFeedback } from "../paint-feedback.js";
 
@@ -13,7 +13,7 @@ function readText(id: string) { try { return sessionStorage.getItem(draftKey(id)
 export function useSessionCreation({ view, navigation, select, onError }: {
   view: Scope | null;
   navigation: RefObject<number>;
-  select: (scope: Scope) => void;
+  select: (scope: Scope, isCurrent: () => boolean) => void;
   onError: (message: string) => void;
 }) {
   const requests = useRef(new Map<string, Creation>());
@@ -31,7 +31,7 @@ export function useSessionCreation({ view, navigation, select, onError }: {
     requests.current.delete(request.workspaceId);
     if (navigation.current === request.startedAt) {
       const focus = request.preview && document.activeElement?.id === "prompt";
-      select({ workspaceId: session.workspaceId, sessionId: session.id });
+      select({ workspaceId: session.workspaceId, sessionId: session.id }, () => navigation.current === request.startedAt);
       if (focus) requestAnimationFrame(() => document.getElementById("prompt")?.focus({ preventScroll: true }));
     }
     refresh();
@@ -41,15 +41,17 @@ export function useSessionCreation({ view, navigation, select, onError }: {
     if (existing) {
       // Reopen the same preparation after navigating away (or an uncertain
       // preview), but never submit a duplicate write or remount pristine reuse.
-      if (existing.startedAt !== navigation.current || existing.state === "uncertain") { existing.startedAt = navigation.current; existing.preview = true; refresh(); }
+      if (existing.startedAt !== navigation.current || existing.state === "uncertain" && !existing.preview) {
+        existing.startedAt = ++navigation.current; existing.preview = true; refresh();
+      }
       return;
     }
     const session = view?.workspaceId === workspaceId && view.sessionId
-      ? scopeSnapshot<Session[]>(`sessions:${workspaceId}`)?.find(s => s.id === view.sessionId) ?? scopeSnapshot<Session>(`session:${workspaceId}:${view.sessionId}`) : undefined;
+      ? scopeAuthority<Session | null>(scopeKey(view)) : undefined;
     // Clicking New on the current pristine conversation must preserve its mounted
     // composer, attachments and draft while the server confirms reuseEmpty.
-    const reuseCurrent = session?.title === "新对话" && session.messageCount === 0 && !session.runId && !session.activeTasks;
-    const request: Creation = { workspaceId, requestId: crypto.randomUUID(), startedAt: navigation.current, preview: !reuseCurrent, state: "pending", text: readText(workspaceId) };
+    const reuseCurrent = session?.title === "新对话" && session.messageCount === 0 && !session.runId && !session.activeTasks && !session.activeTaskCount;
+    const request: Creation = { workspaceId, requestId: crypto.randomUUID(), startedAt: ++navigation.current, preview: !reuseCurrent, state: "pending", text: readText(workspaceId) };
     requests.current.set(workspaceId, request); refresh(); onError("");
     try {
       await paintFeedback();

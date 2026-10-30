@@ -84,12 +84,12 @@ test("maintenance lease and startup reservation still exclude offline preview", 
     assert.throws(f.get, /启动或维护/); assert.equal(startup.prepare("SELECT token FROM startup").get()?.token, "a".repeat(64));
   } finally { lease.close(); startup.close(); f.cleanup(); }
 });
-test("preview does not repair interrupted jobs", () => {
+test("preview ignores stale jobs and leaves files untouched", () => {
   const f = fixture();
   try {
     atomicRtkJson(join(f.base, "job.json"), { id: randomUUID(), kind: "uninstall", running: true, message: "interrupted" });
     const before = tree(f.base), state = f.get();
-    assert.equal(state.job?.running, false); assert.match(state.job!.error!, /中断/); assert.deepEqual(tree(f.base), before);
+    assert.equal(state.job, undefined, "component standard: stale jobs are not shown"); assert.deepEqual(tree(f.base), before);
   } finally { f.cleanup(); }
 });
 for (const kind of ["hardlink", "symlink"]) test(`offline preview rejects ${kind} config without changing its target`, t => {

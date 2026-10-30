@@ -8,6 +8,8 @@ import { Store } from "../src/server/storage.js";
 import { DocumentFiles, decodeFileText } from "../src/server/document-files.js";
 import { hasFileLink, localFileLink, type FilePreview } from "../src/shared/file-preview.js";
 import { htmlResourceLinks, htmlResourceTags } from "../src/shared/html-preview.js";
+import { textRevision } from "../src/server/file-edit.js";
+import { fixtureZip } from "./preview-fixtures.js";
 import type { ChatMessage } from "../src/shared/agent.js";
 import type { Session, Workspace } from "../src/shared/protocol.js";
 
@@ -35,7 +37,7 @@ test("file decoding handles UTF8/BOM/UTF16 and Chinese legacy encoding, rejects 
   assert.equal(decodeFileText(Buffer.from([0xd6,0xd0,0xce,0xc4]))?.text, "中文");
   assert.equal(decodeFileText(Buffer.from([0,1,2,3,4])), null);
 });
-test("document preview is tied to actual assistant link and session, bounded, read-only, with scoped reveal", async () => {
+test("document preview is tied to actual assistant link and session, with scoped reveal", async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-document-")), project = join(root, "project"); mkdirSync(project);
   const store = new Store(join(root, "data"));
   const workspace = store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: project, authorized: true } }) as Workspace;
@@ -63,7 +65,7 @@ test("document preview is tied to actual assistant link and session, bounded, re
     for (const [name, content, expected] of [
       ["code.ts", "const greeting = '你好';", "code"], ["empty.txt", "", "text"], ["safe.html", "<script>alert(1)</script>", "code"],
       ["archive.zip", "PK123", "unsupported"], ["raw.bin", Buffer.from([0,1,2]), "unsupported"],
-      ["huge.txt", Buffer.alloc(1024 * 1024 + 1, 65), "unsupported"], ["fake.png", "not image", "unsupported"],
+      ["huge.txt", Buffer.alloc(1024 * 1024 + 1, 65), "text"], ["fake.png", "not image", "unsupported"],
       ["real.pdf", "%PDF-1.7\n", "pdf"],
     ] as const) {
       writeFileSync(join(project, name), content); link(name); assert.equal((await call(name) as FilePreview).kind, expected);
@@ -78,6 +80,44 @@ test("document preview is tied to actual assistant link and session, bounded, re
     await assert.rejects(call("hardlink.md"), { code: "FILE_PREVIEW_FORBIDDEN" });
     assert.equal(store.db.prepare("SELECT count(*) AS n FROM runs").get()!.n, 0);
     assert.equal(store.db.prepare("SELECT count(*) AS n FROM external_requests").get()!.n, 0);
+  } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("large documents preview completely without a file-size gate; editing limits remain independent", async () => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-large-preview-"));
+  const store = new Store(join(root, "data"));
+  const workspace = store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: root, authorized: true } }) as Workspace;
+  const session = store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
+  const scope = { workspaceId: workspace.id, sessionId: session.id };
+  let message: ChatMessage = { id: "large", role: "assistant", text: "" };
+  const files = new DocumentFiles(store, () => message);
+  const read = async (name: string, content: string | Buffer) => {
+    writeFileSync(join(root, name), content);
+    message = { ...message, text: `[文件](${name})` };
+    return await files.command({ requestId: randomUUID(), ...scope, op: "files.document", params: { messageId: message.id, href: name } }) as FilePreview;
+  };
+  try {
+    const text = "中文大文件正文\n".repeat(80000) + "完整结尾";
+    assert.ok(Buffer.byteLength(text) > 1024 * 1024);
+    for (const [name, kind] of [["large.txt", "text"], ["large.md", "markdown"], ["large.ts", "code"], ["large.html", "code"]] as const) {
+      const file = await read(name, text);
+      assert.equal(file.kind, kind); assert.equal(file.text, text);
+      assert.equal(file.size, Buffer.byteLength(text)); assert.equal(file.revision, textRevision(Buffer.from(text)));
+      assert.equal(file.editable, false); assert.match(file.editReason!, /1 MiB 编辑上限/);
+      assert.equal(file.reason, undefined);
+    }
+    assert.equal((await read("boundary.txt", "x".repeat(1024 * 1024))).editable, true);
+    assert.equal((await read("boundary.txt", "x".repeat(1024 * 1024 + 1))).editable, false);
+    const pdf = Buffer.alloc(8 * 1024 * 1024 + 1, 32); pdf.write("%PDF-1.7\n");
+    const media = await read("large.pdf", pdf);
+    assert.equal(media.kind, "pdf"); assert.deepEqual(Buffer.from(media.data!, "base64"), pdf);
+    const archive = fixtureZip({ "large.txt": Buffer.alloc(32 * 1024 * 1024 + 1, 65) });
+    const directory = await read("large.zip", archive);
+    assert.equal(directory.kind, "archive"); assert.equal(directory.entries?.[0]?.name, "large.txt");
+    const member = await files.command({ requestId: randomUUID(), ...scope, op: "files.document", params: {
+      messageId: message.id, href: "large.zip", entry: "large.txt", archiveRevision: directory.revision,
+    } }) as FilePreview;
+    assert.equal(member.kind, "unsupported"); assert.match(member.reason!, /8 MiB/);
   } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
 });
 

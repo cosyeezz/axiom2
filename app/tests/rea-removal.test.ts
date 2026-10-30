@@ -98,18 +98,16 @@ for (const replaced of [false, true]) test(`global engine removal ${replaced ? "
   } finally { removal.close(); f.cleanup(); }
 });
 
-test("REA uninstall command requires confirmation and runs under the removal barrier", async () => {
+test("REA uninstall runs without server-side confirmation or revision and keeps engines", async () => {
   const f = fixture(); let called = false;
   const s = new ReaService(f.root, () => {}, { removal: async work => { called = true; return work(); } });
   const command = (params: Record<string, unknown>) => s.command({ op: "rea.uninstall", requestId: randomUUID(), params });
   try {
-    await assert.rejects(command({ confirm: true, revision: "stale" }), { code: "CONFIRM_REQUIRED" });
-    await assert.rejects(command({ revision: f.config.revision }), { code: "CONFIRM_REQUIRED" });
-    assert.equal(called, false);
-    await command({ confirm: true, revision: f.config.revision });
+    // Component standard: confirmation happens in the client dialog only.
+    await command({ revision: "stale" });
     const deadline = Date.now() + 5000;
     while (s.snapshot().job?.running) { assert.ok(Date.now() < deadline); await new Promise<void>(done => setImmediate(done)); }
     assert.equal(called, true); assert.equal(s.snapshot().job?.error, undefined); assert.equal(s.snapshot().version, undefined);
-    assert.ok(fs.existsSync(f.path));
+    assert.equal(fs.existsSync(f.program), false); assert.ok(fs.existsSync(f.path));
   } finally { await s.close(); f.cleanup(); }
 });

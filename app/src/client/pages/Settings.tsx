@@ -51,6 +51,10 @@ export default function Settings() {
               </span>
               <Icon name="chevron-right" />
             </a>
+            <a className="log-row module-row" href="/model-accounts.html">
+              <div><h3>多账号管理</h3><p>管理同一供应商的多个账号，快速切换并查看官方额度；单账号在模型服务中管理</p></div>
+              <span className="meta">账号管理</span><Icon name="chevron-right" />
+            </a>
             <a className="log-row module-row" href="/model-usage.html">
               <div><h3>模型用量与统计</h3><p>本地调用用量、预计费用与独立账号的上游额度查询</p></div>
               <span className="meta">统计与用量授权</span><Icon name="chevron-right" />

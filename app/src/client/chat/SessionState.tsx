@@ -5,6 +5,7 @@ import { command, useConnectionState, useScope } from "../transport.js";
 import { agentScope, emptyAgent, runLabels, type SessionEnvironment } from "../../shared/agent.js";
 import { capabilitiesScope, capabilityPreferencesScope, type CapabilityState } from "../../shared/capabilities.js";
 import type { Scope } from "../../shared/protocol.js";
+import { retryDelayText } from "../../shared/retry-policy.js";
 
 const emptyCapabilities: CapabilityState = { revision: 0, locked: false, legacy: false, selection: null };
 const emptyPreferences = { revision: 0 };
@@ -93,8 +94,10 @@ function EnvironmentContent({ scope }: { scope: Scope }) {
       {environment && <p>工作目录：<LocalPath path={environment.cwd} scope={scope} /></p>}
       {info.run && <p>模型：{display(info.run.selection).label}</p>}
       {environment?.source === "preview" && <p>与执行共用资源及原生提示词生成逻辑；运行时扩展变更将在执行后更新。</p>}
-      {environment?.retry && <p>自动重试：{environment.retry.enabled ? `最多 ${environment.retry.maxRetries} 次，基础等待 ${environment.retry.baseDelayMs / 1000} 秒` : "已关闭"}
-        {`；会话等待上限 ${environment.retry.maxAgentDelayMs / 1000} 秒；供应商层 ${environment.retry.provider.maxRetries ?? 0} 次`}</p>}
+      {environment?.retry && <p>自动重试：{environment.retry.enabled ? `最多 ${environment.retry.maxRetries} 次，${environment.retry.delaysMs
+        ? `依次等待 ${environment.retry.delaysMs.slice(0, environment.retry.maxRetries).map(retryDelayText).join("、")}${environment.retry.maxRetries > environment.retry.delaysMs.length ? "，之后保持末档等待" : ""}`
+        : `基础等待 ${retryDelayText(environment.retry.baseDelayMs)}（指数退避）`}` : "已关闭"}
+        {`；单次等待上限 ${retryDelayText(environment.retry.maxAgentDelayMs)}；供应商层 ${environment.retry.provider.maxRetries ?? 0} 次`}</p>}
       {environment && <p>{environment.source === "preview" ? "预览不执行外部扩展" : `已加载扩展：${environment.extensions}`}</p>}
       {environment?.warnings.map((warning, index) => <p key={index}>{warning}</p>)}
       {typeof environment?.systemPrompt === "string" ? <pre className="session-system-prompt" aria-label="系统提示词">{environment.systemPrompt || "（空）"}</pre>

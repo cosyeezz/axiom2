@@ -6,7 +6,7 @@ import { chromium, type Browser, type Locator } from "playwright";
 import { startServer } from "../src/server/index.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-action-icons-"));
-const artifacts = resolve("test-results/action-icons");
+const artifacts = resolve(process.env.AXIOM_TEST_ARTIFACTS ?? "test-results/action-icons");
 mkdirSync(artifacts, { recursive: true });
 const previous = process.env.AXIOM_PI_DIR;
 process.env.AXIOM_PI_DIR = join(root, "pi");
@@ -74,7 +74,8 @@ try {
   await page.locator("#new-model-name").focus();
   assert.equal(await color(edit), gray);
   assert.equal(await edit.evaluate(el => getComputedStyle(el).opacity), "1");
-  await page.getByRole("button", { name: "完成编辑", exact: true }).click();
+  assert.ok(await page.getByRole("button", { name: "完成编辑", exact: true }).isDisabled(), "unchanged editor cannot stage a duplicate save");
+  await page.locator("#model-editor").getByRole("button", { name: "取消", exact: true }).click();
   for (const [width, height] of [[360,800], [390,844], [430,932], [600,960], [820,1180], [1024,768], [1366,768], [1440,900], [1920,1080]]) {
     await page.setViewportSize({ width, height }); await copy.focus();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `no page overflow at ${width}`);
@@ -90,7 +91,8 @@ try {
   const phoneEdit = phoneRow.getByRole("button", { name: "编辑模型：操作图标示例", exact: true });
   await phoneEdit.waitFor();
   const touchButtons = await phoneRow.locator("button:visible").all();
-  assert.equal(touchButtons.length, 4, "touch row contains name/ID copy, edit and delete actions");
+  assert.equal(touchButtons.length, 5, "touch row contains name/ID copy, duplicate configuration, edit and delete actions");
+  assert.ok(await phoneRow.getByRole("button", { name: "复制模型配置：操作图标示例", exact: true }).isVisible());
   for (const button of touchButtons) {
     assert.equal(await color(button.locator("svg")), gray);
     assert.equal(await button.evaluate(el => getComputedStyle(el).opacity), "1");
@@ -101,7 +103,8 @@ try {
   await phone.screenshot({ path: join(artifacts, "model-touch.png") });
   await phoneEdit.tap();
   await phone.locator("#model-editor").waitFor();
-  await phone.getByRole("button", { name: "完成编辑", exact: true }).tap();
+  assert.ok(await phone.getByRole("button", { name: "完成编辑", exact: true }).isDisabled());
+  await phone.locator("#model-editor").getByRole("button", { name: "取消", exact: true }).tap();
   await phoneRow.getByRole("button", { name: "删除模型：操作图标示例", exact: true }).tap();
   const confirm = phone.getByRole("dialog", { name: "删除模型草稿？", exact: true });
   await confirm.waitFor();

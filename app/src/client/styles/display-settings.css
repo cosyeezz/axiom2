@@ -2,8 +2,8 @@
 dialog.scrollable-dialog { overflow:visible; }
 dialog.scrollable-dialog[open] { display:flex; flex-direction:column; }
 .scrollable-dialog > .dialog-content { min-height:0; overflow:auto; overscroll-behavior:contain; }
-/* Keep adjustment tracks stationary while their preview and the app reflow. */
-.display-app { --display-font-scale:1; font-size:14px; overflow-anchor:none; }
+/* Keep tracks at the entry reading scale while the preview and other pages reflow. */
+.display-app { --display-font-scale:var(--display-editor-scale,1); font-size:15px; overflow-anchor:none; }
 .display-page { padding:20px; min-width:0; }
 .display-preview-viewport { height:240px; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; overflow-anchor:none; border-radius:var(--radius-sm); }
 .display-preview-viewport:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }

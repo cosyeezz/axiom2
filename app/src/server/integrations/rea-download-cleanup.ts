@@ -50,7 +50,7 @@ export function reaDownloadPlan(root: string, config: ReaConfig, id: DownloadId,
   const scope: CleanupScope = { paths, revision };
   return { names, paths, files, identities, scope };
 }
-/** Global builtin operation, configuration lock and worker barrier must be held. */
+/** Hold the REA operation and configuration lock; session workers are not involved. */
 export function clearReaDownloads(root: string, id: DownloadId, revision: string, cleanupRevision: unknown) {
   const config = readReaConfig(root), plan = reaDownloadPlan(root, config, id, builtinRemovalDirectories());
   if (config.revision !== revision || typeof cleanupRevision !== "string" || !/^[a-f0-9]{64}$/.test(cleanupRevision) || plan.scope.revision !== cleanupRevision) throw Error("下载包清理范围已变化，请重新读取并确认。");

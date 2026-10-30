@@ -12,7 +12,7 @@ import type { Session, Workspace } from "../src/shared/protocol.js";
 import { tmpdir } from "./temporary.js";
 
 test("invisible absolute-link prefixes do not turn local paths into relative paths", () => {
-  for (const prefix of ["\u200b", "\ufeff", "\u200b\ufeff\u200b"]) {
+  for (const prefix of ["\u200b", "\u200c", "\ufeff", "\u200b\u200c\ufeff\u200b"]) {
     for (const [href, path] of [
       ["/tmp/latency-findings.md", "/tmp/latency-findings.md"],
       ["/tmp/中文%20文档.md", "/tmp/中文 文档.md"],
@@ -27,19 +27,23 @@ test("invisible absolute-link prefixes do not turn local paths into relative pat
       assert.equal(localFileLink(prefix + href), null, JSON.stringify(prefix + href));
   }
   // Do not silently rename legitimate relative paths or characters inside filenames.
-  for (const href of ["\u200bnotes.md", "\ufeffnotes.md", "./\u200bnotes.md", "/tmp/\u200bnotes.md", "/tmp/\ufeffnotes.md", "/tmp/notes.md\u200b", "\u200c/tmp/notes.md", "\u200d/tmp/notes.md", "\u2060/tmp/notes.md"])
+  for (const href of ["\u200bnotes.md", "\u200cnotes.md", "\ufeffnotes.md", "./\u200bnotes.md", "./\u200cnotes.md", "/tmp/\u200bnotes.md", "/tmp/\u200cnotes.md", "/tmp/\ufeffnotes.md", "/tmp/notes.md\u200b", "/tmp/notes.md\u200c", "\u200d/tmp/notes.md", "\u2060/tmp/notes.md"])
     assert.deepEqual(localFileLink(href), { path: href });
   assert.deepEqual(localFileLink("%E2%80%8B/tmp/notes.md"), { path: "\u200b/tmp/notes.md" });
+  assert.deepEqual(localFileLink("%E2%80%8C/tmp/notes.md"), { path: "\u200c/tmp/notes.md" });
 });
 
 test("prefixed Markdown links retain the exact original authorization href", () => {
-  const clean = "/tmp/latency-findings.md", href = "\u200b" + clean;
-  const text = `详见[耗时诊断](${href})。`;
-  const hrefs: string[] = [];
-  markdown.walkTokens(markdownTokens(text), token => { if (token.type === "link") hrefs.push(token.href); });
-  assert.deepEqual(hrefs, [href]);
-  assert.equal(hasFileLink(text, href), true);
-  assert.equal(hasFileLink(text, clean), false);
+  const clean = "/tmp/latency-findings.md";
+  // Unlike FEFF (Markdown whitespace), these prefixes survive tokenization.
+  for (const prefix of ["\u200b", "\u200c"]) {
+    const href = prefix + clean, text = `详见[耗时诊断](${href})。`;
+    const hrefs: string[] = [];
+    markdown.walkTokens(markdownTokens(text), token => { if (token.type === "link") hrefs.push(token.href); });
+    assert.deepEqual(hrefs, [href]);
+    assert.equal(hasFileLink(text, href), true);
+    assert.equal(hasFileLink(text, clean), false);
+  }
 });
 
 test("document preview reads a prefixed absolute link without widening session authorization", async () => {
@@ -57,8 +61,8 @@ test("document preview reads a prefixed absolute link without widening session a
   try {
     writeFileSync(path, "# 耗时诊断\n\n中文正文正常。\n");
     const paths = process.platform === "darwin" && path.startsWith("/private/tmp/") ? [path, path.replace(/^\/private/, "")] : [path];
-    for (const linkedPath of paths) {
-      const href = "\u200b" + linkedPath;
+    for (const linkedPath of paths) for (const prefix of ["\u200b", "\u200c"]) {
+      const href = prefix + linkedPath;
       message = { ...message, role: "assistant", text: `详见[耗时诊断](${href})。` };
       const file = await read(href);
       assert.equal(file.kind, "markdown"); assert.equal(file.path, path);
@@ -69,9 +73,11 @@ test("document preview reads a prefixed absolute link without widening session a
       await assert.rejects(read(href), { code: "FILE_PREVIEW_FORBIDDEN" });
     }
     // A real zero-width character in a filename is not stripped.
-    const literal = join(root, "\u200bnotes.md");
-    writeFileSync(literal, "# Literal filename");
-    message = { ...message, role: "assistant", text: `[文件](${literal})` };
-    assert.equal((await read(literal)).text, "# Literal filename");
+    for (const prefix of ["\u200b", "\u200c"]) {
+      const literal = join(root, prefix + "notes.md");
+      writeFileSync(literal, "# Literal filename");
+      message = { ...message, role: "assistant", text: `[文件](${literal})` };
+      assert.equal((await read(literal)).text, "# Literal filename");
+    }
   } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
 });

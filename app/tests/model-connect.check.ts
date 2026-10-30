@@ -9,6 +9,7 @@ import type { AddressInfo } from "node:net";
 import { startServer } from "../src/server/index.js";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 import type { Command } from "../src/shared/protocol.js";
+import { openAIProviderId } from "../src/shared/model-providers.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-model-connect-"));
 const previous = process.env.AXIOM_PI_DIR;
@@ -96,7 +97,7 @@ try {
         assert.equal(c.params!.answer, "http://localhost/callback?code=FIXTURE&state=fixture");
         loggedIn = true;
         reply({ accepted: true });
-        auth(failNext ? { ...flow, status: "failed", message: "认证未完成，请关闭后重试。" } : { id: flow.id, providerId: "openai", status: "completed", message: "pi 已保存认证" });
+        auth(failNext ? { ...flow, status: "failed", message: "认证未完成，请关闭后重试。" } : { id: flow.id, providerId: flow.providerId, status: "completed", message: "pi 已保存认证" });
       } else if (c.op === "auth.cancel") reply({ cancelled: true });
       else server.send(message);
     });
@@ -106,9 +107,13 @@ try {
       if (reads.delete(event.requestId) && event.data?.providers) {
         supportedProviders = event.data.templates.filter((template: { methods?: string[] }) => template.methods?.includes("oauth"));
         if (legacyCapabilities) for (const template of event.data.templates) delete template.methods;
-        for (const provider of event.data.providers) if (loggedIn && provider.providerId === "openai") {
-          provider.auth = { ...provider.auth, configured: true, source: "stored", type: "oauth" };
-          provider.connectionType = "oauth";
+        if (loggedIn && !event.data.providers.some((provider: { providerId: string }) => provider.providerId === openAIProviderId)) {
+          const template = event.data.templates.find((provider: { id: string }) => provider.id === openAIProviderId);
+          // UI-only OAuth receipt: add the Codex connection without converting
+          // the independently saved legacy OpenAI API-key connection.
+          event.data.providers.push({ ...event.data.providers[0], id: openAIProviderId, originalId: openAIProviderId,
+            providerId: openAIProviderId, name: "OpenAI", api: template.api, url: template.url, models: [],
+            hasConnectionOverrides: false, connectionType: "oauth", auth: { configured: true, source: "stored", type: "oauth", methods: ["oauth"] } });
         }
         route.send(JSON.stringify(event));
       } else route.send(message);
@@ -149,15 +154,16 @@ try {
   await menu.getByRole("menuitem", { name: "OAuth 登录", exact: true }).click();
   await providerSelect.click();
   const providerOptions = await page.getByRole("listbox", { name: "供应商", exact: true }).getByRole("option").evaluateAll(options => options.map(option => ({ id: option.getAttribute("data-value"), name: option.textContent })));
-  assert.deepEqual(providerOptions, supportedProviders.filter(provider => provider.id !== "openai-codex").map((provider) => ({ id: provider.id, name: provider.name })));
-  assert.equal(providerOptions.some(provider => provider.id === "openai-codex"), false, "legacy OpenAI is not offered for new connections");
-  assert.deepEqual(providerOptions.filter(provider => provider.id === "openai"), [{ id: "openai", name: "OpenAI" }]);
+  assert.deepEqual(providerOptions, supportedProviders.filter(provider => provider.id !== "openai").map((provider) => ({ id: provider.id, name: provider.name })));
+  assert.equal(providerOptions.some(provider => provider.id === "openai"), false, "direct OAuth is not offered for new connections");
+  assert.deepEqual(providerOptions.filter(provider => provider.id === openAIProviderId), [{ id: openAIProviderId, name: "OpenAI" }]);
+  assert.equal(await page.getByRole("listbox", { name: "供应商", exact: true }).locator(`[data-value="${openAIProviderId}"]`).getAttribute("aria-selected"), "true", "default OpenAI OAuth uses the native Codex identity");
   assert.deepEqual(providerOptions.filter(provider => provider.id === "kiro"), [{ id: "kiro", name: "kiro" }]);
   assert.deepEqual(providerOptions.filter(provider => provider.id === "qoder"), [{ id: "qoder", name: "Qoder" }]);
   assert.deepEqual(providerOptions.filter(provider => provider.id === "qoder-cn"), [{ id: "qoder-cn", name: "Qoder 国内版" }]);
   await page.keyboard.press("Escape");
   assert.ok(supportedProviders.length > 2, "dropdown is populated from pi, not a fixed pair");
-  await chooseSelect(page, providerSelect, "openai");
+  await chooseSelect(page, providerSelect, openAIProviderId);
   assert.equal(await page.getByRole("dialog").count(), 0);
   assert.equal(await page.locator("#provider-key").count(), 0);
   for (const width of [360, 1440]) {
@@ -252,7 +258,7 @@ try {
   assert.equal(await page.getByRole("button", { name: "OAuth 登录", exact: true }).count(), 0, "custom interface has no OAuth login button");
   await page.locator("#add-supplier").click();
   await menu.getByRole("menuitem", { name: "OAuth 登录", exact: true }).click();
-  await chooseSelect(page, providerSelect, "openai");
+  await chooseSelect(page, providerSelect, openAIProviderId);
   const proxyMode = setup.getByRole("combobox", { name: "授权与模型代理", exact: true });
   await chooseSelect(page, proxyMode, "builtin");
   await setup.getByRole("combobox", { name: "内置线路", exact: true }).waitFor();
@@ -286,17 +292,17 @@ try {
   await page.locator("#provider-auth-status").filter({ hasText: "已通过 OAuth 登录" }).waitFor();
   await page.locator("#add-supplier").click();
   await menu.getByRole("menuitem", { name: "OAuth 登录", exact: true }).click();
-  await chooseSelect(page, providerSelect, "openai");
+  await chooseSelect(page, providerSelect, openAIProviderId);
   await setup.getByRole("button", { name: "浏览器登录", exact: true }).click();
   await login.locator("#auth-answer").waitFor();
-  assert.deepEqual(startedProviders, ["openai", "openai"]);
+  assert.deepEqual(startedProviders, [openAIProviderId, openAIProviderId]);
   assert.deepEqual(startedProxies, [{ mode: "external", url: "http://127.0.0.1:17890" }, { mode: "direct" }]);
   await login.getByRole("button", { name: "取消登录", exact: true }).click();
   await login.waitFor({ state: "detached" });
   failNext = true;
   await page.locator("#add-supplier").click();
   await menu.getByRole("menuitem", { name: "OAuth 登录", exact: true }).click();
-  await chooseSelect(page, providerSelect, "openai");
+  await chooseSelect(page, providerSelect, openAIProviderId);
   await setup.getByRole("button", { name: "浏览器登录", exact: true }).click();
   await login.locator("#auth-answer").fill("http://localhost/callback?code=FIXTURE&state=fixture");
   await login.getByRole("button", { name: "提交回填" }).click();

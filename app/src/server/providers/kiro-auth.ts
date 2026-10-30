@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import type { OAuthAuth, OAuthCredential, ProviderAuthInteraction } from "@earendil-works/pi-ai";
 import { kiroCallback } from "./kiro-callback.js";
+import { kiroLoginPrompt } from "../model-account-info.js";
 
 // Protocol references and remaining CLI/IDE differences: docs/kiro-auth.md.
 const socialOrigin = "https://prod.us-east-1.auth.desktop.kiro.dev";
@@ -13,6 +14,7 @@ type Method = "builder-id" | "identity-center" | "social";
 export interface KiroCredential extends OAuthCredential {
   authMethod: Method;
   authRegion: string;
+  authFlow?: "pkce" | "device";
   startUrl?: string;
   clientId?: string;
   clientSecret?: string;
@@ -66,7 +68,9 @@ function metadata(credential: OAuthCredential): Omit<KiroCredential, "type" | "a
   const method = credential.authMethod;
   if (method !== "builder-id" && method !== "identity-center" && method !== "social")
     throw new Error("Kiro 凭据缺少登录类型，请重新登录。");
-  const result = { authMethod: method, authRegion: region(credential.authRegion) } as KiroCredential;
+  const result = { authMethod: method, authRegion: region(credential.authRegion),
+    ...(credential.authFlow === "pkce" || credential.authFlow === "device" ? { authFlow: credential.authFlow } : {}),
+  } as KiroCredential;
   if (credential.profileArn !== undefined) result.profileArn = required(credential.profileArn, "账号配置");
   if (method !== "social") {
     result.startUrl = httpsUrl(credential.startUrl);
@@ -166,18 +170,18 @@ export function kiroOAuth(options: {
     throw new Error(`Kiro 认证请求失败（HTTP ${response.status}），请重新登录或联系管理员。`);
   };
   const oidcLogin = async (method: "builder-id" | "identity-center", interaction: ProviderAuthInteraction, signal: AbortSignal): Promise<KiroCredential> => {
-    const startUrl = method === "builder-id" ? builderStartUrl : httpsUrl((await interaction.prompt({
+    const startUrl = method === "builder-id" ? builderStartUrl : httpsUrl((await interaction.prompt(kiroLoginPrompt("startUrl", {
       type: "text", message: "请输入管理员提供的 IAM Identity Center Start URL。暂不支持独立 external_idp / Entra 直连；经 Identity Center 联邦的组织可用。", signal,
       placeholder: "https://your-org.awsapps.com/start",
-    })).trim());
-    const authRegion = method === "builder-id" ? "us-east-1" : region((await interaction.prompt({
+    }))).trim());
+    const authRegion = method === "builder-id" ? "us-east-1" : region((await interaction.prompt(kiroLoginPrompt("authRegion", {
       type: "text", message: "请输入组织的 IAM Identity Center 区域", placeholder: "us-east-1", signal,
-    })).trim());
+    }))).trim());
     const origin = oidcOrigin(authRegion);
-    const flow = await interaction.prompt({ type: "select", message: "选择 AWS 授权流程；组织禁用设备授权时请选择浏览器，不会自动降级绕过策略。", signal, options: [
+    const flow = await interaction.prompt(kiroLoginPrompt("flow", { type: "select", message: "选择 AWS 授权流程；组织禁用设备授权时请选择浏览器，不会自动降级绕过策略。", signal, options: [
       { id: "pkce", label: "浏览器授权（PKCE，推荐）" },
       { id: "device", label: "设备授权（适合远程服务，需组织允许）" },
-    ] });
+    ] }));
     if (flow === "pkce") {
       const verifier = randomBytes(32).toString("base64url"), state = randomBytes(32).toString("base64url");
       const callback = await (options.callback ?? kiroCallback)(state, signal, { oidc: true });
@@ -198,7 +202,7 @@ export function kiroOAuth(options: {
         const callbackResult = await callback.wait(interaction);
         signal.throwIfAborted();
         const body = await request(`${origin}/token`, { clientId, clientSecret, grantType: "authorization_code", code: callbackResult.code, codeVerifier: verifier, redirectUri }, signal);
-        return token(body, { authMethod: method, authRegion, startUrl, clientId, clientSecret, clientSecretExpiresAt });
+        return token(body, { authMethod: method, authRegion, authFlow: "pkce", startUrl, clientId, clientSecret, clientSecretExpiresAt });
       } finally { await callback.close(); }
     }
     if (flow !== "device") throw new Error("Kiro 授权流程无效。");
@@ -224,7 +228,7 @@ export function kiroOAuth(options: {
         const result = await request(`${origin}/token`, { clientId, clientSecret, deviceCode, grantType: deviceGrant }, pollSignal, true);
         if (result.pending) { if (result.slowDown) interval += 5000; continue; }
         pollSignal.throwIfAborted();
-        return token(result, { authMethod: method, authRegion, startUrl, clientId, clientSecret, clientSecretExpiresAt });
+        return token(result, { authMethod: method, authRegion, authFlow: "device", startUrl, clientId, clientSecret, clientSecretExpiresAt });
       }
     } catch (error) {
       signal.throwIfAborted();
@@ -238,11 +242,11 @@ export function kiroOAuth(options: {
       const signal = AbortSignal.any([interaction.signal, AbortSignal.timeout(options.loginTimeoutMs ?? 600_000)]);
       try {
         signal.throwIfAborted();
-        const method = await interaction.prompt({ type: "select", message: "选择 Kiro 登录方式（同一供应商仅保存一个账号）", signal, options: [
+        const method = await interaction.prompt(kiroLoginPrompt("method", { type: "select", message: "选择 Kiro 登录方式", signal, options: [
           { id: "builder-id", label: "个人 · AWS Builder ID" },
           { id: "social", label: "个人 · Google / GitHub（浏览器 PKCE）" },
           { id: "identity-center", label: "企业 · IAM Identity Center" },
-        ] });
+        ] }));
         if (method === "builder-id" || method === "identity-center") return await oidcLogin(method, interaction, signal);
         if (method !== "social") throw new Error("Kiro 登录方式无效。");
         const verifier = randomBytes(32).toString("base64url"), state = randomBytes(32).toString("base64url");
@@ -255,7 +259,7 @@ export function kiroOAuth(options: {
           const result = await callback.wait(interaction);
           signal.throwIfAborted();
           const body = await request(`${socialOrigin}/oauth/token`, { code: result.code, code_verifier: verifier, redirect_uri: result.redirectUri }, signal);
-          return token(body, { authMethod: "social", authRegion: "us-east-1" });
+          return token(body, { authMethod: "social", authRegion: "us-east-1", authFlow: "pkce" });
         } finally { await callback.close(); }
       } catch (error) {
         interaction.signal.throwIfAborted();

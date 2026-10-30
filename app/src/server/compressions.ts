@@ -6,13 +6,13 @@ import { sameLease } from "./execution-protocol.js";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { estimateTokens, type CompactionEntry } from "@earendil-works/pi-coding-agent";
+import { type CompactionEntry } from "@earendil-works/pi-coding-agent";
 import { AppError, object, text, type Command, type Scope } from "../shared/protocol.js";
 import { agentScope, thinkingLevels, type Selection } from "../shared/agent.js";
 import { autoCompressionThreshold, compressionScope, compressionPreferencesScope, type Compression } from "../shared/compression.js";
 import type { Agents } from "./agents.js";
 import { openTranscript } from "./transcript.js";
-import { contextUsage } from "./context-usage.js";
+import { contextUsage, measureContext } from "./context-usage.js";
 import type { CompressionInput } from "./compression-worker.js";
 import { compressionError } from "./compression-error.js";
 import { assertCompressionPrefix, readCompressionPrefix, type CompressionPrefix } from "./compression-request.js";
@@ -245,7 +245,7 @@ export class Compressions {
         const selection = info.selection;
         if (!selection) return;
         const job: Compression = { id: processingId, requestId, trigger: "auto", state: "failed", phase: "snapshot",
-          startedAt: Date.now(), endedAt: Date.now(), messageCount: 0, before: context.tokens,
+          startedAt: Date.now(), endedAt: Date.now(), messageCount: 0, before: null,
           after: null, summary: "", error: compressionError(error), selection, usage: null };
         this.store.db.prepare("INSERT INTO compressions VALUES(?,?,?)").run(job.id, scope.sessionId, JSON.stringify(job));
         this.save({ scope, job });
@@ -355,7 +355,9 @@ export class Compressions {
     const messages = openTranscript(live.input.file, live.input.cwd).buildSessionProjection().messages;
     live.job.messageCount = messages.filter((m) => ["user", "assistant", "custom", "toolResult"].includes(m.role)).length;
     if (!live.job.messageCount) throw Error("Empty snapshot");
-    live.job.before = messages.reduce((total, message) => total + estimateTokens(message), 0);
+    const measurement = measureContext(snapshot.entries, { provider: live.input.selection.provider });
+    live.job.before = measurement.tokens;
+    live.job.snapshot = { capturedAt: snapshot.capturedAt, leafId: snapshot.entries.at(-1)?.id ?? null, source: measurement.source };
     this.stage(live, "快照已保存，准备摘要执行");
     this.launch(live);
     this.save(live);
@@ -414,7 +416,7 @@ export class Compressions {
           live.entry = event.entry;
           const summary = String(event.entry.summary);
           job.summary = summary.slice(0, 64000) + (summary.length > 64000 ? "\n…（摘要预览超过 64,000 字符，已截断）" : "");
-          job.before = event.before; job.after = event.after; job.usage = event.usage;
+          job.nativeBefore = event.before; job.after = event.after; job.usage = event.usage;
           this.stage(live, "摘要已生成，等待执行环境退出");
           reap = setTimeout(() => child.kill("SIGKILL"), 2000);
         }

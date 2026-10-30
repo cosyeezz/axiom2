@@ -107,14 +107,13 @@ export class DocumentFiles {
       const archive = archiveExtension.test(path), office = officeExtension.test(path), playable = mediaExtension.test(path);
       if (member && !archive) throw new AppError("INVALID_INPUT", "只能从压缩包读取成员");
       if (binary.has(ext) && !archive && !office && !playable) return { ...result, reason: "此格式尚无内嵌解析器；旧版 Office、加密文档等可用本地应用打开。" };
-      const media = ["png", "jpg", "jpeg", "gif", "webp", "pdf"].includes(ext), limit = (archive || office ? 32 : playable ? 16 : media ? 8 : 1) * 1024 * 1024;
-      if (before.size > limit) return { ...result, reason: `文件超过 ${limit / 1024 / 1024} MiB 预览上限，请打开本地位置查看。` };
+      const media = ["png", "jpg", "jpeg", "gif", "webp", "pdf"].includes(ext);
       const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
       try {
         const info = await handle.stat();
-        if (!info.isFile() || info.dev !== before.dev || info.ino !== before.ino || info.size > limit) throw forbidden();
-        const buffer = Buffer.alloc(Math.min(info.size + 1, limit + 1)); let length = 0;
-        while (length < buffer.length) { const r = await handle.read(buffer, length, buffer.length - length, length); if (!r.bytesRead) break; length += r.bytesRead; }
+        if (!info.isFile() || info.dev !== before.dev || info.ino !== before.ino) throw forbidden();
+        const buffer = Buffer.alloc(info.size + 1); let length = 0;
+        while (length < buffer.length) { signal.throwIfAborted(); const r = await handle.read(buffer, length, buffer.length - length, length); if (!r.bytesRead) break; length += r.bytesRead; }
         const after = await inspect(), final = await handle.stat(); signal.throwIfAborted(); authorize();
         if (after.dev !== info.dev || after.ino !== info.ino || final.size !== info.size || final.mtimeMs !== info.mtimeMs || final.ctimeMs !== info.ctimeMs || length !== info.size)
           throw new AppError("FILE_CHANGED", "文件在读取期间发生变化，请重新加载");
@@ -152,9 +151,9 @@ export class DocumentFiles {
         if (!decoded) return { ...result, reason: "无法可靠解码此文件，或文件包含二进制内容。请在本地应用中查看。" };
         const companions = !member && ["html", "htm"].includes(ext) ? await htmlResources(path, decoded.text, authorize, signal) : {};
         signal.throwIfAborted(); authorize();
-        const editable = !member && decoded.encoding === "UTF-8" && (!skill || bytes.length <= 128 * 1024);
+        const editable = !member && decoded.encoding === "UTF-8" && bytes.length <= (skill ? 128 * 1024 : 1024 * 1024);
         return { ...result, ...decoded, ...companions, revision: textRevision(bytes), editable,
-          ...(!editable ? { editReason: member ? "压缩包成员仅供只读预览。" : decoded.encoding !== "UTF-8" ? "此编码仅支持预览，编辑需要 UTF-8 文本。" : "技能文件超过 128 KiB 编辑上限。" } : {}),
+          ...(!editable ? { editReason: member ? "压缩包成员仅供只读预览。" : decoded.encoding !== "UTF-8" ? "此编码仅支持预览，编辑需要 UTF-8 文本。" : skill ? "技能文件超过 128 KiB 编辑上限。" : "文件超过 1 MiB 编辑上限，仅供只读预览。" } : {}),
           kind: !member && ["md", "markdown", "mdown"].includes(ext) ? "markdown" : languages[ext] ? "code" : "text", language: languages[ext] };
       } finally { await handle.close(); }
     } catch (error) {

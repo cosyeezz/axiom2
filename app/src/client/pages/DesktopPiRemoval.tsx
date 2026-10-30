@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { MaintenanceTaskView } from '../maintenance/MaintenanceView.js';
+import { ComponentAction, ComponentCard, ComponentConfirmation } from '../maintenance/ComponentCard.js';
 import type { MaintenanceTask } from '../../shared/maintenance.js';
 import { desktopInvoke, DesktopResponsePendingError, isDesktopResponsePending } from './desktop-bridge.js';
 import { observesSubmission, isSubmissionRefused, validOperationJob, type OperationWitness } from './desktop-operation.js';
@@ -84,21 +85,21 @@ export default function DesktopPiRemoval({ onRescan }: { onRescan: () => Promise
     await act('pi-uninstall', { token, confirm: true, sessionsClosed: true });
   }
   const items = ownJob && job?.kind === 'pi-uninstall' ? job.cleanup?.items : checked ? preview.items : undefined;
-  return <section className="environment-item" aria-label="终端 Pi 卸载">
-    <div className="environment-cleanup-row"><div><strong>终端 Pi</strong><p className="connect-update-detail">独立的终端程序，保留个人设置</p></div><button className="connect-secondary" disabled={busy || running || uncertain || needsReconciliation || !!confirmed} onClick={() => void act('pi-remove-preview')}>{busy || running ? '正在核对…' : uncertain ? '正在核实…' : '卸载'}</button></div>
+  return <ComponentCard className="environment-component" regionLabel="终端 Pi 卸载" label="终端 Pi" description="独立的终端程序，卸载时保留个人设置" busy={busy || running || uncertain}
+    version={preview?.version ? `v${preview.version}` : undefined} location={preview?.packageRoot}
+    actions={<ComponentAction icon="trash-2" label="卸载" danger disabled={busy || running || uncertain || needsReconciliation || !!confirmed} disabledReason="维护正在进行或结果待核实，请先完成当前操作。" onClick={() => void act('pi-remove-preview')} />}>
     {error && <p className={neutral || running ? "connect-message" : "connect-error"} role={neutral || running ? "status" : "alert"}>{error}</p>}
     {notice && <p className="connect-update-detail" role="status">{notice}</p>}
     {checked && preview.installed === false && <p className="connect-update-detail" role="status">{preview.message || '所选 npm 中未安装终端 Pi，无需卸载；此结果不代表其他命令来源也未安装。'}</p>}
     {ownJob && job.task && !confirmed && <MaintenanceTaskView task={job.task} compact connected onCancel={() => act('cancel', { id: job.task!.id })} onReconcile={() => act('reconcile', { id: job.task!.id })} />}
-    {confirmed && <div className="environment-confirm inline-confirmation" role="group" aria-label="确认 Pi 卸载">
-      <p>卸载终端 Pi {confirmed.version}？</p>
-      <p>程序和 npm 命令入口将被移除，设置及共享缓存保留。外部终端任务不会自动结束。</p>
+    {confirmed && <ComponentConfirmation title="确认 Pi 卸载" danger confirmLabel="确认卸载" confirmDisabled={busy || uncertain || running || needsReconciliation || !closed}
+      description={<><p>卸载终端 Pi {confirmed.version}？</p><p>程序和 npm 命令入口将被移除，设置及共享缓存保留。外部终端任务不会自动结束。</p></>}
+      onClose={() => { setConfirmed(null); setClosed(false); }} onConfirm={remove}>
       {confirmed.items.some(item => item.state === 'unverified') && <p className="connect-message">部分项目归属未核实，将保留，不会删除。</p>}
       <details><summary>查看移除与保留范围</summary><p className="connect-log">{confirmed.packageRoot}</p><ul>{confirmed.items.map((item, index) => <li key={index}>{item.label} · {labels[item.state]}{item.path && <code>{item.path}</code>}{item.note && <p>{item.note}</p>}</li>)}</ul></details>
       <label><input type="checkbox" checked={closed} onChange={event => setClosed(event.target.checked)} /><span>我已关闭使用此安装的终端会话，可以卸载</span></label>
-      <div className="connect-actions"><button className="connect-secondary" disabled={busy} onClick={() => setConfirmed(null)}>取消</button><button className="connect-secondary confirm-danger" disabled={busy || !closed} onClick={() => void remove()}>确认卸载</button></div>
-    </div>}
+    </ComponentConfirmation>}
     {job?.kind === 'pi-uninstall' && items && <details><summary>查看卸载结果</summary><ul>{items.map((item, index) => <li key={index}>{item.label} · {labels[item.state]}{item.note && <p>{item.note}</p>}{item.path && <code>{item.path}</code>}</li>)}</ul></details>}
     {job?.kind === 'pi-uninstall' && job.cleanup && <p className="connect-update-detail">{job.cleanup.complete ? '终端 Pi 已卸载，个人设置已保留。' : '卸载结果仍需核实，请勿重复提交。'}</p>}
-  </section>;
+  </ComponentCard>;
 }

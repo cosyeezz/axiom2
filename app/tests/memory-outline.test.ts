@@ -154,8 +154,10 @@ test("memory details converge in place while preserving history, continuation an
   assert.match(details, /Step details record essential actions, current findings, results, deliverables and evidence locations/);
   assert.match(details, /Revise current state and next actions in place instead of appending successive progress reports/);
   assert.match(details, /Preserve necessary history; when a conclusion becomes invalid, explain why and point to its replacement instead of leaving it as current guidance/);
-  assert.match(details, /When a step completes, consolidate its detail into final results, verification scope, remaining limitations, necessary history and evidence references/);
-  assert.match(details, /remove stale next actions and repetitive interim updates/);
+  assert.match(details, /Before marking work Completed or handing it off, consolidate the directly affected details for readability, leading with current results, verification scope and remaining limitations/);
+  assert.match(details, /Preserve necessary history and evidence references; replace obsolete next-action and pending-result notes/);
+  assert.match(details, /For handoffs, clearly state unfinished work, blockers and the next action/);
+  assert.match(details, /remove repetitive interim updates/);
   assert.match(details, /Before replacing a lengthy report or deliverable with a summary and reference, verify that its full content is safely saved and retrievable/);
   assert.match(details, /Never delete the only copy merely to shorten a detail/);
   assert.match(details, /Do not impose a fixed step-detail length/);
@@ -165,7 +167,9 @@ test("memory policy records requirements promptly but background references befo
   const prompt = memoryInstruction("/memory/MEMORY.md");
   assert.match(prompt, /Before saving, ask: if this is forgotten/);
   assert.match(prompt, /100 characters without omitting key requirements/);
-  assert.match(prompt, /initial requirements or later decisions and adjustments become clear; do not defer them/);
+  assert.match(prompt, /initial requirements or later decisions and adjustments become clear/);
+  assert.match(prompt, /results are read back, dependencies are resolved or conclusions change/);
+  assert.match(prompt, /correct outdated state only where directly affected, without deferring until switching steps or wrapping up/);
   assert.match(prompt, /taskId and resultId from the same notification, and verify it before use/);
   assert.match(prompt, /Before compaction, review background tasks and results and save continuation-critical[\s\S]*?in the corresponding step details/);
   for (const reference of ["evidence locations", "processing status", "next actions", "taskId", "resultId", "process identity", "working directory", "logs", "artifact locations"])

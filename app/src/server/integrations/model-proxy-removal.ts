@@ -4,10 +4,12 @@ import { basename, join } from "node:path";
 import type { ProxyKernel } from "../../shared/model-proxy.js";
 import { managedChildren, managedDirectory, removeManagedDirectory } from "./managed-removal.js";
 import { proxyImporterDirectoryPattern, proxyVersionDirectoryPattern, readProxyConfig, type ProxyConfig } from "./model-proxy-config.js";
-import { installedKernelPids, pidAlive, readKernelRecord, terminatePid } from "./model-proxy-kernel.js";
+import { installedKernelPids, pidAlive, readKernelRecord, terminateInstalledKernels, terminatePid } from "./model-proxy-kernel.js";
+import { componentChildren, forceRemoveComponentPaths } from "./component-maintenance.js";
 
 export function assertProxyStopped(root: string, kernel: ProxyKernel, paths = proxyRemovalPlan(root, kernel, readProxyConfig(root)).paths) {
-  assertToolProcessesStopped(root);
+  // Check only this component's importer/core processes, not unrelated runtime
+  // tools registered at the application root. Session work is never drained.
   // Importer workers use the maintenance process registry; cores use native PID enumeration.
   const corePaths = paths.filter(path => !proxyImporterDirectoryPattern.test(basename(path)));
   for (const path of paths) if (proxyImporterDirectoryPattern.test(basename(path))) assertToolProcessesStopped(path);
@@ -46,4 +48,26 @@ export function proxyRemovalPlan(root: string, kernel: ProxyKernel, config: Prox
     : { parents: [...parents, "versions"], pattern: proxyVersionDirectoryPattern };
   for (const name of names) { const at = target(name); managedDirectory(root, at.parents, name, at.pattern); }
   return { names, paths: names.map(name => join(root, ...target(name).parents, name)), remove() { for (const name of names) { const at = target(name); removeManagedDirectory(root, at.parents, name, at.pattern); } } };
+}
+/**
+ * Component standard: forced kernel uninstall. Running cores from any managed
+ * version of this kernel are terminated (importer workers stop with the aborted
+ * operation), then every managed directory of the kernel is deleted.
+ */
+export async function forceRemoveProxyKernel(root: string, kernel: ProxyKernel) {
+  const base = join(root, "integrations", "model-proxy");
+  const versions = componentChildren(join(base, "versions"), new RegExp(proxyVersionDirectoryPattern.source.replace("(xray|mihomo)", kernel)));
+  const importers = kernel === "xray" ? componentChildren(join(base, "importer"), proxyImporterDirectoryPattern) : [];
+  const binary = kernel + (process.platform === "win32" ? ".exe" : "");
+  for (const directory of versions) {
+    const executable = join(directory, binary);
+    // Any process started from a directory about to be deleted is stopped,
+    // whatever its arguments. An unavailable process list never blocks removal.
+    let pids: number[];
+    try { pids = installedKernelPids(executable, true); } catch { pids = []; }
+    for (const pid of pids) { try { await terminatePid(pid); } catch { /* Deletion proceeds; leftovers can be retried. */ } }
+    await terminateInstalledKernels(executable);
+  }
+  forceRemoveComponentPaths(join(base, "versions"), versions);
+  forceRemoveComponentPaths(join(base, "importer"), importers);
 }

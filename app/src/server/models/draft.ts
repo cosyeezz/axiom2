@@ -8,6 +8,7 @@ import {
   samplingKeys,
   assignModelConfigIds,
   bodyOverrideType,
+  bodyOverrideApis,
   validBodyOverrideKey,
   editableBodyOverride,
   modelCostKeys,
@@ -335,11 +336,7 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
             invalid("接口协议：无法识别此模型的原生协议；请填写该供应商目录中的模型 ID，或在请求体 model 字段指定有效的原生模型 ID");
           if (
             Object.keys(model.samplingParams).length &&
-            ![
-              "openai-completions",
-              "openai-responses",
-              "azure-openai-responses",
-            ].includes(api)
+            !bodyOverrideApis.includes(api)
           )
             invalid(
               `请求体覆盖：接口协议 ${api} 不支持请求体覆盖；请移除供应商及该模型的请求体覆盖项，或选择支持的接口协议`,
@@ -516,11 +513,7 @@ export function validateDraft(
             );
           if (
             Object.keys(model.samplingParams ?? {}).length &&
-            ![
-              "openai-completions",
-              "openai-responses",
-              "azure-openai-responses",
-            ].includes(actual.api)
+            !bodyOverrideApis.includes(actual.api)
           )
             invalid(
               `请求体覆盖：模型实际接口协议 ${actual.api} 不支持请求体覆盖；请移除供应商及该模型的请求体覆盖项`,

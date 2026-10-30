@@ -14,6 +14,8 @@ import { usageModelNames } from "./model-metadata.js";
 import type { Store } from "./storage.js";
 import { usageCost } from "./usage-cost.js";
 import { nativeCompactionCost } from "./native-compaction-usage.js";
+import { usageAnalytics } from "./usage-analytics.js";
+import { UsageQueryCache } from "./usage-query-cache.js";
 
 type Json = Record<string, any>;
 const object = (v: unknown): Json => v && typeof v === "object" && !Array.isArray(v) ? v as Json : {};
@@ -23,7 +25,7 @@ const at = (v: unknown): number | undefined => {
   const value = typeof v === "number" ? v : typeof v === "string" ? Date.parse(v) : NaN;
   return Number.isFinite(value) && value >= 0 && value <= 8.64e15 ? value : undefined;
 };
-function filter(input: unknown): UsageRecordFilter {
+export function usageRecordFilter(input: unknown): UsageRecordFilter {
   const data = object(input), result: UsageRecordFilter = {};
   for (const key of ["workspaceId", "snapshot", "rootSessionId"] as const) if (data[key] !== undefined) {
     const value = text(data[key]); if (!value) throw new AppError("INVALID_INPUT", "用量筛选参数无效。");
@@ -32,6 +34,10 @@ function filter(input: unknown): UsageRecordFilter {
   if (data.agentRole !== undefined) {
     if (data.agentRole !== "main" && data.agentRole !== "subagent") throw new AppError("INVALID_INPUT", "代理类型筛选无效。");
     result.agentRole = data.agentRole;
+  }
+  if (data.requestType !== undefined) {
+    if (data.requestType !== "main" && data.requestType !== "subagent" && data.requestType !== "compression") throw new AppError("INVALID_INPUT", "请求类型筛选无效。");
+    result.requestType = data.requestType;
   }
   if (data.providerId !== undefined) {
     if (data.providerId !== null && !text(data.providerId)) throw new AppError("INVALID_INPUT", "供应商筛选无效。");
@@ -51,16 +57,24 @@ function filter(input: unknown): UsageRecordFilter {
     if (!Number.isSafeInteger(value) || value < 1 || value > maximum) throw new AppError("INVALID_INPUT", "分页参数无效。");
     result[key] = value;
   }
-  for (const key of ["refresh", "continue"] as const) {
+  if (data.timeZone !== undefined) {
+    if (!text(data.timeZone, 100)) throw new AppError("INVALID_INPUT", "统计时区无效。");
+    try { result.timeZone = new Intl.DateTimeFormat("en-US", { timeZone: data.timeZone }).resolvedOptions().timeZone; }
+    catch { throw new AppError("INVALID_INPUT", "统计时区无效。"); }
+  }
+  for (const key of ["refresh", "continue", "analytics"] as const) {
     if (data[key] !== undefined && typeof data[key] !== "boolean") throw new AppError("INVALID_INPUT", "扫描参数无效。");
     result[key] = data[key] === true;
   }
   return result;
 }
-type Snapshot = { db: DatabaseSync; id: string; updatedAt: number; partial: boolean; warnings: string[]; scannedRoots: number; processedRoots: number; totalRoots: number; building: boolean };
-type Cached = Snapshot & { scan?: AsyncGenerator<Snapshot, Snapshot>; timer?: ReturnType<typeof setTimeout> };
-type Limits = { roots: number; bytes: number; rows: number; milliseconds: number; databaseRows: number; lineBytes: number; ttl: number; fileBytes: number; sourceRows: number };
-const defaults: Limits = { roots: 1000, bytes: 32 * 1024 * 1024, rows: 20_000, milliseconds: 3000, databaseRows: 5000, lineBytes: 1024 * 1024, ttl: 5 * 60_000,
+export type UsageLedgerSnapshot = { db: DatabaseSync; id: string; updatedAt: number; partial: boolean; warnings: string[]; scannedRoots: number; processedRoots: number; totalRoots: number; building: boolean };
+type QueryAggregate = Pick<UsageRecordPage, "count" | "total" | "analytics">;
+type Snapshot = UsageLedgerSnapshot;
+export type UsageLedgerPublication = Snapshot & { queries?: UsageQueryCache<QueryAggregate>; providers?: UsageRecordPage["providers"] };
+type Cached = UsageLedgerPublication & { scan?: AsyncGenerator<Snapshot, Snapshot>; timer?: ReturnType<typeof setTimeout> };
+type Limits = { roots: number; bytes: number; rows: number; indexBytes: number; milliseconds: number; databaseRows: number; lineBytes: number; ttl: number; fileBytes: number; sourceRows: number };
+const defaults: Limits = { roots: 1000, bytes: 32 * 1024 * 1024, rows: 20_000, indexBytes: 64 * 1024 * 1024, milliseconds: 3000, databaseRows: 5000, lineBytes: 1024 * 1024, ttl: 5 * 60_000,
   fileBytes: 512 * 1024 * 1024, sourceRows: 5000 };
 
 /** Disposable, bounded per-entry ledger. No transcript bodies or credentials enter the index. */
@@ -69,14 +83,14 @@ export class ModelUsageLedger {
   private tail: Promise<unknown> = Promise.resolve();
   private closed = false;
   private readonly limits: Limits;
-  constructor(private readonly store: Store, private readonly modelsDir: string, limits: Partial<Limits> = {}) { this.limits = { ...defaults, ...limits }; }
+  constructor(private readonly store: Pick<Store, "db">, private readonly modelsDir: string, limits: Partial<Limits> = {}) { this.limits = { ...defaults, ...limits }; }
   workspaces() {
     return this.store.db.prepare("SELECT id,substr(name,1,160) AS name FROM workspaces WHERE archived=0 AND length(CAST(id AS BLOB))<=160 ORDER BY name,id LIMIT 1000").all()
       .map(row => ({ id: String(row.id), name: String(row.name) }));
   }
   /** Metadata only: never opens histories or starts a ledger scan. */
   sessions(input: unknown = {}): UsageSessionDirectory {
-    const { workspaceId } = filter(input);
+    const { workspaceId } = usageRecordFilter(input);
     if (workspaceId && !this.store.db.prepare("SELECT 1 FROM workspaces WHERE id=? AND archived=0").get(workspaceId)) throw new AppError("NOT_FOUND", "工作空间不存在或已归档。");
     const rows = this.store.db.prepare(`SELECT s.id,substr(s.title,1,160) AS title,w.id AS workspaceId,substr(w.name,1,160) AS workspaceName
       FROM sessions s JOIN workspaces w ON w.id=s.workspaceId WHERE w.archived=0 AND s.deletedAt IS NULL
@@ -86,7 +100,7 @@ export class ModelUsageLedger {
     return { sessions: rows.slice(0, 1000).map(row => ({ id: String(row.id), title: label(row.title, "未命名会话"), workspaceId: String(row.workspaceId), workspaceName: String(row.workspaceName) })), truncated: rows.length > 1000 };
   }
   read(input: unknown = {}): Promise<UsageRecordPage> {
-    const params = filter(input);
+    const params = usageRecordFilter(input);
     if (this.closed) throw new AppError("INVALID_INPUT", "用量统计已关闭。");
     const result = this.tail.then(() => this.page(params));
     this.tail = result.catch(() => {});
@@ -98,7 +112,7 @@ export class ModelUsageLedger {
     await Promise.all(snapshots.map(value => this.dispose(value)));
   }
   private async dispose(value: Cached) {
-    clearTimeout(value.timer);
+    clearTimeout(value.timer); value.queries?.clear();
     try { await value.scan?.return(value); } finally { try { value.db.close(); } catch { /* Builder already closed after an error. */ } }
   }
   private remember(key: string, value: Cached) {
@@ -131,42 +145,62 @@ export class ModelUsageLedger {
       try { const next = await scan.next(); snapshot = { ...next.value, ...(!next.done ? { scan } : {}) }; this.remember(key, snapshot); }
       catch (error) { this.cache.delete(key); await this.dispose(snapshot); throw error; }
     }
+    return this.queryPublished(params, snapshot);
+  }
+  /** Background materialization only: query an already verified publication, never scan sources. */
+  queryPublished(input: unknown, snapshot: UsageLedgerPublication): UsageRecordPage {
+    const params = usageRecordFilter(input);
     const reset = !!params.snapshot && params.snapshot !== snapshot.id;
     const where: string[] = [], values: (number | string | null)[] = [];
     if (params.providerId !== undefined) { where.push("provider IS ?"); values.push(params.providerId); }
     if (params.rootSessionId) { where.push("json_extract(data,'$.rootSessionId')=?"); values.push(params.rootSessionId); }
     // Identity belongs to the session, not its accounting category (tool/compression/memory).
     if (params.agentRole) where.push(`json_extract(data,'$.sessionId') ${params.agentRole === "main" ? "=" : "<>"} json_extract(data,'$.rootSessionId')`);
+    if (params.requestType === "compression") where.push("json_extract(data,'$.category')='compression'");
+    else if (params.requestType) where.push(`json_extract(data,'$.sessionId') ${params.requestType === "main" ? "=" : "<>"} json_extract(data,'$.rootSessionId')`);
     if (params.query) { where.push("search LIKE ? ESCAPE '\\'"); values.push(`%${params.query.toLowerCase().replace(/[\\%_]/g, "\\$&")}%`); }
     if (params.from !== undefined) { where.push("timestamp>=?"); values.push(params.from); }
     if (params.to !== undefined) { where.push("timestamp<=?"); values.push(params.to); }
     const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
-    const count = Number(snapshot.db.prepare(`SELECT count(*) AS count FROM records ${clause}`).get(...values)!.count);
+    // A publication owns its memo; a continuation/refresh creates a new Cached object.
+    // Pagination and client snapshot tokens never change the matching set.
+    const queryKey = JSON.stringify([params.providerId !== undefined, params.providerId ?? null, params.rootSessionId ?? null,
+      params.agentRole ?? null, params.requestType ?? null, params.query?.toLowerCase() || null, params.from ?? null, params.to ?? null, params.timeZone ?? "UTC"]);
+    const queries = snapshot.queries ??= new UsageQueryCache<QueryAggregate>();
+    const cached = queries.get(queryKey);
+    const count = cached?.count ?? Number(snapshot.db.prepare(`SELECT count(*) AS count FROM records ${clause}`).get(...values)!.count);
     const pageSize = params.pageSize!, page = Math.min(reset ? 1 : params.page!, Math.max(1, Math.ceil(count / pageSize)));
     const rows = snapshot.db.prepare(`SELECT data FROM records ${clause} ORDER BY timestamp IS NULL,timestamp DESC,id ASC LIMIT ? OFFSET ?`).all(...values, pageSize, (page - 1) * pageSize)
       .map(row => JSON.parse(String(row.data)) as UsageRecord);
-    const fields = ["records", "knownCost", "unknownCost", "unknownTokens", "unknownParts", "estimatedCost", "estimatedRecords", ...costParts.map(p => `tokens.${p}`), ...costParts.map(p => `parts.${p}`)];
-    const sums = snapshot.db.prepare(`SELECT ${fields.map((field, index) => `coalesce(sum(json_extract(data,'$.${field}')),0) AS f${index}`).join(",")} FROM records ${clause}`).get(...values)!;
-    const total = emptyCostTotals();
-    for (let i = 0; i < fields.length; i++) {
-      const [parent, child] = fields[i].split("."), value = Number(sums[`f${i}`]);
-      if (child) total[parent as "tokens" | "parts"][child as typeof costParts[number]] = value;
-      else if (!parent.startsWith("estimated") || value) (total as unknown as Record<string, number>)[parent] = value;
+    const total = cached?.total ?? emptyCostTotals();
+    if (!cached) {
+      const fields = ["records", "knownCost", "unknownCost", "unknownTokens", "unknownParts", "estimatedCost", "estimatedRecords", ...costParts.map(p => `tokens.${p}`), ...costParts.map(p => `parts.${p}`)];
+      const sums = snapshot.db.prepare(`SELECT ${fields.map((field, index) => `coalesce(sum(json_extract(data,'$.${field}')),0) AS f${index}`).join(",")} FROM records ${clause}`).get(...values)!;
+      for (let i = 0; i < fields.length; i++) {
+        const [parent, child] = fields[i].split("."), value = Number(sums[`f${i}`]);
+        if (child) total[parent as "tokens" | "parts"][child as typeof costParts[number]] = value;
+        else if (!parent.startsWith("estimated") || value) (total as unknown as Record<string, number>)[parent] = value;
+      }
+      if (total.estimatedRecords) total.estimateSources = snapshot.db.prepare(`SELECT DISTINCT json_each.value AS source FROM records, json_each(records.data,'$.estimateSources') ${clause}${clause ? " AND" : " WHERE"} json_each.type='text' AND length(json_each.value)<=1024 ORDER BY source LIMIT 64`).all(...values).map(row => String(row.source));
     }
-    if (total.estimatedRecords) total.estimateSources = snapshot.db.prepare(`SELECT DISTINCT json_each.value AS source FROM records, json_each(records.data,'$.estimateSources') ${clause}${clause ? " AND" : " WHERE"} json_each.type='text' AND length(json_each.value)<=1024 ORDER BY source LIMIT 64`).all(...values).map(row => String(row.source));
-    return { rows, total, count, page, pageSize, snapshot: snapshot.id, updatedAt: snapshot.updatedAt, scannedRoots: snapshot.scannedRoots, totalRoots: snapshot.totalRoots,
+    const analytics = params.analytics ? cached?.analytics ?? usageAnalytics((function* () {
+      for (const row of snapshot.db.prepare(`SELECT data FROM records ${clause}`).iterate(...values)) yield JSON.parse(String(row.data)) as UsageRecord;
+    })(), params) : undefined;
+    if (!cached || (params.analytics && !cached.analytics)) queries.set(queryKey, { count, total, ...(analytics ? { analytics } : {}) });
+    const providers = snapshot.providers ??= snapshot.db.prepare("SELECT DISTINCT provider FROM records ORDER BY provider").all().map(row => row.provider === null ? null : String(row.provider));
+    return { rows, total, count, page, pageSize, ...(analytics ? { analytics } : {}), snapshot: snapshot.id, updatedAt: snapshot.updatedAt, scannedRoots: snapshot.scannedRoots, totalRoots: snapshot.totalRoots,
       processedRoots: snapshot.processedRoots, building: snapshot.building,
       partial: snapshot.partial, warnings: [...snapshot.warnings, ...(reset ? ["用量快照已更新，已返回第一页。"] : [])],
-      providers: snapshot.db.prepare("SELECT DISTINCT provider FROM records ORDER BY provider").all().map(row => row.provider === null ? null : String(row.provider)) };
+      providers: [...providers] };
   }
   private async *build(workspaceId?: string): AsyncGenerator<Snapshot, Snapshot> {
     const db = new DatabaseSync(":memory:"), source = this.store.db, limits = this.limits;
-    db.exec("CREATE TABLE records(id TEXT PRIMARY KEY,provider TEXT,timestamp REAL,search TEXT NOT NULL,data TEXT NOT NULL); CREATE INDEX record_order ON records(timestamp DESC,id); CREATE TABLE staging AS SELECT * FROM records WHERE 0; CREATE UNIQUE INDEX staging_id ON staging(id);");
-    const insert = db.prepare("INSERT OR IGNORE INTO records VALUES(?,?,?,?,?)"), stage = db.prepare("INSERT OR IGNORE INTO staging VALUES(?,?,?,?,?)");
+    db.exec("CREATE TABLE records(id TEXT PRIMARY KEY,provider TEXT,timestamp REAL,search TEXT NOT NULL,data TEXT NOT NULL,callKey TEXT); CREATE INDEX record_order ON records(timestamp IS NULL,timestamp DESC,id); CREATE TABLE staging AS SELECT * FROM records WHERE 0; CREATE UNIQUE INDEX staging_id ON staging(id);");
+    const insert = db.prepare("INSERT OR IGNORE INTO records VALUES(?,?,?,?,?,?)"), stage = db.prepare("INSERT OR IGNORE INTO staging VALUES(?,?,?,?,?,?)");
     const exists = db.prepare("SELECT 1 FROM records WHERE id=?");
-    const warnings = new Set<string>(); let bytes = 0, databaseRows = 0, count = 0, partial = false, scannedRoots = 0, processedRoots = 0, staging = false, familyComplete = true, started = performance.now();
+    const warnings = new Set<string>(); let bytes = 0, databaseRows = 0, count = 0, indexedBytes = 0, partial = false, scannedRoots = 0, processedRoots = 0, staging = false, familyComplete = true, started = performance.now();
     const warn = (message: string) => { partial = true; familyComplete = false; if (warnings.size < 20) warnings.add(message); };
-    const exhausted = () => count >= limits.rows;
+    const exhausted = () => count >= limits.rows || indexedBytes >= limits.indexBytes;
     const paused = () => bytes >= limits.bytes || databaseRows >= limits.databaseRows || performance.now() - started >= limits.milliseconds;
     const resume = () => { bytes = 0; databaseRows = 0; started = performance.now(); };
     const base = `FROM sessions s JOIN workspaces w ON w.id=s.workspaceId WHERE w.archived=0 AND s.deletedAt IS NULL
@@ -253,7 +287,7 @@ export class ModelUsageLedger {
         if (paused()) { yield publish(true); resume(); }
         const root = roots[index]; familyComplete = true;
         if (!root.id || !root.workspaceId || !root.path) { warn("部分会话标识无效，未计入。"); processedRoots++; continue; }
-        const children = this.store.db.prepare("SELECT substr(s.id,1,161) AS id,substr(s.title,1,160) AS title FROM tasks t JOIN sessions s ON s.id=t.sessionId AND s.workspaceId=t.workspaceId WHERE t.workspaceId=? AND t.parentSessionId=? ORDER BY t.id LIMIT 513").all(String(root.workspaceId), String(root.id));
+        const children = this.store.db.prepare("SELECT substr(s.id,1,161) AS id,substr(s.title,1,160) AS title FROM tasks t JOIN sessions s ON s.id=t.sessionId AND s.workspaceId=t.workspaceId WHERE t.workspaceId=? AND t.parentSessionId=? AND s.deletedAt IS NULL ORDER BY t.id LIMIT 513").all(String(root.workspaceId), String(root.id));
         databaseRows += children.length + 1;
         if (children.length >= 512 || children.some(row => !text(row.id))) { warn("部分会话家族超过扫描预算，未计入。"); processedRoots++; continue; }
         const parent = this.store.db.prepare("SELECT substr(title,1,160) AS title FROM sessions WHERE id=?").get(String(root.id))!;
@@ -275,7 +309,14 @@ export class ModelUsageLedger {
               ...(timestamp !== undefined ? { timestamp } : {}), ...(status ? { status: status.slice(0, 80) } : {}), kind: totals.records > 1 ? "aggregate" : kind, ...totals };
             const search = [row.workspaceName, row.sessionTitle, row.source, row.model, row.provider].join(" ").toLowerCase();
             if (staging && exists.get(id)) return;
-            const result = (staging ? stage : insert).run(id, row.provider, row.timestamp ?? null, search, JSON.stringify(row)); count += Number(result.changes);
+            const data = JSON.stringify(row), size = Buffer.byteLength(data) + Buffer.byteLength(search);
+            if (indexedBytes + size > limits.indexBytes) { indexedBytes = limits.indexBytes; return; }
+            // Detect ambiguous corrected copies without silently changing historical attribution.
+            // Missing native IDs (line fallbacks) cannot establish a cross-branch call identity.
+            const callKey = sourceId.startsWith("entry:") && !/^entry:line-\d+$/.test(sourceId)
+              ? createHash("sha256").update(JSON.stringify([root.workspaceId, origin, sourceId])).digest("hex") : null;
+            const result = (staging ? stage : insert).run(id, row.provider, row.timestamp ?? null, search, data, callKey);
+            count += Number(result.changes); if (result.changes) indexedBytes += size;
           };
           const jobs = new Map<string, Compression>(), applied = new Set<string>();
           for (const value of readRows("compressions", session.id)) {
@@ -392,8 +433,10 @@ export class ModelUsageLedger {
         processedRoots++;
         if (familyComplete && !exhausted()) scannedRoots++;
       }
-      if (exhausted()) warn("已达到本次派生账务条数上限；可按单个工作空间核对，当前不是全部历史。");
+      if (exhausted()) warn("已达到本次派生账务条数或容量上限；可按单个工作空间核对，当前不是全部历史。");
       if (processedRoots < totalRoots) warn(`已处理 ${processedRoots} / ${totalRoots} 个主会话家族，部分来源超过本次索引上限。`);
+      if (db.prepare("SELECT 1 FROM records WHERE callKey IS NOT NULL GROUP BY callKey HAVING count(*)>1 LIMIT 1").get())
+        warn("部分分支中同一原生调用存在不同账务版本，当前保留既有归属；汇总可能重复，不能视为已确认账单。");
       return publish(false);
     } catch (error) { db.close(); throw error; }
   }

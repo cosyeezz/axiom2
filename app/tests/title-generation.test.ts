@@ -76,9 +76,14 @@ test("independent titles: real worker cadence, memory and details, no main-conte
   assert.ok(!material.includes("MAIN_USER_SENTINEL") && !material.includes("MAIN_TOOL_SENTINEL"));
   third.finish("主任务完成，不等待标题。"); await settled(scope);
   assert.equal(state(scope).titleState, "pending", "main can settle while title is in flight");
+  await wait(() => app!.agents.pool.requests.snapshot().providers.find(row => row.providerId === "title-fixture")?.current === 1, "only the independent title request should remain in flight");
+  const inFlight = app.agents.pool.requests.snapshot().providers.find(row => row.providerId === "title-fixture")!;
+  assert.equal(inFlight.rpm, requests.length, "main requests and the independent title each count exactly once");
+  assert.ok(inFlight.peak >= 2, "main and title requests overlap on the same connection"); assert.equal(inFlight.callLevel, false);
   titleRequest.finish("一二三四五六七八九十甲乙丙");
   await wait(() => state(scope).titleState === "generated", "title not saved");
   assert.equal(state(scope).title, "一二三四五六七八九十甲乙丙");
+  await wait(() => app!.agents.pool.requests.snapshot().providers.find(row => row.providerId === "title-fixture")?.current === 0, "completed title request must release concurrency");
   const file = app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId)!.file as string;
   const history = readFileSync(file, "utf8");
   const entries = history.trim().split("\n").map(line => JSON.parse(line));
@@ -96,4 +101,6 @@ test("independent titles: real worker cadence, memory and details, no main-conte
 
   const empty = await create(); await call(empty, "prompt", { text: "空记忆" }); const noMemory = await nextMain(5); noMemory.finish("完成"); await settled(empty);
   await new Promise(resolve => setTimeout(resolve, 100)); assert.equal(titles().length, 2); assert.equal(state(empty).titleState, "pending");
+  await wait(() => app!.agents.pool.requests.snapshot().providers.every(row => row.current === 0), "all main/title requests must settle");
+  assert.equal(app.agents.pool.requests.snapshot().providers[0].rpm, requests.length, "manual title priority does not lose completed request statistics");
 });

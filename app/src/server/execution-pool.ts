@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import { fork, spawn, type ChildProcess } from "node:child_process";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
-import { MaintenanceError } from "../shared/maintenance.js";
 import { AppError } from "../shared/protocol.js";
 import type { ExecutionMode, PreparedEnvironment } from "./execution-profile.js";
 import { sameLease, type LeaseRef } from "./execution-protocol.js";
+import { ProviderRequestTracker } from "./provider-request-statistics.js";
 import { rejectExecution, safeExecutionRejection, type ExecutionRejection, type RejectionObserver } from "./execution-diagnostics.js";
 export type ExecutionKind = "agent" | "memory-query" | "memory-organize" | "session-title" | "compression-summary";
 export interface PoolLimits {
@@ -22,6 +22,8 @@ export interface AcquireRequest {
   onBindingRejected?: RejectionObserver;
   affinity?: { sessionId: string; fileRevision: string };
   parentLease?: LeaseRef; signal: AbortSignal; deadlineAt?: number;
+  /** Fail before dispatch when capacity is unavailable; the caller owns retry scheduling. */
+  wait?: false;
   memory?: { concurrency: number; queue: number };
 }
 export interface ExecutionLease {
@@ -56,6 +58,7 @@ const defaults: PoolLimits = { maxLiveProcesses: 24, maxIdleRetained: 4, targetR
 export class ExecutionPool {
   readonly limits: PoolLimits;
   readonly mode: ExecutionMode;
+  readonly requests = new ProviderRequestTracker();
   onMetric?: (metric: PoolMetric) => void;
   private instances = new Map<string, Instance>();
   private waiters: Waiter[] = [];
@@ -63,7 +66,6 @@ export class ExecutionPool {
   private backoff = new Map<string, number>();
   private generation = 0;
   private stopping = false;
-  private maintaining = false;
   private pumping = false;
   private scheduled = false;
   private peak = 0;
@@ -94,7 +96,6 @@ export class ExecutionPool {
   }
   acquire(request: AcquireRequest): Promise<ExecutionLease> {
     if(this.stopping) return Promise.reject(new AppError("SHUTTING_DOWN","执行池正在关闭"));
-    if(this.maintaining) return Promise.reject(new AppError("MAINTENANCE_BUSY","正在清理托管组件，请稍后再开始执行。"));
     if(request.signal.aborted || request.deadlineAt !== undefined && request.deadlineAt <= Date.now()) return Promise.reject(new AppError("AGENT_STOPPED","执行资源等待已取消或超时"));
     if(request.parentLease && (request.kind!=='memory-query'||!this.isActive(request.parentLease))) return Promise.reject(new AppError("AGENT_STOPPED","父执行已经结束"));
     const waiter: Waiter = {request,at:performance.now(),done:deferred(),abort:()=>{this.remove(waiter);waiter.done.reject(new AppError("AGENT_STOPPED","执行资源等待已取消或超时"));this.schedule();}};
@@ -103,7 +104,9 @@ export class ExecutionPool {
     if(request.deadlineAt!==undefined) waiter.timer=setTimeout(waiter.abort,Math.max(0,request.deadlineAt-Date.now()));
     this.pump();
     // Try immediate admission before applying the waiting-only limits (queue=0 is valid).
-    if(this.waiters.includes(waiter) && (this.waiters.length>this.limits.maxQueued || request.memory && this.waiters.filter(w=>w.request.memory).length>request.memory.queue)) {
+    if(this.waiters.includes(waiter) && request.wait===false) {
+      this.remove(waiter);waiter.done.reject(new AppError('EXECUTION_BUSY','执行资源暂不可用；本次尚未启动，请稍后重试。'));
+    } else if(this.waiters.includes(waiter) && (this.waiters.length>this.limits.maxQueued || request.memory && this.waiters.filter(w=>w.request.memory).length>request.memory.queue)) {
       this.remove(waiter);waiter.done.reject(new AppError(request.memory?'MEMORY_BUSY':'EXECUTION_BUSY',request.memory?'记忆查询队列已满':'执行资源等待队列已满'));
     }
     return waiter.done.promise;
@@ -121,7 +124,7 @@ export class ExecutionPool {
     return !i.consumed || i.environment.reuse==='cross-binding';
   }
   private pump() {
-    if(this.pumping||this.stopping||this.maintaining)return;this.pumping=true;
+    if(this.pumping||this.stopping)return;this.pumping=true;
     try {
       for(const w of [...this.waiters]) {
         const r=w.request;
@@ -191,6 +194,7 @@ export class ExecutionPool {
         child.on('error',()=>{i.processReady.reject(Error('工作进程启动失败'));i.environmentReady.reject(Error('执行环境准备失败'));});
         child.on('message',(event:any)=>{
           if(event.instance?.instanceId===i.id&&event.instance?.generation===i.generation&&event.instance?.profileHash===e.profileHash){
+            if(event.type==='provider_request_stat' && i.state!=='exited') this.requests.observe(i.id,event);
             if(event.type==='process_ready'){i.processReadyAt=performance.now();i.processReady.resolve();this.metric(i,'process_ready',{durationMs:performance.now()-begin});}
             if(event.type==='environment_ready'){i.environmentReadyAt=performance.now();i.environmentReady.resolve();this.metric(i,'environment_ready',{durationMs:event.durationMs});}
             if(event.type==='prepare_failed'){i.environmentReady.reject(Error('执行环境准备失败'));void this.retireInstance(i,'prepare_failed');}
@@ -306,6 +310,7 @@ export class ExecutionPool {
     clearTimeout(i.killTimer);clearTimeout(i.idleTimer);i.state='exited';i.validationAbort.abort();
     i.processReady.reject(Error('工作进程已关闭'));i.environmentReady.reject(Error('执行环境已关闭'));
     if(!i.consumed&&!i.lease)this.unused++;
+    this.requests.releaseOwner(i.id);
     this.releaseOwner(i);this.instances.delete(i.id);
     try{i.environment.release();}catch{/* Cleanup must not interrupt later process-close listeners. */}
     finally{i.closed.resolve();this.schedule();}
@@ -333,7 +338,7 @@ export class ExecutionPool {
     this.prewarm();
   }
   private prewarm() {
-    if(this.stopping||this.maintaining)return;
+    if(this.stopping)return;
     const now=Date.now();
     // Only real admitted demand renews this window; idle retirement must not feed prewarming forever.
     for(const [key,value] of this.recent)if(now-value.lastDemandAt>=this.limits.idleTtlMs){this.recent.delete(key);value.environment.release();}
@@ -351,25 +356,6 @@ export class ExecutionPool {
     await Promise.all([...this.instances.values()].filter(i=>!i.lease&&(!providers||!i.environment.provider||providers.includes(i.environment.provider))).map(i=>this.retireInstance(i,'configuration')));
   }
   async trim() {for(const {environment:e} of this.recent.values())e.release();this.recent.clear();await Promise.all([...this.instances.values()].filter(i=>!i.lease).map(i=>this.retireInstance(i,'trim')));}
-  /** Quiesce retained workers before removing programs they may have cached. */
-  async maintenance<T>(operation: () => T, signal?: AbortSignal, closeTimeoutMs = 30_000): Promise<T> {
-    if (this.stopping || this.maintaining || this.waiters.length || [...this.instances.values()].some(i => i.lease))
-      throw new AppError("MAINTENANCE_BUSY", "仍有执行或维护任务，请结束后再卸载组件。");
-    signal?.throwIfAborted();
-    this.maintaining = true;
-    let timeout: ReturnType<typeof setTimeout> | undefined, abort: (() => void) | undefined;
-    try {
-      await Promise.race([this.trim(), new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => reject(new MaintenanceError("stop-unconfirmed", "缓存工作进程退出超时；已请求终止并保留文件，可重新核实后重试。")), closeTimeoutMs);
-        abort = () => reject(signal!.reason);
-        signal?.addEventListener("abort", abort, { once: true });
-        if (signal?.aborted) abort();
-      })]);
-      signal?.throwIfAborted();
-      if (this.stopping) throw new AppError("SHUTTING_DOWN", "执行池正在关闭。");
-      return await operation();
-    } finally { clearTimeout(timeout); if (abort) signal?.removeEventListener("abort", abort); this.maintaining = false; this.schedule(); }
-  }
   async waitForPrewarm() {this.prewarm();await Promise.all([...this.instances.values()].filter(i=>!i.lease&&i.ready).map(i=>i.ready!.catch(()=>{})));}
   async close() {
     this.stopping=true;for(const w of [...this.waiters])w.abort();for(const {environment:e} of this.recent.values())e.release();this.recent.clear();

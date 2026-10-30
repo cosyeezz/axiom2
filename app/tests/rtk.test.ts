@@ -31,12 +31,10 @@ function event(command = "rg --files", text = paths): ToolResultEvent {
   return { type: "tool_result", toolName: "bash", toolCallId: "call-fixture", input: { command }, content: [{ type: "text", text }], isError: false, details: undefined, structuredContent: { output: text, exit_code: 0, truncated: false, wall_time_seconds: 0.1 } };
 }
 
-test("RTK install: checked version, exclusive short receipt, idempotency, CAS, atomic rollback and cancellation", async () => {
+test("RTK install: latest without check, idempotent receipt, CAS, forced-clean retry and cancellation", async () => {
   const f = rtkFixture(), store = new Store(join(f.root, "store")); const s = new RtkService(f.root, () => {}, f);
   try {
-    await assert.rejects(call(s, "rtk.install", { version: "1.0.1" }), { code: "CHECK_REQUIRED" });
     await assert.rejects(call(s, "rtk.save", { enabled: true, level: "balanced", subagents: true, revision: "" }), { code: "NOT_INSTALLED" });
-    await call(s, "rtk.check"); assert.equal((await settle(s)).latest, "1.0.1");
     f.hold();
     const c = { requestId: "once", op: "rtk.install", params: { version: "1.0.1" } };
     const first = await store.external(c, () => s.command(c)) as RtkState;
@@ -50,12 +48,13 @@ test("RTK install: checked version, exclusive short receipt, idempotency, CAS, a
     await assert.rejects(call(s, "rtk.save", { enabled: false, level: "balanced", subagents: true, revision: state.revision }), { code: "CONFIGURATION_CONFLICT" });
     const config = readFileSync(rtkConfigPath(f.root), "utf8");
     f.setVersion("1.0.2"); await call(s, "rtk.check"); await settle(s); f.corrupt();
-    await call(s, "rtk.install", { version: "1.0.2" }); assert.match((await settle(s)).job!.error!, /SHA-256/);
-    assert.equal(readFileSync(rtkConfigPath(f.root), "utf8"), config); assert.ok(existsSync(state.executable!));
-    f.hold(); const running = await call(s, "rtk.install", { version: "1.0.2" }) as RtkState;
-    await call(s, "rtk.cancel", { jobId: running.job!.id });
-    assert.match(s.snapshot().job!.message, /取消/); assert.equal(readFileSync(rtkConfigPath(f.root), "utf8"), config);
-    assert.equal(readdirSync(join(rtkDirectory(f.root), "versions")).length, 1);
+    await call(s, "rtk.install"); const failed = await settle(s);
+    assert.match(failed.job!.error!, /SHA-256/); assert.equal(failed.version, undefined, "component standard: a failed retry leaves a clean slate");
+    assert.equal(existsSync(state.executable!), false); assert.notEqual(readFileSync(rtkConfigPath(f.root), "utf8"), config);
+    f.hold(); const running = await call(s, "rtk.install") as RtkState;
+    await call(s, "rtk.cancel", { jobId: running.job!.id }); await settle(s);
+    assert.match(s.snapshot().job!.message, /取消/);
+    assert.equal(readdirSync(join(rtkDirectory(f.root), "versions")).length, 0);
   } finally { await s.close(); store.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
@@ -63,7 +62,7 @@ test("RTK restart, malformed config, scope and clear validation", async () => {
   const f = rtkFixture(); let s = new RtkService(f.root, () => {}, f);
   try {
     await s.close(); atomicRtkJson(join(rtkDirectory(f.root), "job.json"), { id: "old", kind: "install", running: true, message: "working" });
-    s = new RtkService(f.root, () => {}, f); assert.equal(s.snapshot().job?.running, false); assert.match(s.snapshot().job!.error!, /不会自动重试/);
+    s = new RtkService(f.root, () => {}, f); assert.equal(s.snapshot().job, undefined, "component standard: no restored history");
     await assert.rejects(s.command({ requestId: "scope", op: "rtk.stats", sessionId: "bad" }), { code: "INVALID_SCOPE" });
     await assert.rejects(call(s, "rtk.clearStats"), { code: "CONFIRM_REQUIRED" });
     await assert.rejects(call(s, "rtk.stats", { days: 100 }), { code: "INVALID_PARAMS" });

@@ -20,16 +20,21 @@
 .reply-body > .markdown table { font-size: 14px; }
 .reply-body > .markdown :is(h4, h5, h6) { font-size: var(--thread-text-size, 15px); }
 .message-actions { position: absolute; top: -8px; right: 0; z-index: 1; line-height: 1; }
-.message-actions > button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: var(--radius-sm); color: var(--muted); background: transparent; opacity: 0; pointer-events: none; transition: opacity var(--motion-fast), color var(--motion-fast), background var(--motion-fast); }
+.message-actions > button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: var(--radius-sm); color: var(--muted); background: transparent; opacity: 0; pointer-events: none; --message-action-glyph-display: none; transition: opacity var(--motion-fast), color var(--motion-fast), background var(--motion-fast); }
+/* Disabled actions share reveal rules; late global button:disabled styles must not expose them. */
+.message-actions > button:disabled { opacity: 0; }
 .message-actions svg { width: 16px; height: 16px; }
-.log-row:hover .message-actions > button, .message-actions:focus-within > button, .message-actions[data-feedback] > button { opacity: 1; pointer-events: auto; }
+/* Remove hidden glyphs from painting, including SVG use/overflow, without removing
+   the focusable button or changing its hit-target geometry. No masking layer. */
+.message-actions > button > svg { display: var(--message-action-glyph-display, none); }
+.log-row:hover .message-actions > button, .message-actions:focus-within > button, .message-actions[data-feedback] > button { opacity: 1; pointer-events: auto; --message-action-glyph-display: block; }
 .message-actions > button:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 6%, transparent); }
 .message-actions > button:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: -3px; }
 .message-actions[data-feedback="copied"] > .copy-reply { color: var(--success); }
 .message-actions[data-feedback="failed"] > .copy-reply { color: var(--danger-icon); }
 .fork-action:disabled { cursor: not-allowed; }
 .message-copy-error { position: absolute; top: 100%; right: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); font-size: 11px; line-height: 1.5; white-space: nowrap; pointer-events: none; }
-@media (hover: none), (pointer: coarse) { .message-actions > button { opacity: 1; pointer-events: auto; } }
+@media (hover: none), (pointer: coarse) { .message-actions > button, .message-actions > button:disabled { opacity: 1; pointer-events: auto; --message-action-glyph-display: block; } }
 @media (prefers-reduced-motion: reduce) { .message-actions > button { transition: none; } }
 /* Reply copy: compact row after the output, aligned with the text edge. */
 .message-actions.reply-actions { position: static; display: flex; align-items: center; gap: 0; margin: 4px 0 0 -6px; }
@@ -47,8 +52,23 @@
 .title-heading > h1 { min-width: 0; max-width: calc(100% - 32px); overflow-wrap: anywhere; }
 .title-heading > .title-copy { flex-shrink: 0; width: 24px; min-width: 24px; height: 24px; padding: 0; color: var(--muted); }
 .title-heading > .title-copy svg { width: 13px; height: 13px; }
-.git-branch-badge { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: min(240px,100%); padding: 1px 6px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm); color: var(--fg-2); font-size: 11px; line-height: 18px; }
-.git-branch-badge > svg { flex-shrink: 0; width: 13px; height: 13px; }
+.git-branch-badge { position: relative; display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: min(240px,100%); padding: 0; border: 0; border-radius: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-align: left; cursor: pointer; }
+.git-branch-badge:hover { background: transparent; }
+.git-branch-badge:hover .git-branch-name { text-decoration: underline; text-underline-offset: 3px; }
+.git-branch-badge > .branch-copy-feedback { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; width: max-content; max-width: min(260px, 75vw); padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg); font: inherit; line-height: 1.5; white-space: normal; pointer-events: none; box-shadow: 0 4px 12px #0003; }
+.git-branch-badge > .branch-copy-feedback:empty { display: none; }
+.title-meta > .git-branch-badge { flex-shrink: 0; max-width: min(240px, 45%); }
+/* Reserve three 44px path actions plus a readable path fragment on touch screens. */
+@media (hover: none), (pointer: coarse) {
+  .title-meta > .git-branch-badge { min-width: 44px; min-height: 44px; flex-shrink: 1; }
+  .title-meta > .workspace-path { min-width: min(100%, 185px); }
+}
+.title-meta .git-branch-name { display: block; }
+.title-meta .git-branch-name, .title-meta .workspace-path-label { font: inherit; letter-spacing: inherit; }
+.git-branch-badge > svg, .title-meta .workspace-directory-icon { flex: none; width: 13px; height: 13px; }
+.title-meta .workspace-path-label { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.title-meta .path-actions > .icon-btn { color: inherit; }
+.title-meta .path-actions > .icon-btn:is(:hover, :focus-visible) { color: var(--fg); }
 .git-branch-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (hover: none), (pointer: coarse) { .title-heading > h1 { max-width: calc(100% - 52px); } .title-heading > .title-copy { width: 44px; min-width: 44px; height: 44px; } }
 .compression-feedback {
@@ -58,9 +78,13 @@
 }
 .steering-queue { margin-bottom: 8px; max-height: 112px; overflow: auto; color: var(--muted); font-size: 12px; }
 .steering-queue-item { display: flex; gap: 10px; padding: 4px 2px; min-width: 0; }
-.steering-queue-item > span:first-child { flex: 0 0 auto; font: 11px/1.6 var(--font-mono); color: var(--fg-2); }
-.steering-queue-item > span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.steering-queue-item > small { flex-shrink: 0; font-size: 11px; }
+.steering-queue-recall { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; min-height: 28px; padding: 0 4px; margin: -4px -2px; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; text-align: left; }
+.steering-queue-recall:hover:not(:disabled) { background: color-mix(in srgb, var(--fg) 5%, transparent); color: var(--fg); }
+.steering-queue-recall:focus-visible { outline-offset: -2px; }
+.steering-queue-item > span:first-child, .steering-queue-recall > span:first-child { flex: 0 0 auto; font: 11px/1.6 var(--font-mono); color: var(--fg-2); }
+.steering-queue-item > span:nth-child(2), .steering-queue-recall > span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.steering-queue-item > small, .steering-queue-recall > small { flex-shrink: 0; font-size: 11px; }
+@media (pointer: coarse) { .steering-queue-recall { min-height: 44px; } }
 .steering-queue-item > .btn { flex-shrink: 0; font-size: 12px; }
 .steering-queue-item[data-failed] { flex-wrap: wrap; align-items: center; }
 .steering-queue-item[data-failed] > small { flex: 1 0 100%; min-width: 0; overflow-wrap: anywhere; }
@@ -200,19 +224,24 @@
   max-width: 100%;
   overflow-x: auto;
 }
+/* Dense model controls scale gently, independently of conversation typography. */
+.model-picker { --display-font-scale: clamp(.85, var(--display-content-scale, 1), 1.15); }
+.model-picker > summary { font-size: calc(11px * var(--display-font-scale, 1)); }
 .model-picker > summary > span {
   min-width: 0;
-  max-width: 190px;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.composer .model-picker > summary > span { white-space: nowrap; overflow-wrap: normal; }
+.model-selection-provider { display: none; }
+.composer .model-selection-provider { display: inline; }
 /* Use the available conversation width, including when a sidebar is open. */
 .composer-area > .container { container-type: inline-size; }
 @container (max-width: 620px) {
   .composer { column-gap: 4px; }
   .composer textarea { grid-column: 2 / -1; }
   .composer :is(.model-picker, .composer-model-controls) { grid-column: 2 / 4; grid-row: 2; justify-self: start; margin: 0; min-width: 0; }
-  .composer .model-picker > summary > span { max-width: 140px; }
   .composer .send, .composer .composer-actions { grid-column: 4; grid-row: 2; }
 }
 /* Compact controls leave the scrollable model directory most of the available height. */
@@ -226,7 +255,7 @@
 .model-picker .model-search input { min-height: 36px; padding-block: 6px; }
 .model-picker .model-list { flex: 1 1 auto; min-height: 0; max-height: 360px; padding: 0 4px 4px; overscroll-behavior: contain; }
 .model-picker .model-row { margin-bottom: 0; }
-.model-picker .model-option { font-family: var(--font-body); min-height: 48px; padding: 5px 8px; gap: 6px; }
+.model-picker .model-option { font-family: var(--font-body); min-height: 40px; padding: 4px 6px; gap: 4px; }
 .model-picker .model-copy { display: grid; gap: 0; text-align: left; }
 .model-picker .model-name { font-size: 12px; font-weight: 510; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-picker .model-provider-name { font: 10px/1.4 var(--font-mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -237,11 +266,11 @@
 .model-picker .model-reasoning { min-width: 0; margin: 0; padding: 4px 8px; border: 0; border-top: 1px solid var(--border); flex-shrink: 0; }
 .model-picker .model-reasoning legend { float: left; width: 100%; padding: 0; margin-bottom: 4px; font-size: 11px; color: var(--muted); }
 .model-picker .model-reasoning > p { clear: both; }
-/* Use real options, readable type and wrapping instead of seven tiny reserved slots. */
-.model-picker .model-levels { clear: both; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(72px * var(--display-font-scale, 1))), 1fr)); gap: 4px; }
+/* Six stable slots, filled in source order; unused trailing slots stay empty. */
+.model-picker .model-levels { clear: both; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; container-type: inline-size; }
 .model-picker .model-level { position: relative; min-width: 0; cursor: pointer; }
 .model-picker .model-level input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.model-picker .model-level span { display: flex; align-items: center; justify-content: center; min-height: 32px; padding: 4px 0; border: 1px solid var(--border); border-radius: 6px; font: calc(11px * var(--display-font-scale, 1))/1.5 var(--font-mono); color: var(--fg-2); white-space: nowrap; pointer-events: none; }
+.model-picker .model-level span { display: flex; align-items: center; justify-content: center; min-height: 32px; padding: 4px 0; border: 1px solid var(--border); border-radius: 6px; font: min(calc(10px * var(--display-font-scale, 1)), 3.1cqi)/1.4 var(--font-mono); color: var(--fg-2); white-space: nowrap; pointer-events: none; }
 .model-picker .model-level input:enabled:hover + span { background: color-mix(in srgb, var(--fg) 8%, transparent); }
 .model-picker .model-level input:checked + span { border-color: var(--accent); background: var(--accent); color: var(--accent-on); }
 .model-picker .model-level input:enabled:checked:hover + span { border-color: var(--accent-hover); background: var(--accent-hover); }
@@ -281,8 +310,10 @@
   max-height: none;
   overflow: visible;
 }
-.composer-model-controls { grid-column: 3; grid-row: 1; display: flex; align-items: center; min-width: 0; max-width: 100%; gap: 2px; }
-.composer-model-controls > .model-picker { min-width: 0; }
+.composer-model-controls { grid-column: 3; grid-row: 1; display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; min-width: 0; gap: 2px; }
+/* A stable budget protects the draft; long identities use a single-line ellipsis. */
+.composer :is(.model-picker, .composer-model-controls) { width: max-content; max-width: min(24rem, calc(100cqi - 140px)); }
+.composer-model-controls > .model-picker { flex: 1 1 auto; width: auto; min-width: 0; max-width: 100%; }
 @media (max-width: 760px) {
   .composer-model-controls { grid-column: 2 / 4; grid-row: 2; justify-self: start; }
 }
@@ -291,13 +322,13 @@
 .composer-clear svg { width: 18px; height: 18px; --icon-stroke: 1.5px; }
 .composer { position: relative; }
 /* A long draft owns the entire upper row, not a narrow column beside controls. */
-.composer[data-multiline] { grid-template-rows: auto 44px; row-gap: 0; border-radius: 20px; }
+.composer[data-multiline] { grid-template-rows: auto minmax(44px, auto); row-gap: 0; border-radius: 20px; }
 .composer[data-multiline] textarea { grid-column: 1 / -1; grid-row: 1; width: 100%; min-width: 0; padding-inline: 8px; white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: hidden; }
-.composer[data-multiline] :is(.attachment-picker, #attach, .composer-model-controls, .model-picker, .send, .composer-actions) { grid-row: 2; }
+.composer[data-multiline] :is(.attachment-picker, :where(#attach), .composer-model-controls, .model-picker, .send, .composer-actions) { grid-row: 2; }
 .composer[data-multiline] .attachment-picker, .composer[data-multiline] #attach { grid-column: 1; }
-.composer[data-multiline] :is(.model-picker, .composer-model-controls) { grid-column: 2 / 4; justify-self: end; max-width: 100%; }
+.composer[data-multiline] :is(.model-picker, .composer-model-controls) { grid-column: 2 / 4; justify-self: end; }
 .composer[data-multiline] :is(.send, .composer-actions) { grid-column: 4; }
-.composer[data-multiline] .composer-model-controls > .model-picker { flex: 1; }
+.composer[data-multiline] .composer-model-controls > .model-picker { flex: 1 1 auto; }
 .attachment-picker { grid-column: 1; grid-row: 1; position: relative; display: grid; width: 44px; height: 44px; }
 .file-completion {
   position: fixed;

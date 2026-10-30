@@ -21,6 +21,9 @@ export function AsciiDiagramPreview({ diagram, source }: { diagram: AsciiDiagram
       <g className="ascii-diagram-lines" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         {diagram.strokes.map((stroke, i) => <path key={i} d={diagramStrokePath(stroke)} />)}
       </g>
+      {diagram.fields && <g className="ascii-diagram-fields" stroke="currentColor" strokeWidth="1.2" aria-hidden="true">
+        {diagram.fields.map((field, i) => <rect key={i} x={p + field.x * w} y={p + field.y * h + 1} width={field.width * w} height={h - 2} rx="4" />)}
+      </g>}
       <g className="ascii-diagram-labels" fill="currentColor" fontSize="14" fontWeight="400" dominantBaseline="central">
         {/* Keep natural CJK words together; anchor ASCII and script transitions
             independently so mixed labels cannot accumulate column drift. */}

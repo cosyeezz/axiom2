@@ -14,6 +14,13 @@ export const modelApis = [
   "anthropic-messages",
   "google-generative-ai",
 ] as const;
+/** APIs whose request body receives Model.samplingParams (Codex is merged by Axiom). */
+export const bodyOverrideApis: readonly string[] = [
+  "openai-completions",
+  "openai-responses",
+  "azure-openai-responses",
+  "openai-codex-responses",
+];
 export const samplingKeys = [
   "temperature",
   "top_p",
@@ -144,6 +151,8 @@ export interface AuthState {
     type: "secret" | "text" | "manual_code" | "select";
     message: string;
     placeholder?: string;
+    /** Explicit non-secret saved preference; remains visible and editable. */
+    defaultValue?: string;
     options?: { id: string; label: string }[];
   };
 }

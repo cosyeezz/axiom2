@@ -127,6 +127,7 @@ export const managedNode: ManagedNodeProvider = {
     await pipeline(Readable.fromWeb(response.body as never), meter, createWriteStream(archive, { flags: "wx", mode: 0o600 }), { signal });
     maintenancePhase("verifying");
     if (!size || hash.digest("hex") !== sha256) throw Error("Node SHA-256 校验失败，当前工具保持不变。");
+    maintenancePhase("installing", "正在解压并准备专属 Node/npm 运行时…");
     await extractEngineArchive(archive, runtime, format, signal, 600 * 1024 * 1024); await rm(archive);
     const paths = nodeRuntimePaths(prefix, binding), state = join(prefix, "environment");
     prepareComponentEnvironment(state);

@@ -14,6 +14,7 @@ import { ProcessingPage } from "../pages/ProcessingPage.js";
 import type { Scope } from "../../shared/protocol.js";
 import { useSettingsPopover } from "../useSettingsPopover.js";
 import { useModelDisplay } from "../useModelDisplay.js";
+import { contextSourceLabel } from "../../shared/context-usage.js";
 
 export function compressionStatusLabel(job: Compression) {
   if (job.state === "completed") return job.phase === "done" ? "已应用" : "应用状态待核实";
@@ -196,9 +197,9 @@ export function CompressionDetail({
               </dd>
             </div>
             <div>
-              <dt>压缩前 · pi 估算</dt>
+              <dt>压缩前 · {job?.snapshot ? "上下文快照" : job?.before != null ? "历史估算" : "等待快照"}</dt>
               <dd className="num">
-                {job?.before?.toLocaleString("zh-CN") ?? "—"} Token
+                {job?.before == null ? "—" : `${job.before.toLocaleString("zh-CN")} Token`}
               </dd>
             </div>
             <div>
@@ -209,8 +210,19 @@ export function CompressionDetail({
                     ? "等待结果"
                     : "—"
                   : `${job.after.toLocaleString("zh-CN")} Token`}
+                {job?.after != null && <div className="meta">{done ? "摘要已应用；当前占用另计" : uncertain ? "应用状态待核实" : active ? "尚未应用" : "未应用"}</div>}
               </dd>
             </div>
+            {job?.before != null && <>
+              <div>
+                <dt>统计来源</dt>
+                <dd>{contextSourceLabel(job.snapshot?.source)}</dd>
+              </div>
+              <div>
+                <dt>快照时间</dt>
+                <dd>{job.snapshot?.capturedAt == null ? "未记录" : <time dateTime={new Date(job.snapshot.capturedAt).toISOString()}>{new Date(job.snapshot.capturedAt).toLocaleString("zh-CN", { hour12: false })}</time>}</dd>
+              </div>
+            </>}
           </dl>
         </section>
         <section>
@@ -274,7 +286,7 @@ export function CompressionDetail({
             运行中按自动压缩流程在安全点处理；会话已停止时立即压缩全部当前上下文。缓存前缀不可用或过大时改用原生摘要，必要时分批生成。应用后保留原始历史与快照后的新增消息；生成失败或取消时不应用摘要。
           </p>
           <p id={`${id}-note`} style={{ marginTop: 8 }}>
-            摘要在后台生成，并在新的安全点自动应用。快照估算不包含后续新增消息，当前占用以会话上下文窗口图形为准。
+            压缩前读数固定在快照保存时，不随摘要生成或后续聊天变化。压缩后为摘要替换该快照的估算，不包含快照后的新增消息，也不代表摘要已应用；当前占用以会话上下文卡片为准。
           </p>
           {job?.usage && (
             <p style={{ marginTop: 8 }}>

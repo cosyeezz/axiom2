@@ -1,5 +1,8 @@
 import { Icon } from "../Icon.js";
+import { emptyMaintenanceState } from "../../shared/maintenance.js";
 import { BackendMaintenance } from "../maintenance/BackendMaintenance.js";
+import { ComponentActions } from "../maintenance/ComponentCard.js";
+import { componentInstallAction } from "../../shared/component-actions.js";
 import { useEffect, useRef, useState } from "react";
 import { command, useConnectionState, useScope } from "../transport.js";
 import { emptyModelProxyState, type ModelProxyState, type ProxyKernel } from "../../shared/model-proxy.js";
@@ -7,14 +10,17 @@ import { ProxyProfileEditor, type ProxyDraft } from "./ProxyProfileEditor.js";
 const statusText = { running: "运行中", starting: "启动中", stopped: "已停止", error: "异常" };
 export function ModelProxyTool({ active }: { active: boolean }) {
   const state = useScope("builtin-tools:model-proxy", emptyModelProxyState), connection = useConnectionState();
-  const [uninstall, setUninstall] = useState<{ kernel: ProxyKernel; revision: string }>();
+  const [uninstall, setUninstall] = useState<{ kernel: ProxyKernel }>();
   const [draft, setDraft] = useState<ProxyDraft>(), [removing, setRemoving] = useState<string>();
-  const [pending, setPending] = useState<{ id: string; op: string; target?: string }>(), [feedback, setFeedback] = useState<{ text: string; error?: boolean }>();
+  const maintenance = useScope("maintenance", emptyMaintenanceState);
+  const [pending, setPending] = useState<{ id: string; op: string; target?: string; kernel?: ProxyKernel }>(), [feedback, setFeedback] = useState<{ text: string; error?: boolean; kernel?: ProxyKernel }>();
   const activeRequest = useRef<{ id: string; acknowledged: boolean } | undefined>(undefined);
   if (activeRequest.current && activeRequest.current.id === state.job?.id) activeRequest.current.acknowledged = true;
   // A job snapshot acknowledges an accepted request even if its receipt was lost on reconnect.
   const sending = !!pending && state.job?.id !== pending.id;
   const busy = sending || !!state.job?.running || !connection.connected;
+  // Component standard: install/update/uninstall stay available; only an in-flight request or a lost connection blocks them.
+  const locked = sending || !connection.connected;
   const inspecting = (sending && pending?.op === "modelProxy.inspect") || (!!state.job?.running && state.job.id === draft?.inspectionId);
   // 线路级过渡态：启动走维护任务（job.profileId 标明目标线路），停止在请求内完成（靠 pending）。
   const pendingJob = state.job?.running ? state.job : undefined;
@@ -40,7 +46,7 @@ export function ModelProxyTool({ active }: { active: boolean }) {
   async function action(op: string, params: Record<string, unknown> = {}, requestId = crypto.randomUUID()) {
     const request = { id: requestId, acknowledged: false };
     activeRequest.current = request;
-    setPending({ id: requestId, op, ...(typeof params.id === "string" ? { target: params.id } : {}) }); setFeedback(undefined);
+    setPending({ id: requestId, op, ...(typeof params.id === "string" ? { target: params.id } : {}), ...(params.kernel === "xray" || params.kernel === "mihomo" ? { kernel: params.kernel } : {}) }); setFeedback(undefined);
     try {
       const result = await command(op, { revision: state.revision, ...params }, {}, requestId) as ModelProxyState;
       if (activeRequest.current !== request) return result;
@@ -49,11 +55,14 @@ export function ModelProxyTool({ active }: { active: boolean }) {
       if (op === "modelProxy.stop") setFeedback({ text: "线路已停止；使用此线路的模型请求会失败。" });
       return result;
     } catch (error) {
-      if (activeRequest.current === request && (!request.acknowledged || !["UNCERTAIN", "DISCONNECTED"].includes((error as { code?: string }).code ?? ""))) setFeedback({ text: (error as Error).message, error: true });
+      if (activeRequest.current === request && (!request.acknowledged || !["UNCERTAIN", "DISCONNECTED"].includes((error as { code?: string }).code ?? ""))) setFeedback({ text: (error as Error).message, error: true, ...(params.kernel === "xray" || params.kernel === "mihomo" ? { kernel: params.kernel } : {}) });
     }
     finally { setPending(current => current?.id === requestId ? undefined : current); }
   }
-  const error = feedback?.error ? feedback.text : state.error || state.job?.error;
+  const error = sending ? undefined : feedback?.error ? feedback.text : state.error || state.job?.error;
+  const kernelTask = maintenance.tasks.find(task => task.id === state.job?.id && ["check", "install", "uninstall"].includes(task.action));
+  const jobKernel = kernelTask?.resource === "proxy:xray" ? "xray" : kernelTask?.resource === "proxy:mihomo" ? "mihomo" : undefined;
+  const noticeKernel = feedback ? feedback.kernel : pending?.kernel ?? jobKernel;
   const editorNotice = !connection.connected ? { text: "连接已断开；重连后读取识别状态。", error: true }
     : state.job?.running ? { text: state.job.message }
     : inspecting ? { text: "正在提交识别任务…" }
@@ -62,24 +71,31 @@ export function ModelProxyTool({ active }: { active: boolean }) {
   return <article className="supplier-detail tools-detail" id="model-proxy" aria-labelledby="model-proxy-heading" style={active ? undefined : { display: "none" }}>
     <div className="detail-heading row-between"><div><h2 id="model-proxy-heading">模型代理</h2><p className="meta">为模型供应商提供应用内代理入口。</p></div><span className="tag">{state.profiles.filter(p => p.status === "running").length} 条运行中</span></div>
     <div className="tools-content">
-      <div className="tools-feedback" aria-live="polite">{error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{feedback?.text || state.job?.message || "按需安装内核，再添加线路。"}</p>}{!connection.connected && <p>连接已断开；重连后读取当前状态。</p>}</div>
+      <div className="tools-feedback" aria-live="polite">{!noticeKernel && (error ? <p className="tools-error" role="alert">{error}</p> : feedback?.text ? <p role="status">{feedback.text}</p> : null)}{!connection.connected && <p>连接已断开；重连后读取当前状态。</p>}</div>
       <section className="section tools-section" aria-labelledby="proxy-install-heading">
-        <div className="section-heading"><h3 id="proxy-install-heading">安装与更新</h3><p>根据线路格式安装所需内核。当前平台：{state.platform || "读取中"}</p></div>
+        <div className="section-heading"><h3 id="proxy-install-heading">安装与更新</h3></div>
         {(["xray", "mihomo"] as const).map(kernel => {
           const installed = state.installations[kernel], latest = state.latest[kernel];
-          const upToDate = !!installed && !!latest && installed.version === latest;
-          return <BackendMaintenance showError={false} resource={`proxy:${kernel}`} label={kernel === "xray" ? "Xray-core" : "mihomo"} key={kernel}>
-          <p className="field-help">当前：{state.installations[kernel] ? `v${state.installations[kernel]!.version}` : "未安装"} · 最新：{state.latest[kernel] ? `v${state.latest[kernel]}` : "尚未检查"}</p>
-          {!state.managed && <p className="field-help">当前平台暂不提供内核下载、校验与版本自检；已安装的内核仍可启动线路。</p>}
-          <div className="tools-actions"><button className="btn" title={state.managed ? undefined : "当前平台不提供内核下载与版本自检"} disabled={busy || !state.managed} onClick={() => void action("modelProxy.check", { kernel })}>检查 {kernel === "xray" ? "Xray" : "mihomo"} 更新</button><button className="btn btn-primary" title={state.managed ? undefined : "当前平台不提供内核下载与版本自检"} disabled={busy || !state.managed || !latest || (upToDate && kernel !== "xray") || !!state.removalPending?.[kernel]} onClick={() => void action("modelProxy.install", { kernel, version: latest })}>{upToDate ? kernel === "xray" ? "重新安装" : "已是最新版本" : installed ? "安装已确认版本" : "安装内核"}</button>{(installed || state.removalPending?.[kernel] || !!state.cleanup?.[kernel]?.paths.length) && <button className="btn" disabled={busy} onClick={() => setUninstall({ kernel, revision: state.revision })}><Icon name="trash-2" />{!installed || state.removalPending?.[kernel] ? "清理残留文件" : "卸载内核"}</button>}</div>
+          const kernelLabel = kernel === "xray" ? "Xray-core" : "mihomo";
+          const managed = state.managed || !state.platform && !state.supportError;
+          const installAction = componentInstallAction({ label: kernelLabel, installation: installed ? "installed" : state.revision ? "missing" : "unknown", version: installed?.version, target: latest });
+          return <BackendMaintenance showError={!(error && noticeKernel === kernel)} resource={`proxy:${kernel}`} label={kernel === "xray" ? "Xray-core" : "mihomo"} version={installed?.version ? `v${installed.version}` : installed ? "已安装" : state.revision ? "未安装" : undefined} description={kernel === "xray" ? "Xray 网络代理内核" : "mihomo 网络代理内核"} key={kernel}
+            actions={<ComponentActions context={{ connected: connection.connected, sending, taskRunning: !!state.job?.running }} capabilities={[
+              { id: "check-versions", label: `检查 ${kernelLabel} ${installed ? "更新" : "版本"}`, support: managed ? "supported" : "unsupported", conflictsWithTask: true, execute: () => void action("modelProxy.check", { kernel }) },
+              { ...installAction, support: managed ? "supported" : "unsupported", execute: () => void action("modelProxy.install", { kernel }) },
+              { id: "uninstall", label: "卸载内核", danger: true, execute: () => setUninstall({ kernel }) },
+            ]} />}
+            kind="dependency" availableVersion={latest ? `v${latest}` : undefined} availableVersionLabel="最新"
+            details={<p className="maintenance-note">平台 · {state.platform || "读取中"}</p>}
+            feedback={noticeKernel === kernel && (error || sending || feedback?.text) ? error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{sending ? "正在提交操作…" : feedback?.text}</p> : undefined}>
+          {!managed && <p className="field-help">当前平台暂不提供内核下载、校验与版本自检；已安装的内核仍可启动线路。</p>}
           {uninstall?.kernel === kernel && <div className="tools-conflict inline-confirmation" role="group" aria-label={`确认卸载 ${kernel}`}>
             <p>停止使用 {kernel} 的线路并删除托管程序{kernel === "xray" ? "及节点识别所需文件" : ""}，正在使用这些线路的模型请求会中断。订阅、节点与供应商绑定保留；重新安装后可手动启动线路。</p>
-            <div className="tools-actions"><button className="btn" onClick={() => setUninstall(undefined)}>暂不卸载</button><button className="btn confirm-danger" disabled={busy} onClick={() => { const revision = uninstall.revision; setUninstall(undefined); void action("modelProxy.uninstall", { kernel, revision, confirm: true }); }}><Icon name="trash-2" />确认卸载</button></div>
+            <div className="tools-actions"><button className="btn" onClick={() => setUninstall(undefined)}>暂不卸载</button><button className="btn confirm-danger" disabled={locked} onClick={() => { setUninstall(undefined); void action("modelProxy.uninstall", { kernel }); }}><Icon name="trash-2" />确认卸载</button></div>
           </div>}
         </BackendMaintenance>; })}
-        {state.job?.running && state.job.cancellable !== false && !inspecting && <button className="btn" disabled={pending?.op === "modelProxy.cancel" || !connection.connected} onClick={() => void action("modelProxy.cancel", { jobId: state.job!.id })}>取消操作</button>}
-        <p className="field-help tools-help">从官方发布页下载，校验后安装到 Axiom 数据目录。Xray-core 安装时会一并准备分享链接识别功能。更新后重新启动线路使用新版本。使用桌面代理软件的地址时，无需安装这里的内核。</p>
-        {state.platform && state.managed && !state.supported && <p className="field-help tools-help">安装内核后即可启动线路。</p>}      </section>
+        {state.job?.running && !kernelTask && state.job.cancellable !== false && !inspecting && <button className="btn" disabled={pending?.op === "modelProxy.cancel" || !connection.connected} onClick={() => void action("modelProxy.cancel", { jobId: state.job!.id })}>取消操作</button>}
+      </section>
       <section className="section tools-section" aria-labelledby="proxy-profiles-heading">
         <div className="section-heading"><h3 id="proxy-profiles-heading">代理线路</h3><p>启动的线路会随 Axiom 后台启动；停止线路会中断使用它的请求。</p></div>
         {!state.profiles.length && <p className="field-help">尚未添加线路。</p>}

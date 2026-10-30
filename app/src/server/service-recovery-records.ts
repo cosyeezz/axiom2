@@ -22,18 +22,56 @@ export class ServiceRecoveryRecords {
     return this.db.prepare("SELECT * FROM service_recoveries WHERE sessionId=?").get(sessionId) as unknown as ServiceRecovery | undefined;
   }
   pending() {
-    return this.db.prepare("SELECT * FROM service_recoveries WHERE state='pending' ORDER BY createdAt,rowid").all() as unknown as ServiceRecovery[];
+    // Restoring file authorization must not require another service restart.
+    this.db.prepare(`UPDATE service_recoveries SET state='pending' WHERE state='blocked'
+      AND EXISTS(SELECT 1 FROM sessions s JOIN workspaces w ON w.id=s.workspaceId
+        WHERE s.id=service_recoveries.sessionId AND s.deletedAt IS NULL AND w.archived=0 AND w.authorized=1)`).run();
+    return this.db.prepare(`SELECT r.* FROM service_recoveries r WHERE r.state='pending'
+      ORDER BY CASE WHEN EXISTS(SELECT 1 FROM tasks t WHERE t.sessionId=r.sessionId) THEN 0 ELSE 1 END,
+      r.createdAt,r.rowid`).all() as unknown as ServiceRecovery[];
   }
   remove(sessionId: string, expected?: ServiceRecovery) {
     if (expected) this.db.prepare("DELETE FROM service_recoveries WHERE sessionId=? AND runId IS ? AND kind=? AND createdAt=? AND payload=?")
       .run(sessionId, expected.runId, expected.kind, expected.createdAt, expected.payload);
     else this.db.prepare("DELETE FROM service_recoveries WHERE sessionId=?").run(sessionId);
   }
+  retry(expected: ServiceRecovery, error: string) {
+    const changed = this.db.prepare(`UPDATE service_recoveries SET state='pending',error=?
+      WHERE sessionId=? AND runId IS ? AND kind=? AND createdAt=? AND payload=?`)
+      .run(error, expected.sessionId, expected.runId, expected.kind, expected.createdAt, expected.payload).changes;
+    if (!changed) return;
+    this.db.prepare("UPDATE runs SET error=? WHERE id=? AND status IN ('interrupted','cancelled')")
+      .run(`自动恢复等待重试：${error}`, expected.runId);
+    this.db.prepare("UPDATE tasks SET error=? WHERE sessionId=? AND status IN ('interrupted','queued')")
+      .run(`自动恢复等待重试：${error}`, expected.sessionId);
+  }
   block(sessionId: string, error: string) {
     this.db.prepare("UPDATE service_recoveries SET state='blocked',error=? WHERE sessionId=?").run(error, sessionId);
     this.db.prepare(`UPDATE runs SET error=? WHERE id=(SELECT runId FROM service_recoveries WHERE sessionId=?)
       AND status IN ('interrupted','cancelled')`).run(`自动恢复受阻：${error}`, sessionId);
     this.db.prepare("UPDATE tasks SET error=? WHERE sessionId=? AND status='interrupted'").run(`自动恢复受阻：${error}`, sessionId);
+  }
+  /** Called inside finishRun's transaction, before task settlement consumes its live queue. */
+  interrupted(sessionId: string, runId: string) {
+    const run = this.db.prepare(`SELECT id FROM runs r WHERE r.id=? AND r.sessionId=? AND r.status='interrupted'
+      AND r.reasonCode IN ('WORKER_INTERRUPTED','UNCERTAIN')
+      AND r.id=(SELECT id FROM runs WHERE sessionId=r.sessionId ORDER BY startedAt DESC,rowid DESC LIMIT 1)
+      AND NOT EXISTS(SELECT 1 FROM tasks WHERE sessionId=r.sessionId AND status='stopping')`).get(runId, sessionId);
+    if (!run) return false;
+    const hasSkills = !!this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='task_input_skills'").get();
+    const inputs = this.db.prepare(`SELECT i.*,
+      (SELECT body FROM task_input_images WHERE inputId=i.id) AS images,
+      ${hasSkills ? "(SELECT body FROM task_input_skills WHERE inputId=i.id)" : "NULL"} AS skills
+      FROM task_inputs i JOIN tasks t ON t.id=i.taskId
+      WHERE t.sessionId=? AND i.state='queued' AND i.runId IS NULL ORDER BY i.createdAt,i.rowid`).all(sessionId);
+    this.db.exec("SAVEPOINT interrupted_recovery");
+    try {
+      this.db.prepare(`INSERT OR REPLACE INTO service_recoveries(sessionId,runId,kind,payload,createdAt)
+        VALUES(?,?,'resume',?,?)`).run(sessionId, runId, JSON.stringify(inputs), Date.now());
+      this.db.prepare("UPDATE task_parents SET frozen=1 WHERE sessionId=?").run(sessionId);
+      this.db.exec("RELEASE interrupted_recovery");
+    } catch (error) { this.db.exec("ROLLBACK TO interrupted_recovery; RELEASE interrupted_recovery"); throw error; }
+    return true;
   }
   /** Caller owns the transaction, including marking old runs interrupted on startup. */
   capture() {

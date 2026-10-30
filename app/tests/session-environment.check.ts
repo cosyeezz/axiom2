@@ -149,6 +149,13 @@ try {
   assert.equal(await tag("系统提示词").getAttribute("aria-expanded"), "false", "tool schema expansion does not open other sections");
   assert.equal((await panel.textContent())?.includes("hidden-env-secret"), false);
   await openSection("系统提示词");
+  const retryPolicy = panel.locator("p").filter({ hasText: "自动重试：" });
+  assert.equal(await retryPolicy.innerText(), "自动重试：最多 9 次，依次等待 2 秒、4 秒、8 秒、16 秒、32 秒、2 分钟、4 分钟、8 分钟、30 分钟；单次等待上限 30 分钟；供应商层 0 次");
+  for (const width of [320, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.equal(await retryPolicy.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, `full retry schedule wraps at ${width}px`);
+    if (process.env.AXIOM_ENVIRONMENT_ARTIFACTS) await page.screenshot({ path: join(process.env.AXIOM_ENVIRONMENT_ARTIFACTS, `retry-policy-${width}.png`) });
+  }
   assert.ok((await prompt.textContent())?.includes("Skill visible before sending"), "hiding the skill list does not disable skill injection");
   const preloadsBeforeChange = commands.filter(command => command.op === "agent.environment").length;
   await page.evaluate(() => {

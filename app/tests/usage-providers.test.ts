@@ -9,6 +9,7 @@ test("usage directory is read-only metadata, preserves connection names and shar
   const root = mkdtempSync(join(tmpdir(), "axiom-usage-directory-")), dir = join(root, "pi"); mkdirSync(dir);
   try {
     const auth = JSON.stringify({ openai: { type: "oauth", access: "PRIVATE_ACCESS", refresh: "PRIVATE_REFRESH", expires: Date.now() + 3600000 },
+      "openai-codex": { type: "oauth", access: "PRIVATE_CODEX_ACCESS", refresh: "PRIVATE_CODEX_REFRESH", expires: Date.now() + 3600000 },
       anthropic: { type: "api_key", key: "PRIVATE_KEY" }, "stored-only": { type: "api_key", key: "PRIVATE_STORED" } });
     const config = JSON.stringify({ providers: { openai: { name: "My OpenAI", models: [{ id: "large-model", name: "NO_MODEL_CATALOG" }] }, anthropic: { name: "My Anthropic" },
       legacy: { apiKey: "!NEVER_EXECUTE", name: "Custom route", headers: { authorization: "PRIVATE_HEADER" } } } });
@@ -18,6 +19,8 @@ test("usage directory is read-only metadata, preserves connection names and shar
     const directory = await models.usageProviders();
     assert.equal(directory.find(row => row.id === "openai")!.name, "My OpenAI");
     assert.equal(directory.find(row => row.id === "openai")!.query, "shared");
+    assert.equal(directory.find(row => row.id === "openai-codex")!.name, "OpenAI");
+    assert.equal(directory.find(row => row.id === "openai-codex")!.query, "shared");
     assert.equal(directory.find(row => row.id === "anthropic")!.query, "unsupported");
     assert.equal(directory.find(row => row.id === "stored-only")!.configured, true);
     assert.equal(directory.find(row => row.id === "legacy")!.configured, true);

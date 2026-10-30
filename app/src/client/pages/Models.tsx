@@ -3,6 +3,7 @@ import { AddProvider, ProviderAddMenu } from "../models/AddProvider.js";
 import { Icon, SettingsSidebar } from "../components.js";
 import { ConfirmDialog } from "../ConfirmDialog.js";
 import { ProviderConnection } from "../models/ProviderConnection.js";
+import { ModelAccountRecovery } from "../models/ModelAccountRecovery.js";
 import { MountOnVisit } from "../MountOnVisit.js";
 import { useConfiguration } from "../models/useConfiguration.js";
 import { SettingsHeader } from "../settings/SettingsHeader.js";
@@ -11,7 +12,9 @@ import "../styles/model-interactions.css";
 const ModelLogin = lazy(() => import("./ModelLogin.js").then(module => ({ default: module.ModelLogin })));
 const ModelRegistry = lazy(() => import("../models/ModelRegistry.js").then(module => ({ default: module.ModelRegistry })));
 export default function Models() {
-  const [adding, setAdding] = useState(false);
+  const [accountAddition] = useState(() => new URLSearchParams(location.search).get("add-account") === "1");
+  const [adding, setAdding] = useState(accountAddition);
+  const [accountLabel, setAccountLabel] = useState(""), [accountRegion, setAccountRegion] = useState(""), [accountError, setAccountError] = useState("");
   const supplierSearch = useRef<HTMLInputElement>(null);
   const {
     config,
@@ -57,6 +60,10 @@ export default function Models() {
     copyButton,
     rows,
   } = useConfiguration();
+  const startLogin = (flow: NonNullable<typeof login>) => {
+    if (accountAddition && !accountLabel.trim()) { setAccountError("请先填写账号名称。"); document.getElementById("account-label")?.focus(); return; }
+    setAccountError(""); setAdding(false); setLogin(flow);
+  };
   const hasError = feedback ? feedbackError : !!config.error;
   const loading = !revision && !hasError;
   const filteredProviders = useMemo(() => {
@@ -71,6 +78,13 @@ export default function Models() {
       <SettingsSidebar page="models" />
       <main className="settings-main" id="content">
         <SettingsHeader page="models" />
+        {accountAddition ? <section className="account-add-context" aria-label="独立添加账号">
+          <div className="row-between"><h2>添加账号</h2><a href="/model-accounts.html">返回多账号管理</a></div>
+          <p className="field-help">此入口独立保存新账号，不覆盖原账号；登录成功后自动返回，新供应商首个账号可直接使用。同一供应商共用连接和模型列表，不会为账号复制模型配置。</p>
+          <div className="grid-2"><div className="field"><label htmlFor="account-label">账号名称</label><input id="account-label" className="input" required maxLength={160} value={accountLabel} disabled={!!login || busy} placeholder="工作账号 / 个人账号" onChange={event => setAccountLabel(event.target.value)} /></div>
+            <div className="field"><label htmlFor="account-region">区域或备注</label><input id="account-region" className="input" maxLength={160} value={accountRegion} disabled={!!login || busy} placeholder="可选，不改变服务端点" onChange={event => setAccountRegion(event.target.value)} /></div></div>
+          {accountError && <p role="alert" className="auth-error">{accountError}</p>}
+        </section> : <p className="field-help"><a href="/model-accounts.html">多账号管理 →</a> 单账号在此管理；直接登录会替换当前账号，需要保留多个账号时请使用多账号管理。</p>}
         <span className="configuration-progress" role="status" aria-live="polite" aria-atomic="true">
           {busy && !hasError ? feedback : ""}
         </span>
@@ -142,13 +156,14 @@ export default function Models() {
               </div>
             </section>
             <div className="supplier-detail">
-              {login?.type === "oauth" ? (
+              {login ? (
                 <Suspense fallback={<p role="status">正在加载登录界面…</p>}>
                 <ModelLogin
                   {...login}
                   inline
                   revision={revision}
-                  onComplete={() => { void refreshAuthentication(login.providerId); }}
+                  account={accountAddition ? { label: accountLabel.trim(), region: accountRegion.trim() } : undefined}
+                  onComplete={() => { if (accountAddition) location.replace("/model-accounts.html?added=1"); else void refreshAuthentication(login.providerId); }}
                   close={() => {
                     setLogin(null);
                     void refreshAuthentication(login.providerId).then(() => document.getElementById("add-supplier")?.focus());
@@ -160,7 +175,8 @@ export default function Models() {
                   templates={templates}
                   connections={providers}
                   blocked={dirty || !!editor || busy || needsReconcile}
-                  login={(providerId, proxy) => { setAdding(false); setLogin({ providerId, type: "oauth", proxy }); }}
+                  accountAddition={accountAddition}
+                  login={(providerId, proxy, type) => startLogin({ providerId, type, ...(type === "oauth" ? { proxy } : {}) })}
                   close={() => { setAdding(false); document.getElementById("add-supplier")?.focus(); }}
                 />
               ) : !p ? (
@@ -224,6 +240,7 @@ export default function Models() {
                   </nav>
                   {p.auth?.error && !p.key.trim() && <p className="auth-error" role="alert">配置错误 · {p.auth.error}</p>}
                   {p.notices?.map(notice => <p className="field-help" key={notice}>{notice}</p>)}
+                  <ModelAccountRecovery providerId={p.providerId} blocked={dirty || !!editor || busy || needsReconcile} activated={() => refreshAuthentication(p.providerId)} />
                   <ProviderConnection
                     {...{
                       p,
@@ -237,7 +254,8 @@ export default function Models() {
                       editor,
                       busy,
                       needsReconcile,
-                      setLogin,
+                      setLogin: startLogin,
+                      accountAddition,
                       feedback: feedbackError ? feedback : "",
                       logoutProvider,
                       removeProvider,

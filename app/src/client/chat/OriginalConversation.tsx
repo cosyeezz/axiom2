@@ -5,12 +5,13 @@ import type { Scope } from "../../shared/protocol.js";
 import type { HistoryIndex, HistoryRead } from "../../shared/history.js";
 import { HistoryStore } from "./history-store.js";
 import { historyCache } from "./history-cache.js";
+import { TaskWindowProvider } from "../tasks/TaskWindowProvider.js";
 
 const Disclosures = createContext<Map<string, boolean> | null>(null);
 /** Viewing state is isolated between main and child sessions; recycled rows remember disclosures. */
-export function OriginalConversationProvider({ children }: { scope: Scope | null; children: ReactNode }) {
+export function OriginalConversationProvider({ scope, children }: { scope: Scope | null; children: ReactNode }) {
   const memory = useRef(new Map<string, boolean>());
-  return <Disclosures.Provider value={memory.current}>{children}</Disclosures.Provider>;
+  return <Disclosures.Provider value={memory.current}><TaskWindowProvider scope={scope}>{children}</TaskWindowProvider></Disclosures.Provider>;
 }
 export function useRememberedDisclosure(key: string, initial = false) {
   const memory = useContext(Disclosures);

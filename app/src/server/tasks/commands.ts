@@ -232,9 +232,10 @@ export class TaskCommands {
     }
 
     if (c.op === "agent.recall" && child) {
-      if (Object.keys(p).length) throw new AppError("INVALID_INPUT", "撤回不接受额外参数");
+      if (Object.keys(p).some((key) => key !== "inputId")) throw new AppError("INVALID_INPUT", "撤回只接受待执行输入标识");
+      const inputId = p.inputId === undefined ? undefined : text(p.inputId, "待执行输入标识");
       return this.serial(child.id, () => this.store.external(c, () =>
-        this.scheduler.recall(this.records.own(parent(child), child.id))));
+        this.scheduler.recall(this.records.own(parent(child), child.id), inputId)));
     }
     if (c.op === "agent.stop")
       return this.store.external(c, async () => {
@@ -282,6 +283,7 @@ export class TaskCommands {
       c,
       newWork
         ? {
+            serviceRecovery: !!recovery,
             beforeStart: () => {
               if (recovery) assertServiceRecovery(this.agents, recovery);
               if (

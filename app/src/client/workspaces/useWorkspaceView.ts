@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { command, observeVisualActions, scopeSnapshot, useScope } from "../transport.js";
-import { compareSessions } from "./session-order.js";
-import type { Scope, Session, Workspace } from "../../shared/protocol.js";
+import type { Scope, Workspace } from "../../shared/protocol.js";
 
 type WorkspaceView = { workspaceId: string | null; view: Scope | null };
 
@@ -51,12 +50,11 @@ export function useWorkspaceView(onError: (message: string) => void) {
     if (phase === "begin") {
       const previous = current.current;
       if (action.op === "session.delete" && previous.view?.sessionId === action.target.sessionId && previous.view?.workspaceId === action.target.workspaceId) {
-        const next = [...(scopeSnapshot<Session[]>(`sessions:${action.target.workspaceId}`) ?? [])].sort(compareSessions)[0];
-        select({ workspaceId: action.target.workspaceId!, sessionId: next?.id ?? "" }, false);
+        select({ workspaceId: action.target.workspaceId!, sessionId: "" }, false);
       } else if (action.op === "workspace.delete" && (previous.workspaceId === action.target.workspaceId || previous.view?.workspaceId === action.target.workspaceId)) {
-        const nextWorkspace = scopeSnapshot<Workspace[]>("workspaces")?.[0];
-        const next = nextWorkspace ? [...(scopeSnapshot<Session[]>(`sessions:${nextWorkspace.id}`) ?? [])].sort(compareSessions)[0] : undefined;
-        select(nextWorkspace ? { workspaceId: nextWorkspace.id, sessionId: next?.id ?? "" } : null);
+        const remaining = scopeSnapshot<Workspace[]>("workspaces") ?? [];
+        const nextWorkspace = remaining.find(w => w.id === previous.workspaceId) ?? remaining[0];
+        select(nextWorkspace ? { workspaceId: nextWorkspace.id, sessionId: "" } : null);
       } else return;
       rollback.current.set(action.id, { previous, navigation: navigation.current });
     } else if (phase === "failed" || phase === "completed") {

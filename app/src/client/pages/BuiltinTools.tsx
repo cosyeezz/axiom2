@@ -1,8 +1,10 @@
 import { Icon } from "../Icon.js";
 import { operationFeedback } from "../operation-feedback.js";
 import { BackendMaintenance } from "../maintenance/BackendMaintenance.js";
+import { ComponentActions, ComponentConfirmation } from "../maintenance/ComponentCard.js";
+import { componentInstallAction } from "../../shared/component-actions.js";
+import { ManagedRuntimeCard } from "../maintenance/ManagedRuntimeCard.js";
 import { ReaTool } from "./ReaTool.js";
-import { BuiltinRecovery } from "./BuiltinRecovery.js";
 import { emptyReaState } from "../../shared/rea.js";
 import { ModelProxyTool } from "./ModelProxyTool.js";
 import { emptyModelProxyState } from "../../shared/model-proxy.js";
@@ -19,12 +21,6 @@ import "../styles/settings.css";
 import "../styles/builtin-tools.css";
 
 const empty: OpenCliState = { ready: false, nodeVersion: "", configured: false, revision: "", settings: defaultOpenCliSettings };
-function hasUpdate(latest?: string, installed?: string) {
-  if (!latest || !installed) return false;
-  const a = latest.split(".").map(Number), b = installed.split(".").map(Number);
-  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
-  return false;
-}
 const selectedTool = () => location.hash === "#rea" ? "rea" : location.hash === "#rtk" ? "rtk" : location.hash === "#model-proxy" ? "model-proxy" : "opencli";
 export default function BuiltinTools() {
   const [selected, setSelected] = useState(selectedTool);
@@ -38,23 +34,26 @@ export default function BuiltinTools() {
   const [draft, setDraft] = useState<{ revision: string; settings: OpenCliSettings }>();
   const checkButton = useRef<HTMLButtonElement>(null);
   const focusAfterReconcile = useRef(false);
-  const [uninstall, setUninstall] = useState<{ revision: string; cleanupRevision?: string }>();
+  const [uninstall, setUninstall] = useState(false);
+  const [reinstall, setReinstall] = useState<{ version: string }>();
   const [sending, setSending] = useState(false);
   const [pendingOperation, setPendingOperation] = useState("");
   const [feedback, setFeedback] = useState<{ text: string; error?: boolean; revision?: string }>();
   const settings = draft?.settings ?? state.settings;
   const busy = sending || !!state.job?.running || !connection.connected;
+  // Component standard: install/update/uninstall stay available; only an in-flight request or a lost connection blocks them.
+  const locked = sending || !connection.connected;
   useEffect(() => {
     if (!busy && focusAfterReconcile.current) { focusAfterReconcile.current = false; checkButton.current?.focus(); }
   }, [busy]);
-  const update = hasUpdate(state.latest, state.version);
+  const installAction = componentInstallAction({ label: "OpenCLI", installation: state.installationError ? "incomplete" : state.version || state.packageRoot ? "installed" : state.ready ? "missing" : "unknown", version: state.version, target: state.latest, repairByReinstall: true });
   const conflict = !!draft && draft.revision !== state.revision;
-  const installStatus = state.version ? `v${state.version}` : state.installationError ? "安装不完整" : state.ready ? "未安装" : state.job?.error ? "状态未知" : "等待检查";
+  const installStatus = state.version ? `v${state.version}` : state.installationError ? "安装不完整" : state.packageRoot ? "已安装" : state.ready ? "未安装" : undefined;
   const notice = feedback && (!feedback.revision || feedback.revision === state.revision) ? feedback : undefined;
   useEffect(() => { setFeedback(undefined); }, [state.job?.id]);
   useEffect(() => {
     if (connection.connected) void command("opencli.get").then((value) => {
-      // Preserve failed/interrupted jobs when reconnecting; explicit checks can replace them.
+      // Keep a failed job visible after reconnecting; any later command replaces it.
       if (!(value as OpenCliState).job?.error && !(value as OpenCliState).pendingOperation) return command("opencli.refresh");
     }).catch((error: Error) => setFeedback({ text: error.message, error: true }));
   }, [connection.connected, connection.generation]);
@@ -62,7 +61,7 @@ export default function BuiltinTools() {
     setDraft({ revision: draft?.revision ?? state.revision, settings: { ...settings, ...patch } });
     setFeedback(undefined);
   };
-  async function action(op: string, params: Record<string, unknown> = {}) {
+  async function action(op: string, params: Record<string, unknown> = {}, throwFailure = false) {
     setPendingOperation(op); setSending(true); setFeedback(undefined);
     try {
       const result = await command(op, params) as OpenCliState;
@@ -75,10 +74,10 @@ export default function BuiltinTools() {
         setDraft(undefined);
         setFeedback({ text: "接入设置已保存，将在下一次 Agent 执行时加载。", revision: result.revision });
       }
-    } catch (error) { setFeedback({ text: (error as Error).message, error: true }); }
+    } catch (error) { setFeedback({ text: (error as Error).message, error: true }); if (throwFailure) throw error; }
     finally { setSending(false); }
   }
-  const error = sending ? undefined : notice ? (notice.error ? notice.text : undefined) : state.error || state.job?.error || state.installationError;
+  const error = sending || reinstall ? undefined : notice ? (notice.error ? notice.text : undefined) : state.error || state.job?.error || state.installationError;
   return (
     <div className="settings-app builtin-tools-app">
       <SettingsSidebar page="tools" />
@@ -89,40 +88,34 @@ export default function BuiltinTools() {
             <div className="supplier-toolbar"><h2>全部工具 <span className="meta num">4</span></h2></div>
             <nav className="supplier-list">
               <a className="supplier-option" href="#opencli" aria-current={selected === "opencli" ? "true" : undefined}><span><strong>OpenCLI <span className="tag">浏览器</span></strong><small>{installStatus}</small></span></a>
-              <a className="supplier-option" href="#rea" aria-current={selected === "rea" ? "true" : undefined}><span><strong>REA <span className="tag">逆向分析</span></strong><small>{rea.version ? `v${rea.version}${rea.error ? " · 需修复" : ""}` : "未安装"}</small></span></a>
-              <a className="supplier-option" href="#rtk" aria-current={selected === "rtk" ? "true" : undefined}><span><strong>RTK <span className="tag">输出过滤</span></strong><small>{rtk.version ? `v${rtk.version} · ${rtk.settings.enabled ? "已启用" : "未启用"}` : "未安装"}</small></span></a>
+              <a className="supplier-option" href="#rea" aria-current={selected === "rea" ? "true" : undefined}><span><strong>REA <span className="tag">逆向分析</span></strong><small>{rea.version ? `v${rea.version}${rea.error ? " · 需修复" : ""}` : rea.packageRoot ? "已安装" : rea.revision ? "未安装" : undefined}</small></span></a>
+              <a className="supplier-option" href="#rtk" aria-current={selected === "rtk" ? "true" : undefined}><span><strong>RTK <span className="tag">输出过滤</span></strong><small>{rtk.version ? `v${rtk.version} · ${rtk.settings.enabled ? "已启用" : "未启用"}` : rtk.executable ? "已安装" : rtk.revision ? "未安装" : undefined}</small></span></a>
               <a className="supplier-option" href="#model-proxy" aria-current={selected === "model-proxy" ? "true" : undefined}><span><strong>模型代理 <span className="tag">网络</span></strong><small>{proxy.profiles.filter(p => p.status === "running").length} 条线路运行中</small></span></a>
             </nav>
           </aside>
           <article className="supplier-detail tools-detail" id="opencli" aria-labelledby="opencli-heading" style={selected === "opencli" ? undefined : { display: "none" }}>
-            <div className="detail-heading row-between"><div><h2 id="opencli-heading">OpenCLI</h2><p className="meta">连接 Chrome，让 Agent 操作网页和已登录的网站。</p></div><span className="tag">{state.configured ? "已配置" : "待接入"}</span></div>
             <div className="tools-content">
+            <BackendMaintenance resource="opencli" label="OpenCLI" headingId="opencli-heading" version={state.version ? `v${state.version}` : state.installationError ? "安装不完整" : state.packageRoot ? "已安装" : state.ready ? "未安装" : undefined} description="连接 Chrome，操作网页与已登录的网站" showError={!error && !reinstall}
+              environmentContent={state.runtimeManaged ? <ManagedRuntimeCard owner="OpenCLI" nodeVersion={state.nodeVersion} npmVersion={state.npmVersion} disabled={busy} onCheck={() => void action("opencli.refresh")} /> : undefined}
+              actions={<ComponentActions context={{ connected: connection.connected, sending, taskRunning: !!state.job?.running }} capabilities={[
+                { id: "check-environment", label: "检查环境", buttonRef: checkButton, conflictsWithTask: true, execute: () => void action("opencli.refresh") },
+                { id: "check-versions", label: state.version || state.packageRoot ? "检查更新" : "检查版本", support: state.supportError ? "unsupported" : "supported", conflictsWithTask: true, execute: () => void action("opencli.check") },
+                { ...installAction, support: state.supportError ? "unsupported" : "supported", execute: () => { if ((state.version || state.packageRoot || state.installationError) && installAction.id !== "update") setReinstall({ version: state.latest ?? state.version ?? "最新版" }); else void action("opencli.install"); } },
+                { id: "uninstall", label: state.managed || state.version ? "卸载 OpenCLI" : "移除接入及托管残留", danger: true, execute: () => setUninstall(true) },
+              ]} />}
+              availableVersion={state.latest ? `v${state.latest}` : undefined} availableVersionLabel="最新"
+              location={state.packageRoot && <LocalPath path={state.packageRoot} />}
+              details={!!state.cleanupUnverified?.length && <p className="maintenance-note">保留 {state.cleanupUnverified.length} 个归属未确认的旧目录。</p>}>
             <div className="tools-feedback" aria-live="polite">
-              {error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{sending ? operationFeedback(pendingOperation) : notice?.text || state.job?.message || (connection.connected ? connectionText : `${connectionText}；重连后读取当前操作进度。`)}</p>}
-              {!connection.connected && (error || notice?.text || state.job?.message) && <p>{connectionText}；重连后读取当前操作进度。</p>}
+              {error ? <p className="tools-error" role="alert">{error}</p> : sending || notice?.text ? <p role="status">{sending ? operationFeedback(pendingOperation) : notice?.text}</p> : null}
+              {!connection.connected && <p>{connectionText}；重连后读取当前操作进度。</p>}
             </div>
-            <BackendMaintenance resource="opencli" label="OpenCLI" showError={!error} location={`所连接后台 · 应用级 · ${state.managed ? "Axiom 独立安装" : state.version ? "外部安装接入" : "独立安装目录"}`}>
-              <dl className="tools-facts">
-                <div><dt>运行环境</dt><dd>{state.nodeVersion ? `Node.js ${state.nodeVersion}` : "等待检查"}{state.npmVersion ? ` · npm ${state.npmVersion}` : " · npm 待检查"}{state.runtimeManaged ? " · 组件专用" : state.version ? " · 旧版共享环境" : " · 安装时自动准备专用环境"}</dd></div>
-                <div><dt>当前版本</dt><dd>{state.version ? <code>v{state.version}</code> : installStatus}</dd></div>
-                <div><dt>最新版本</dt><dd>{state.latest ? <><code>v{state.latest}</code>{update && <span className="tag">有更新</span>}</> : state.job?.kind === "check" && state.job.error ? "检查失败" : "尚未检查"}</dd></div>
-              </dl>
-              {state.version && !state.runtimeManaged && <p className="field-help">现有安装保持不变。重新安装或更新后迁移到版本绑定的独立 Node/npm，不修改系统或 Axiom 后台运行环境。</p>}
               {state.supportError && <p className="field-help">{state.supportError}</p>}
-              {state.pendingOperation && !state.job?.running && <BuiltinRecovery label="OpenCLI" operationId={state.pendingOperation} disabled={busy} reconcile={force => void action("opencli.reconcile", { operationId: state.pendingOperation, force })} />}
-              <div className="tools-actions">
-                <button ref={checkButton} className="btn" disabled={busy} onClick={() => void action("opencli.refresh")}>检查环境</button>
-                <button className="btn" disabled={busy || !!state.supportError} onClick={() => void action("opencli.check")}>检查更新</button>
-                <button className="btn btn-primary" disabled={busy || !!state.supportError || !state.latest || !!draft || (!!state.version && state.version !== state.latest && !update)} onClick={() => void action("opencli.install", { version: state.latest })}>{state.job?.running && state.job.kind === "install" ? "正在安装…" : state.version ? update ? "更新 OpenCLI" : "重新安装" : "安装 OpenCLI"}</button>
-                {(state.configured || state.removalPending || state.version) && <button className="btn" disabled={busy || !!draft} onClick={() => setUninstall({ revision: state.revision, cleanupRevision: state.cleanup?.revision })}><Icon name="trash-2" />{state.removalPending ? "清理残留文件" : state.managed ? "卸载 OpenCLI" : "移除接入"}</button>}
-              </div>
+              {reinstall && <ComponentConfirmation title="重新安装 OpenCLI 及专属环境？" description="现场解析最新版并重新安装 OpenCLI 与专属 Node/npm，可能降级；失败会清理托管程序后重试一次，不能保证保留原安装。接入设置、Chrome 扩展与外部安装保留。" confirmLabel="确认重新安装" confirmDisabled={locked} onClose={() => setReinstall(undefined)} onConfirm={async () => { await action("opencli.install", {}, true); }} />}
               {uninstall && <div className="tools-conflict inline-confirmation" role="group" aria-label="确认移除 OpenCLI">
-                <p>移除 Axiom 接入并清理托管程序。接入设置、Chrome 扩展与外部安装保留。等待已准入任务完成后自动移除；等待期间可在任务面板取消。</p>
-                <div className="tools-actions"><button className="btn" onClick={() => setUninstall(undefined)}>暂不移除</button><button className="btn confirm-danger" disabled={busy} onClick={() => { const confirmation = uninstall; setUninstall(undefined); void action("opencli.uninstall", { confirm: true, ...confirmation }); }}><Icon name="trash-2" />确认移除</button></div>
+                <p>移除 Axiom 接入并清理托管程序及对应专属环境。接入设置、Chrome 扩展与外部安装保留。确认后直接移除，不等待或中断会话；正在使用这些资源的任务需自行处理资源缺失。</p>
+                <div className="tools-actions"><button className="btn" onClick={() => setUninstall(false)}>暂不移除</button><button className="btn confirm-danger" disabled={locked} onClick={() => { setUninstall(false); void action("opencli.uninstall"); }}><Icon name="trash-2" />确认移除</button></div>
               </div>}
-              <p className="field-help tools-help">先检查更新，再安装已确认的版本。新版本安装到独立目录，验证成功后用于后续执行；现有任务继续使用原版本。可在任务面板取消安装或延长时间。外部 npm 安装保留，如需卸载请使用原安装方式。</p>
-              {!!state.cleanupUnverified?.length && <p className="field-help">另有 {state.cleanupUnverified.length} 个旧程序目录缺少归属证明，将保留，不阻塞当前程序卸载。</p>}
-              {state.packageRoot && <p className="tools-path">安装位置 <LocalPath path={state.packageRoot} /></p>}
             </BackendMaintenance>
             <section className="section tools-section" aria-labelledby="config-heading">
               <div className="section-heading"><h3 id="config-heading">接入设置</h3><p>仅对 Axiom 主 Agent 生效</p></div>

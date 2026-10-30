@@ -16,6 +16,7 @@ import { taskTools } from "./task-tools.js";
 import { memoryQueryTool } from "./memory-tool.js";
 import { resourceWarnings } from "./reload-resources.js";
 import { topicSnapshot } from "./memory-topics.js";
+import { sessionRetrySettings } from "./session-retry-policy.js";
 
 import { buildAxiomSystemPrompt } from "./axiom-prompt.js";
 
@@ -41,7 +42,7 @@ export function runtimeEnvironment(session: AgentSession, input: EnvironmentReso
     ...resources(session.resourceLoader, input.capabilities),
     ...(topics ? { memory: { topics: topics.text } } : {}),
     extensions: session.resourceLoader.getExtensions().extensions.length,
-    retry: { ...session.settingsManager.getRetrySettings(), provider: session.settingsManager.getProviderRetrySettings() },
+    retry: { ...sessionRetrySettings(session.settingsManager), provider: session.settingsManager.getProviderRetrySettings() },
     warnings: resourceWarnings(session, input.capabilities),
   };
 }
@@ -87,7 +88,7 @@ export async function previewEnvironment(input: EnvironmentResourceInput & { mem
     source: "preview", cwd: input.cwd, systemPrompt, tools: names,
     toolDefinitions: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
     ...resources(loader, input.capabilities), memory: { topics: input.memoryTopics.text }, extensions: 0,
-    retry: { ...settings.getRetrySettings(), provider: settings.getProviderRetrySettings() },
+    retry: { ...sessionRetrySettings(settings), provider: settings.getProviderRetrySettings() },
     warnings: [...input.capabilities?.warnings ?? [],
       ...(projectSettings.drainErrors().length ? ["部分设置无法读取，预览使用其余可用配置。"] : []),
       ...(loader.getSkills().diagnostics.length ? ["部分技能有加载诊断，请检查资源定义。"] : []),

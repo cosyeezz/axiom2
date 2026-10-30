@@ -129,7 +129,7 @@ export class TaskScheduler {
   }
   async stop(rows: Row[], reason: string, source: StopSource = "parent") {
     for (const row of rows)
-      if (taskActive(row.status))
+      if (taskActive(row.status) || this.store.recoveries.get(row.sessionId))
         this.cancel(row, { reason }, source);
     await Promise.allSettled(
       rows.flatMap((row) =>
@@ -248,7 +248,7 @@ export class TaskScheduler {
       assertServiceRecovery(this.agents, recovery);
       const inputs = JSON.parse(recovery.payload) as Array<{ id: string; taskId: string; body: string; mode: string; createdAt: number; images: string | null; skills: string | null }>;
       if (recovery.kind === "resume") {
-        this.agents.assertContinuation(target(row), recovery.runId);
+        this.agents.assertContinuation(target(row), recovery.runId, true);
         const id = `service-resume-${recovery.runId}`;
         const createdAt = Math.min(Date.now(), ...inputs.map(input => input.createdAt)) - 1;
         this.store.db.prepare("INSERT OR IGNORE INTO task_inputs VALUES(?,?,?,'resume','queued',NULL,?)").run(id, row.id, recovery.runId, createdAt);
@@ -271,6 +271,13 @@ export class TaskScheduler {
     } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
     this.changed(row);
     this.kick();
+  }
+  async recoverAndStart(row: Row, recovery: ServiceRecovery) {
+    this.recover(row, recovery);
+    // Recovery has its own serial coordinator, not the ordinary task capacity/FIFO gate.
+    this.launching.add(row.id);
+    try { await this.track(this.start(this.records.rows("WHERE id=?", row.id)[0])); }
+    finally { this.launching.delete(row.id); this.kick(); }
   }
   resume(row: Row, expectedRunId: string, requestId: string) {
     if (this.closing || this.cancelling.has(row.id))
@@ -297,15 +304,16 @@ export class TaskScheduler {
     this.kick();
     return { taskId: row.id, inputId: id, status: "queued" };
   }
-  async recall(row: Row) {
+  async recall(row: Row, inputId?: string) {
     // Freeze handoff/preflight before yielding. A failed worker recall must not
     // erase queued drafts whose successful withdrawal could not be returned.
     this.recalling.add(row.id);
-    this.store.db.prepare("DELETE FROM task_initial_retries WHERE taskId=?").run(row.id);
+    if (inputId === undefined) this.store.db.prepare("DELETE FROM task_initial_retries WHERE taskId=?").run(row.id);
+    else this.store.db.prepare("DELETE FROM task_initial_retries WHERE taskId=? AND inputId=?").run(row.id, inputId);
     try {
-      const queued = ["queued", "waiting"].flatMap((state) => this.records.inputs(row, state)).filter((input) => this.records.drafts.has(input.id));
-      const sent = ["starting", "inflight"].flatMap((state) => this.records.inputs(row, state))
-        .filter((input) => this.records.drafts.has(input.id));
+      const matches = (input: { id: string }) => this.records.drafts.has(input.id) && (inputId === undefined || input.id === inputId);
+      const queued = ["queued", "waiting"].flatMap((state) => this.records.inputs(row, state)).filter(matches);
+      const sent = ["starting", "inflight"].flatMap((state) => this.records.inputs(row, state)).filter(matches);
       const snapshot = new Map(this.records.drafts);
       const native = sent.filter((input) => !this.failedInputs.has(input.id));
       const ids = native.length ? await this.agents.recallIds(target(row), native.map((input) => input.id)) : [];
@@ -370,7 +378,7 @@ export class TaskScheduler {
       )) {
         if (active >= concurrency || this.closing)
           break;
-        if (this.launching.has(row.id) || this.recalling.has(row.id) || this.cancelling.has(row.id) || this.agents.active(target(row))) continue;
+        if (this.store.recoveries.get(row.sessionId) || this.launching.has(row.id) || this.recalling.has(row.id) || this.cancelling.has(row.id) || this.agents.active(target(row))) continue;
         this.launching.add(row.id);
         active++;
         const turn = this.admission.reserve();
@@ -386,7 +394,7 @@ export class TaskScheduler {
       this.pumping = false;
     }
   }
-  private async start(row: Row, turn: TaskAdmissionTurn) {
+  private async start(row: Row, turn?: TaskAdmissionTurn) {
     const recovery = this.store.recoveries.get(row.sessionId);
     const queued = this.records.inputs(row, "queued");
     // Keep the initial delegation distinct from queued appends so its durable
@@ -430,7 +438,8 @@ export class TaskScheduler {
           params: resuming ? { expectedRunId: inputs[0].body } : rewriting ? { ...JSON.parse(inputs[0].body), images } : { text: "处理明确委派／追加的子任务", images, skills: this.records.skills(inputs[0].id) },
         },
         {
-          admission: { turn, reserve: () => this.admission.reserve() },
+          ...(turn ? { admission: { turn, reserve: () => this.admission.reserve() } } : {}),
+          serviceRecovery: !!recovery,
           prompt: resuming || rewriting ? undefined : inputs.map((i) => i.body).join("\n\n"),
           task: {
             id: row.id,
@@ -455,7 +464,7 @@ export class TaskScheduler {
             const active = Number(this.store.db.prepare("SELECT COUNT(*) AS n FROM tasks WHERE status IN ('starting','running','stopping')").get()!.n);
             const earlier = this.records.rows("JOIN task_queue_order q ON q.taskId=tasks.id WHERE status='queued' AND q.seq < (SELECT seq FROM task_queue_order WHERE taskId=?)", row.id)
               .filter((candidate) => this.launching.has(candidate.id)).length;
-            if (active + earlier >= this.records.preferences().concurrency)
+            if (!recovery && active + earlier >= this.records.preferences().concurrency)
               throw new AppError("TASK_CAPACITY_DEFERRED", "等待可用子任务容量");
           },
           onCommit: (run) => {
@@ -493,6 +502,8 @@ export class TaskScheduler {
       );
     } catch (e) {
       if (this.closing || e instanceof AppError && e.code === "TASK_CAPACITY_DEFERRED") return;
+      // Pre-dispatch failures remain owned by the recovery queue; do not turn them into terminal tasks.
+      if (recovery && this.store.recoveries.get(row.sessionId)?.runId === recovery.runId) throw e;
       const current = this.records.rows("WHERE id=?", row.id)[0];
       if (!current) return;
       const run = this.agents.info(target(current)).run;

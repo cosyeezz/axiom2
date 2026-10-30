@@ -55,7 +55,7 @@ for (const sameVersion of [false, true]) test(`Xray ${sameVersion ? "same-versio
     const accepted = await install(f); await until(() => !!release);
     assert.equal(accepted.job?.running, true);
     assert.deepEqual(readProxyConfig(f.root), f.config, "unverified bundle is not committed");
-    for (const op of ["inspect", "uninstall"]) await assert.rejects(f.service.command(command(op, { kernel: "xray" })), { code: "BUSY" });
+    await assert.rejects(f.service.command(command("inspect", { kernel: "xray" })), { code: "BUSY" });
     release(); await until(() => !f.service.snapshot().job?.running);
     assert.equal(f.service.snapshot().job?.error, undefined);
     const config = readProxyConfig(f.root);
@@ -68,7 +68,7 @@ for (const sameVersion of [false, true]) test(`Xray ${sameVersion ? "same-versio
   } finally { release?.(); await f.close(); }
 });
 
-for (const mode of ["failure", "cancel", "close"] as const) test(`Xray importer ${mode} preserves previous installation and cleans candidate core`, async () => {
+for (const mode of ["failure", "cancel", "close"] as const) test(`Xray importer ${mode === "failure" ? "failure force-cleans and retries once" : `${mode} preserves previous installation and cleans candidate core`}`, async () => {
   let entered = false;
   const f = fixture(async (root, signal) => {
     mkdirSync(xrayImporterDirectory(root), { recursive: true }); entered = true;
@@ -81,8 +81,16 @@ for (const mode of ["failure", "cancel", "close"] as const) test(`Xray importer 
     if (mode === "close") await f.service.close();
     await until(() => !f.service.snapshot().job?.running);
     const state = f.service.snapshot();
-    assert.deepEqual(readProxyConfig(f.root), f.config);
-    assert.deepEqual(readdirSync(join(proxyDirectory(f.root), "versions")), [f.old.directory]);
+    if (mode === "failure") {
+      // Component standard: clean and retry once; a second failure leaves no stale kernel.
+      assert.deepEqual(f.calls, ["core:xray", "importer", "core:xray", "importer"]);
+      assert.equal(readProxyConfig(f.root).installations.xray, undefined);
+      assert.deepEqual(readProxyConfig(f.root).bindings, f.config.bindings);
+      assert.deepEqual(readdirSync(join(proxyDirectory(f.root), "versions")), []);
+    } else {
+      assert.deepEqual(readProxyConfig(f.root), f.config);
+      assert.deepEqual(readdirSync(join(proxyDirectory(f.root), "versions")), [f.old.directory]);
+    }
     assert.ok(existsSync(xrayImporterDirectory(f.root)), "cache remains discoverable for retry and combined cleanup");
     assert.ok(state.cleanup!.xray!.paths.includes(xrayImporterDirectory(f.root)));
     if (mode === "failure") assert.match(state.job!.error!, /importer failed/);

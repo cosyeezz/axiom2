@@ -49,9 +49,10 @@ function fixture(t: TestContext, messages: ChatMessage[] = []) {
   }) as Session;
   const scope: Scope = { workspaceId: workspace.id, sessionId: session.id };
   const events: { scope: string; data: unknown }[] = [];
+  // This fixture observes legacy view channels; metadata has independent protocol tests.
   const views = new AgentViews(store, (scope, data) => events.push({
     scope, data: scope.startsWith("thread:") ? layout(data as ThreadIndex) : data,
-  }));
+  }), scope => /^(agent|thread|message|messages):/.test(scope));
   views.messages.set(scope.sessionId, new Map(messages.map((item) => [item.id, item])));
   t.after(() => {
     views.flush(scope);

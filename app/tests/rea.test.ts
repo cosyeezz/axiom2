@@ -79,49 +79,48 @@ test("REA built-in MCP takes precedence over complete and partial project defini
   } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
-test("REA failed update and failed MCP verification keep current version and clean unused prefixes", async () => {
+test("REA failed update and failed MCP verification force-clean, retry once and leave no stale prefix", async () => {
   for (const failure of ["fail", "mismatch", "invalidSkill"] as const) {
     const root = temporary(), f = reaFixture(), service = new ReaService(root, () => {}, f.dependencies);
     try {
       await call(service, "rea.check"); await settle(service);
       await call(service, "rea.install", { version: "6.7.0" }); assert.equal((await settle(service)).job?.error, undefined);
-      const original = readFileSync(reaConfigPath(root), "utf8");
       f.setLatest("6.8.0"); await call(service, "rea.check"); await settle(service); f[failure]();
-      await call(service, "rea.install", { version: "6.8.0" }); const failed = await settle(service);
+      const before = f.calls.filter(args => args[1] === "install").length;
+      await call(service, "rea.install"); const failed = await settle(service);
       assert.ok(failed.job?.error); assert.ok(!failed.job.error.includes("secret-value"));
-      assert.equal(failed.version, "6.7.0"); assert.equal(readFileSync(reaConfigPath(root), "utf8"), original);
-      const versions = readdirSync(join(reaDirectory(root), "versions"));
-      assert.equal(versions.length, 1, JSON.stringify({ failure, error: failed.job?.error, versions }));
+      // Component standard: one forced-clean retry; a second failure leaves nothing half-installed.
+      assert.equal(f.calls.filter(args => args[1] === "install").length - before, 2);
+      assert.equal(failed.version, undefined); assert.equal(readReaConfig(root).installation, undefined);
+      assert.deepEqual(readdirSync(join(reaDirectory(root), "versions")), []);
     } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
   }
 });
 
-test("REA cancellation, revision conflict, restart and broken configuration never switch or replay installations", async () => {
+test("REA install preempts a running install, keeps no history and never replays after restart", async () => {
   const root = temporary(), f = reaFixture();
   let service = new ReaService(root, () => {}, f.dependencies);
   try {
     await call(service, "rea.check"); await settle(service);
     await call(service, "rea.install", { version: "6.7.0" }); await settle(service);
-    const original = readFileSync(reaConfigPath(root), "utf8");
+    const original = readReaConfig(root).installation!.directory;
     let release!: () => void; f.hold(new Promise<void>(resolve => { release = resolve; }));
-    const running = await call(service, "rea.install", { version: "6.7.0" });
-    await assert.rejects(call(service, "rea.install", { version: "6.7.0" }), { code: "BUSY" });
-    await new Promise(resolve => setImmediate(resolve));
-    await call(service, "rea.cancel", { jobId: running.job!.id });
-    assert.equal(readFileSync(reaConfigPath(root), "utf8"), original);
-    release();
-    await call(service, "rea.install", { version: "6.7.0" });
-    writeFileSync(reaConfigPath(root), JSON.stringify({ ...JSON.parse(original), revision: "external-change" }));
-    assert.match((await settle(service)).job!.error!, /配置已变化/);
-    assert.equal(readReaConfig(root).revision, "external-change");
+    try {
+      const running = await call(service, "rea.install");
+      await new Promise(resolve => setImmediate(resolve));
+      const second = await call(service, "rea.install");
+      assert.notEqual(second.job!.id, running.job!.id);
+      assert.equal(readReaConfig(root).installation!.directory, original, "the preempted install never publishes");
+    } finally { release(); }
+    const done = await settle(service);
+    assert.equal(done.job?.error, undefined); assert.equal(done.version, "6.7.0");
+    assert.notEqual(readReaConfig(root).installation!.directory, original);
     await assert.rejects(call(service, "rea.save", { enabled: false, revision: "old" }), { code: "CONFIGURATION_CONFLICT" });
     await service.close();
     writeFileSync(join(reaDirectory(root), "job.json"), JSON.stringify({ id: "interrupted", kind: "install", running: true, message: "installing" }));
     const count = f.calls.length; service = new ReaService(root, () => {}, f.dependencies);
-    assert.equal(service.snapshot().job?.running, false); assert.match(service.snapshot().job!.message, /中断/); assert.equal(f.calls.length, count);
+    assert.ok(!service.snapshot().job?.running); assert.doesNotMatch(service.snapshot().job?.message ?? "", /中断/); assert.equal(f.calls.length, count);
     writeFileSync(reaConfigPath(root), "broken");
-    await assert.rejects(call(service, "rea.install", { version: "6.7.0" }));
-    assert.equal(readFileSync(reaConfigPath(root), "utf8"), "broken");
     assert.ok(reaResources(root, root).warning);
   } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
 });

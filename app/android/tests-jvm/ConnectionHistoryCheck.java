@@ -18,6 +18,18 @@ public final class ConnectionHistoryCheck {
             saved = ConnectionHistory.record(saved, current, true);
             equal(saved, String.join("\n", A, B, C));
         }
+        current = A;
+        for (String expected : new String[]{C, B, A, C, B, A}) {
+            current = ConnectionHistory.next(saved, current, -1);
+            equal(current, expected);
+            saved = ConnectionHistory.record(saved, current, true);
+            equal(saved, String.join("\n", A, B, C));
+        }
+        equal(ConnectionHistory.next(saved, A, -1), C);
+        equal(ConnectionHistory.next(saved, C, 1), A);
+        equal(ConnectionHistory.next(saved, "not-in-history", -1), C);
+        equal(ConnectionHistory.next("", A, -1), "");
+        equal(ConnectionHistory.next(A, A, -1), A);
         equal(ConnectionHistory.next("", A), "");
         equal(ConnectionHistory.next(A, A), A);
         equal(ConnectionHistory.next(A + "\n" + B, B), A);
@@ -32,6 +44,32 @@ public final class ConnectionHistoryCheck {
         equal(ConnectionHistory.entries(many).get(0), "http://100.64.0.12:4317");
         equal(ConnectionHistory.entries(many).get(7), "http://100.64.0.5:4317");
         equal(ConnectionHistory.record(many, "http://100.64.0.6:4317", true), many);
-        System.out.println("PASS: " + passed + " connection history assertions");
+        gestures();
+        System.out.println("PASS: " + passed + " connection history and gesture assertions");
+    }
+    private static void gestures() {
+        ConnectionSwipeGesture gesture = new ConnectionSwipeGesture(2, 800);
+        gesture.start(600, 200, 1000);
+        equal(gesture.move(550, 203, 1100, 1), true);
+        equal(gesture.finish(400, 210, 1250), 1);
+        equal(gesture.finish(400, 210, 1260), 0); // One gesture, one switch.
+        gesture.start(200, 200, 2000);
+        equal(gesture.finish(400, 210, 2250), -1);
+        gesture.start(600, 200, 3000);
+        equal(gesture.finish(500, 205, 3250), 0); // Short drag.
+        gesture.start(600, 200, 4000);
+        equal(gesture.move(590, 260, 4100, 1), false);
+        equal(gesture.finish(350, 270, 4300), 0); // Vertical direction stays locked.
+        gesture.start(600, 200, 5000);
+        gesture.move(550, 205, 5100, 2);
+        equal(gesture.finish(350, 205, 5300), 0);
+        gesture.start(600, 200, 6000); gesture.cancel();
+        equal(gesture.finish(350, 205, 6300), 0);
+        gesture.start(600, 200, 7000);
+        equal(gesture.finish(350, 205, 8300), 0); // Long press / text selection.
+        gesture.start(600, 200, 9000);
+        equal(gesture.finish(350, 420, 9300), 0); // Diagonal, not a horizontal swipe.
+        gesture.start(600, 200, 10000);
+        equal(gesture.finish(350, 205, 9900), 0);
     }
 }

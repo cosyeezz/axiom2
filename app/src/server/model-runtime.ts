@@ -1,12 +1,19 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { getAgentDir, ModelRuntime, readStoredCredential } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { accountRuntimeStores, readModelCredential, selectedCatalogPath } from "./model-account-storage.js";
 import { installModelCopies } from "./model-copies.js";
+import { openAIProvider, installOpenAITransport } from "./providers/openai.js";
+import { installProviderRequestObserver, recognizeProviderRequestTransport } from "./provider-request-observer.js";
 import { catalogMetadata, credentialMetadata } from "./model-metadata.js";
 import type { ModelConfiguration } from "../shared/models.js";
+import { openAIProviderId } from "../shared/model-providers.js";
 
 type Template = ModelConfiguration["templates"][number];
 const nativeProviders = [{
+  template: { id: openAIProviderId, name: "OpenAI", api: "openai-codex-responses", url: "https://chatgpt.com/backend-api", methods: ["oauth"] } satisfies Template,
+  load: async () => openAIProvider(),
+}, {
   template: { id: "codebuddy-cn", name: "CodeBuddy 国内版", api: "openai-completions", url: "https://copilot.tencent.com/v2", methods: ["api_key", "oauth"] } satisfies Template,
   load: async () => (await import("./providers/codebuddy-cn.js")).codeBuddyProvider(),
 }, {
@@ -34,6 +41,7 @@ async function registerModelProvider(runtime: ModelRuntime, providerId: string) 
   if (!definition || runtime.getRegisteredNativeProvider(providerId)) return;
   const provider = await definition.load();
   if (runtime.getRegisteredNativeProvider(providerId)) return;
+  if (providerId === "kiro" || providerId === "codebuddy-cn") recognizeProviderRequestTransport(provider);
   // pi registers synchronously but starts an unawaited refresh afterwards. Keep
   // registration from mutating a worker's captured model files in the background.
   const refresh = runtime.refresh;
@@ -94,16 +102,20 @@ export async function createModelRuntime(options: RuntimeOptions = {}) {
     modify: async () => { throw Error("Definition validation is read-only"); },
     delete: async () => { throw Error("Definition validation is read-only"); },
   } : metadataOnly ? credentialMetadata(options.authPath ?? join(getAgentDir(), "auth.json"), providerScope) : undefined);
+  const authPath = options.authPath ?? join(getAgentDir(), "auth.json");
+  const catalogPath = options.modelsStorePath ?? join(dirname(authPath), "models-store.json");
+  const routed = !configurationOnly && !metadataOnly && !options.credentials ? await accountRuntimeStores(authPath, catalogPath) : undefined;
+  const effectiveCredentials = credentials ?? routed?.credentials;
   const allowNetwork = process.env.PI_OFFLINE === undefined && options.allowModelNetwork === true;
-  const runtime = await ModelRuntime.create({ ...sdkOptions, credentials, refreshOnCreate: false });
+  const runtime = await ModelRuntime.create({ ...sdkOptions, credentials: effectiveCredentials, modelsStore: options.modelsStore ?? routed?.modelsStore, refreshOnCreate: false });
   // OAuth can exist only in auth.json; it need not create a models.json entry.
   // Read persisted IDs without creating auth.json after a worker profile was captured.
   const needed = new Set(providerScope ? [providerScope] : providerIds);
-  if (credentials && !providerScope) {
-    for (const credential of await credentials.list({ signal: options.signal })) needed.add(credential.providerId);
+  if (effectiveCredentials && !providerScope) {
+    for (const credential of await effectiveCredentials.list({ signal: options.signal })) needed.add(credential.providerId);
   } else if (!providerScope) {
     for (const provider of nativeProviders) {
-      if (readStoredCredential(provider.template.id, options.authPath)) needed.add(provider.template.id);
+      if (readModelCredential(provider.template.id, authPath)) needed.add(provider.template.id);
     }
   }
   for (const provider of nativeProviders) {
@@ -120,12 +132,17 @@ export async function createModelRuntime(options: RuntimeOptions = {}) {
     // phase instead; Kiro's own account/profile scope validation remains intact.
     const storePath = options.modelsStorePath ?? (options.modelsPath === null ? undefined : join(options.modelsPath ? dirname(options.modelsPath) : getAgentDir(), "models-store.json"));
     // Parse the optional file only when a dynamic provider actually needs it.
-    let stored: ReturnType<typeof catalogMetadata> | undefined;
+    const snapshots = new Map<string, ReturnType<typeof catalogMetadata>>();
     let fallbackSignal: AbortSignal | undefined;
     for (const providerId of needed) {
       const provider = runtime.getRegisteredNativeProvider(providerId);
       if (!provider?.refreshModels) continue;
-      if (!options.modelsStore) stored ??= storePath ? catalogMetadata(storePath) : {};
+      let stored: ReturnType<typeof catalogMetadata> | undefined;
+      if (!options.modelsStore && storePath) {
+        const path = selectedCatalogPath(providerId, authPath, storePath);
+        if (!snapshots.has(path)) snapshots.set(path, catalogMetadata(path));
+        stored = snapshots.get(path);
+      }
       const signal = options.signal ?? (fallbackSignal ??= AbortSignal.timeout(5000));
       try {
         await provider.refreshModels({
@@ -152,7 +169,7 @@ export async function createModelRuntime(options: RuntimeOptions = {}) {
     // invoke refresh: the SDK's store read creates a missing file during resource binding.
     const dynamic = nativeProviders.filter(item => needed.has(item.template.id) && runtime.getRegisteredNativeProvider(item.template.id)?.refreshModels).map(item => item.template.id);
     const storePath = options.modelsStorePath ?? (options.modelsPath === null ? undefined : join(options.modelsPath ? dirname(options.modelsPath) : getAgentDir(), "models-store.json"));
-    if (dynamic.length && (options.modelsStore || storePath && existsSync(storePath)))
+    if (dynamic.length && (options.modelsStore || routed?.modelsStore || storePath && existsSync(storePath)))
       await runtime.refresh({ providers: dynamic, allowNetwork: false, signal: options.signal });
   } else {
     const signal = allowNetwork && options.modelRefreshTimeoutMs !== undefined
@@ -160,6 +177,8 @@ export async function createModelRuntime(options: RuntimeOptions = {}) {
       : options.signal;
     await runtime.refresh({ allowNetwork, signal });
   }
+  installOpenAITransport(runtime);
+  installProviderRequestObserver(runtime);
   installModelCopies(runtime, options.modelsPath === undefined ? join(getAgentDir(), "models.json") : options.modelsPath);
   return runtime;
 }

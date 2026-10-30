@@ -25,6 +25,7 @@ export function ProviderConnection({
   feedback,
   logoutProvider,
   removeProvider,
+  accountAddition = false,
 }: {
   p: Provider;
   storage: ModelConfiguration["storage"];
@@ -41,6 +42,7 @@ export function ProviderConnection({
   feedback: string;
   logoutProvider: (p: Provider) => void;
   removeProvider: (p: Provider) => void;
+  accountAddition?: boolean;
 }) {
   const providerIdInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -57,9 +59,9 @@ export function ProviderConnection({
           {p.hasConnectionOverrides && <p className="field-help">此连接保留已有自定义接口覆盖，登录不会修改原配置。协议：{p.api}；地址：{p.keepUrl ? "已保存敏感地址" : p.url}</p>}
           <ProviderProxyFields value={p.proxy} onChange={proxy => patch({ proxy })} disabled={busy || needsReconcile} error={p.auth?.error} />
           <div className="row">
-            <button id="oauth-login-provider" type="button" className="btn btn-primary" disabled={dirty || !!editor || busy || needsReconcile} onClick={() => setLogin({ providerId: p.providerId, type: "oauth" })}>OAuth 登录</button>
-            <button id="logout-provider" type="button" className="btn btn-ghost" disabled={!p.originalId || !p.auth?.configured || dirty || !!editor || busy || needsReconcile} onClick={() => logoutProvider(p)} data-tooltip="立即退出授权，保留供应商和模型">退出授权</button>
-            <button type="button" className="btn btn-ghost" disabled={dirty || !!editor || busy || needsReconcile} onClick={() => removeProvider(p)}>退出登录并移除</button>
+            <button id="oauth-login-provider" type="button" className="btn btn-primary" disabled={dirty || !!editor || busy || needsReconcile} onClick={() => setLogin({ providerId: p.providerId, type: "oauth" })}>{accountAddition ? "添加 OAuth 账号" : "OAuth 登录"}</button>
+            {!accountAddition && <><button id="logout-provider" type="button" className="btn btn-ghost" disabled={!p.originalId || !p.auth?.configured || dirty || !!editor || busy || needsReconcile} onClick={() => logoutProvider(p)} data-tooltip="立即退出授权，保留供应商和模型">退出授权</button>
+            <button type="button" className="btn btn-ghost" disabled={dirty || !!editor || busy || needsReconcile} onClick={() => removeProvider(p)}>退出登录并移除</button></>}
           </div>
           <p className="field-help">删除模型不会退出授权；「退出授权」立即清除受管理认证，保留供应商和模型配置。</p>
           {dirty && <p className="field-help">请先保存或放弃当前草稿，再登录、退出授权或移除账号。</p>}
@@ -151,7 +153,11 @@ export function ProviderConnection({
             </div>
             <ProviderProxyFields value={p.proxy} onChange={proxy => patch({ proxy })} disabled={busy || needsReconcile} error={p.auth?.error} />
             <div className="connection-credentials">
-              <div className="field">
+              {accountAddition ? <div className="field">
+                <p className="field-help">同一供应商的账号共用此连接和模型配置。新供应商请先保存配置，再通过 Auth 独立保存 API Key；不会在配置保存时替换当前账号的密钥。</p>
+                <button type="button" className="btn btn-primary" disabled={!p.originalId || dirty || !!editor || busy || needsReconcile}
+                  onClick={() => setLogin({ providerId: p.providerId, type: "api_key" })}>添加 API Key 账号</button>
+              </div> : <div className="field">
                 <div className="row-between credential-heading">
                   <label htmlFor="provider-key">
                     API 密钥
@@ -223,7 +229,7 @@ export function ProviderConnection({
                 </span>
                   </div>
                 </details>
-              </div>
+              </div>}
             </div>
           </div>
         </section>
@@ -250,7 +256,7 @@ export function ProviderConnection({
               {feedback}
             </p>
           </div>
-          <button
+          {!accountAddition && <button
             type="button"
             className="btn btn-ghost"
             disabled={
@@ -264,7 +270,7 @@ export function ProviderConnection({
             onClick={() => removeProvider(p)}
           >
             删除供应商
-          </button>
+          </button>}
         </div>
       </form>
       <p className="prototype-note">

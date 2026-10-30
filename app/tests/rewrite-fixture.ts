@@ -21,19 +21,25 @@ export async function rewriteFixture(dev = false) {
   mkdirSync(project); mkdirSync(pi);
   const previous = process.env.AXIOM_PI_DIR; process.env.AXIOM_PI_DIR = pi;
   const requests: any[] = [];
-  let stall = false;
+  let stall = false, partial = "";
+  const held: (() => void)[] = [];
   const provider = createServer(async (request, response) => {
     let raw = ""; for await (const chunk of request) raw += chunk;
     requests.push(JSON.parse(raw));
+    const answer = `REWRITE_ANSWER_${requests.length}`;
     response.writeHead(200, { "Content-Type": "text/event-stream" }); response.flushHeaders();
-    if (stall) return;
     const chunk = (delta: unknown, finish_reason: string | null = null) => response.write(`data: ${JSON.stringify({
       id: randomUUID(), object: "chat.completion.chunk", created: 1, model: "rewrite", choices: [{ index: 0, delta, finish_reason }],
     })}\n\n`);
-    chunk({ role: "assistant", content: `REWRITE_ANSWER_${requests.length}` }); chunk({}, "stop");
-    response.write(`data: ${JSON.stringify({ id: "usage", object: "chat.completion.chunk", model: "rewrite", choices: [],
-      usage: { prompt_tokens: 80, completion_tokens: 10, total_tokens: 90 } })}\n\n`);
-    response.end("data: [DONE]\n\n");
+    if (stall && partial) chunk({ role: "assistant", content: partial });
+    const finish = () => {
+      if (response.destroyed || response.writableEnded) return;
+      chunk({ role: "assistant", content: answer }); chunk({}, "stop");
+      response.write(`data: ${JSON.stringify({ id: "usage", object: "chat.completion.chunk", model: "rewrite", choices: [],
+        usage: { prompt_tokens: 80, completion_tokens: 10, total_tokens: 90 } })}\n\n`);
+      response.end("data: [DONE]\n\n");
+    };
+    if (stall) held.push(finish); else finish();
   });
   await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
   writeFileSync(join(pi, "models.json"), JSON.stringify({ providers: { "rewrite-fixture": {
@@ -50,7 +56,9 @@ export async function rewriteFixture(dev = false) {
   const call = (op: string, params: Record<string, unknown> = {}, target: Scope = scope, requestId = randomUUID()) => app.tasks.command({ op, params, ...target, requestId });
   await call("agent.model", { selection });
   const idle = (target = scope) => until(() => !running(app.agents.info(target).run) && !app.agents.active(target), "execution did not settle");
-  return { app, root, project, scope, selection, requests, call, idle, stall: (value: boolean) => { stall = value; },
+  return { app, root, project, scope, selection, requests, call, idle,
+    stall: (value: boolean, text = "") => { stall = value; partial = text; },
+    release: () => { for (const finish of held.splice(0)) finish(); },
     close: async () => {
       await app.close(); provider.closeAllConnections(); await new Promise<void>((resolve) => provider.close(() => resolve()));
       if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;

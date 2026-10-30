@@ -301,8 +301,9 @@ body:has(.connect-page) { margin: 0; background: #111315; color-scheme: dark; }
 .startup-update-section { padding-block: 20px 12px; }
 .updates-simple { padding: 0; }
 .updates-simple > h2 { margin: 0 0 6px; font-size: 13px; font-weight: 550; }
-.update-component { padding: 14px 0; }
-.update-component + .update-component { border-top: 1px solid color-mix(in srgb, currentColor 9%, transparent); }
+/* Recursive cards own their enclosure and padding; these are legacy flat rows. */
+.update-component:not(.component-card) { padding: 14px 0; }
+.update-component:not(.component-card) + .update-component:not(.component-card) { border-top: 1px solid color-mix(in srgb, currentColor 9%, transparent); }
 .update-component-row { display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; min-width: 0; }
 .update-component-copy { min-width: 0; }
 .update-component-copy h3 { margin: 0; font: inherit; font-size: 13px; font-weight: 500; }

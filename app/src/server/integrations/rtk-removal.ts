@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { managedChildren, managedDirectory, removeManagedDirectory } from "./managed-removal.js";
-import { atomicRtkJson, readRtkConfig, rtkConfigPath, rtkDirectoryPattern, type RtkConfig } from "./rtk-config.js";
+import { join } from "node:path";
+import { componentChildren, forceRemoveComponentPaths } from "./component-maintenance.js";
+import { atomicRtkJson, readRtkConfig, rtkConfigPath, rtkDirectory, rtkDirectoryPattern, type RtkConfig } from "./rtk-config.js";
 
 const parents = ["integrations", "rtk", "versions"];
 /** Shared by the online service and the desktop's independent maintenance host. */
@@ -23,4 +25,12 @@ export function removeRtk(root: string, revision: string, barrier: () => void, p
   // Re-enumerate before clearing the recovery record; unexpected versions stay visible.
   if (rtkRemovalDirectories(root, { ...next, removalPending: undefined }).length) throw Error("仍有 RTK 程序文件，清理尚未完成；请重新核实。");
   atomicRtkJson(rtkConfigPath(root), { ...next, removalPending: undefined });
+}
+/** Component standard: forced uninstall without revision, scope or safe-point checks. */
+export function forceRemoveRtk(root: string) {
+  const versions = join(rtkDirectory(root), "versions");
+  let config: RtkConfig | undefined;
+  try { config = readRtkConfig(root); } catch { config = undefined; }
+  if (config) atomicRtkJson(rtkConfigPath(root), { ...config, enabled: false, revision: randomUUID(), installation: undefined, removalPending: undefined });
+  forceRemoveComponentPaths(rtkDirectory(root), componentChildren(versions, rtkDirectoryPattern));
 }

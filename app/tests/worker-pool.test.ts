@@ -413,33 +413,28 @@ test('overlapping binding validations keep their own first rejection', async t =
   first.close(); second.close(); await Promise.all([one.released, two.released]);
 });
 
-test('maintenance rejects active leases and waits for physical worker close before removing files', async t => {
-  const h = harness(t);
-  const lease = await h.acquire(); await lease.ensureReady();
-  let removed = false;
-  await assert.rejects(h.pool.maintenance(() => { removed = true; }), { code: 'MAINTENANCE_BUSY' });
-  assert.equal(removed, false);
-  await h.cleaned(lease);
-  const removal = h.pool.maintenance(() => { assert.equal(h.refs(), 0); removed = true; });
-  await turn(); assert.equal(removed, false);
-  await assert.rejects(h.acquire(), { code: 'MAINTENANCE_BUSY' });
-  await assert.rejects(h.pool.maintenance(() => {}), { code: 'MAINTENANCE_BUSY' });
-  h.children[0].emit('message', { type: 'closed', lease: lease.ref });
-  await turn(); assert.equal(removed, false, 'IPC close does not release executable files');
-  h.children[0].close(); await removal; assert.equal(removed, true);
-  await assert.rejects(h.pool.maintenance(() => { throw Error('disk busy'); }), /disk busy/);
-  const next = await h.acquire(); await h.pool.retire(next.ref, 'end');
+test('execution pool exposes no component maintenance gate', async t => {
+  const h = harness(t), lease = await h.acquire(); await lease.ensureReady();
+  assert.equal('maintenance' in h.pool, false, 'component removal must not reserve or drain the execution pool');
+  const next = await h.acquire(); await next.ensureReady();
+  assert.equal(h.pool.isActive(lease.ref), true);
+  assert.equal(h.pool.isActive(next.ref), true);
+  assert.equal(h.children.some(child => child.messages.some((message: { type: string }) => message.type === 'shutdown')), false);
 });
 
-for (const cancel of [false, true]) test(`maintenance ${cancel ? 'cancellation' : 'close timeout'} preserves files until physical close and allows retry`, async t => {
-  const h = harness(t), lease = await h.acquire(); await lease.ensureReady(); await h.cleaned(lease);
-  let removed = false;
-  const controller = new AbortController();
-  const pending = h.pool.maintenance(() => { removed = true; }, controller.signal, cancel ? 5000 : 20);
-  if (cancel) controller.abort(Error('cancelled fixture'));
-  await assert.rejects(pending, cancel ? /cancelled fixture/ : { code: 'stop-unconfirmed' });
-  assert.equal(removed, false); assert.equal(h.refs(), 1);
-  const retry = h.pool.maintenance(() => { assert.equal(h.refs(), 0); removed = true; });
-  await turn(); assert.equal(removed, false);
-  h.children[0].close(); await retry; assert.equal(removed, true);
+test('request statistics accept only current instance identity and clean dead workers without losing peaks or RPM', async t => {
+  const h = harness(t), lease = await h.acquire(), child: any = await lease.ensureReady();
+  const instance = { instanceId: lease.ref.instanceId, generation: lease.ref.generation, profileHash: lease.environment.profileHash };
+  const start = { type: 'provider_request_stat', phase: 'start', id: 'request-a', provider: 'connection-a', precision: 'http' };
+  child.emit('message', { ...start, instance: { ...instance, generation: instance.generation + 1 } });
+  child.emit('message', { ...start, lease: lease.ref });
+  assert.deepEqual(h.pool.requests.snapshot().providers, []);
+  child.emit('message', { ...start, instance }); child.emit('message', { ...start, instance });
+  assert.deepEqual(h.pool.requests.snapshot().providers[0], { providerId: 'connection-a', current: 1, peak: 1, rpm: 1, callLevel: false });
+  await h.cleaned(lease);
+  assert.equal(h.pool.requests.snapshot().providers[0].current, 1, 'leases are not request lifetimes; idle cache warming may still be streaming');
+  child.close();
+  assert.deepEqual(h.pool.requests.snapshot().providers[0], { providerId: 'connection-a', current: 0, peak: 1, rpm: 1, callLevel: false });
+  child.emit('message', { ...start, instance });
+  assert.equal(h.pool.requests.snapshot().providers[0].current, 0, 'late messages from a closed process cannot resurrect requests');
 });

@@ -27,6 +27,8 @@ export interface Session {
   /** null: not viewed; positive: retained until server expiry; 0: returned to workspace. */
   autoPinUntil?: number | null;
   updatedAt: number;
+  /** Fixed sidebar ordering anchor, captured at creation or legacy migration. */
+  listOrderAt?: number;
   runStatus?: import("./agent.js").Run["status"];
   activeTasks?: boolean;
 }

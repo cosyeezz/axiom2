@@ -187,16 +187,8 @@ try {
     await noUserFooters();
     const restore = feedback.getByRole("button", { name: "恢复编辑", exact: true });
     await restore.click();
-    if (outcome === "uncertain") {
-      const dialog = page.getByRole("dialog", { name: "恢复未确认的消息？", exact: true });
-      await dialog.getByText(/再次发送可能造成重复执行/).waitFor();
-      await dialog.getByRole("button", { name: "取消", exact: true }).click();
-      assert.equal(await page.locator("#prompt").inputValue(), newer);
-      await noUserFooters();
-      await restore.click();
-      await dialog.getByRole("button", { name: "确认恢复编辑", exact: true }).click();
-      await page.locator(".composer-foot").getByText(/原消息已恢复编辑，尚未发送/).waitFor();
-    }
+    assert.equal(await page.getByRole("dialog").count(), 0, "one click restores editing without a confirmation dialog");
+    if (outcome === "uncertain") await page.locator(".composer-foot").getByText(/原消息已恢复编辑，尚未发送/).waitFor();
     await page.waitForFunction(expected => (document.querySelector("#prompt") as HTMLTextAreaElement).value === expected, `${text}\n\n${newer}`, { timeout: 5000 }).catch(async error => {
       assert.fail(`${error}\n${JSON.stringify({ outcome, expected: `${text}\n\n${newer}`, actual: await page.locator("#prompt").inputValue(), feedback: await feedback.allTextContents(), sends: sends.length, errors, composer: await page.locator(".composer-area").innerText() })}`);
     });
@@ -204,6 +196,7 @@ try {
     // Recovery deliberately focuses on the next animation frame. Settle that
     // focus before the following scenario starts another Playwright fill.
     await page.waitForFunction(() => document.activeElement === document.querySelector("#prompt"));
+    assert.deepEqual(await page.locator("#prompt").evaluate((input: HTMLTextAreaElement) => [input.selectionStart, input.selectionEnd]), [0, 0]);
     assert.equal(sends.length, before + 1, "recovery only restores editing and never resends");
     await noUserFooters();
     console.log(`PASS ${outcome}: no user footer; feedback/recovery stays in composer; original and new typing preserved without replay`);

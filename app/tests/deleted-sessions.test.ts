@@ -168,7 +168,9 @@ test("websocket deletion invalidates pages, blocks content, and restores the pre
     assert.equal((await request("session.delete", { confirmed: true })).ok, true);
     assert.equal((await request("deleted-sessions.list")).data.items[0].id, s.id);
     assert.equal((await request("subscribe", { scope: `messages:${w.id}:${s.id}` })).ok, false);
-    assert.equal((await request("subscribe", { scope: `session:${w.id}:${s.id}` })).ok, false);
+    assert.equal((await request("subscribe", { scope: `session:${w.id}:${s.id}` })).ok, true);
+    assert.equal(events.filter(event => event.type === "snapshot" && event.scope === `session:${w.id}:${s.id}`).at(-1)?.data, null,
+      "a missing selected session is authoritative null, independent of a loaded title page");
     assert.equal((await request("session.restore")).ok, true);
     assert.equal(app.store.session(w.id, s.id).updatedAt, 42);
     assert.deepEqual((await request("deleted-sessions.list")).data.items, []);

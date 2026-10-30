@@ -6,6 +6,7 @@ import type { ReaEngineId } from "../../shared/rea-engines.js";
 import { maintenancePhase } from "../maintenance.js";
 import { managedChildren, managedDirectory, removeManagedDirectory } from "./managed-removal.js";
 import { cleanupScope, assertCleanupScope } from "./cleanup-scope.js";
+import { componentChildren, forceRemoveComponentPaths } from "./component-maintenance.js";
 import { atomicReaJson, readReaConfig, reaConfigPath, reaDirectory, reaEngineDirectoryPattern, reaProgramDirectoryPattern, type ReaConfig } from "./rea-runtime.js";
 
 export function insideReaDirectory(directory: string, path: string) {
@@ -28,7 +29,7 @@ export function reaRemovalPlan(root: string, fresh: ReaConfig, previousRemovals:
     throw Error("组件托管记录与路径不一致，未删除文件。");
   return { names, parents, pattern, pending, records, unverified, paths: names.map(name => join(root, ...parents, name)) };
 }
-/** Called only while the application's worker maintenance barrier is held. */
+/** Remove only confirmed component-owned files; active sessions are not drained. */
 export function removeRea(root: string, revision: string, engine?: ReaEngineId, scopeRevision?: unknown) {
   const fresh = readReaConfig(root);
   if (fresh.revision !== revision) throw new AppError("CONFIGURATION_CONFLICT", "REA 配置已变化，请重新确认卸载。");
@@ -59,4 +60,34 @@ export function removeRea(root: string, revision: string, engine?: ReaEngineId, 
   const remaining = next.removalPending.filter(name => !names.includes(name));
   atomicReaJson(reaConfigPath(root), { ...next, removalPending: remaining.length ? remaining : undefined });
   for (const name of names) forgetBuiltinDirectory(join(root, ...parents, name));
+}
+/** Reads the configuration, falling back to an empty one so forced maintenance never stalls. */
+export function readReaConfigLenient(root: string): ReaConfig {
+  try { return readReaConfig(root); } catch { return { format: 1, revision: randomUUID(), enabled: true }; }
+}
+/**
+ * Component standard: forced uninstall. No revision, scope or ownership checks.
+ * Program removal deletes every managed version; engine removal deletes the
+ * engine's managed directories and clears its path and records.
+ */
+export function forceRemoveRea(root: string, engine?: ReaEngineId) {
+  const base = reaDirectory(root), fresh = readReaConfigLenient(root);
+  const container = join(base, engine ? "engines" : "versions");
+  const paths = componentChildren(container, engine ? reaEngineDirectoryPattern : reaProgramDirectoryPattern).filter(path => !engine || basename(path).startsWith(`${engine}-`));
+  const next: ReaConfig = { ...fresh, revision: randomUUID() };
+  if (engine) {
+    if (next.managedEngines) { next.managedEngines = { ...next.managedEngines }; delete next.managedEngines[engine]; }
+    if (next.engines?.[engine]) { next.engines = { ...next.engines }; delete next.engines[engine]; }
+    const pending = next.removalPending?.filter(name => !name.startsWith(`${engine}-`));
+    next.removalPending = pending?.length ? pending : undefined;
+  } else {
+    delete next.installation;
+    const pending = next.removalPending?.filter(name => !reaProgramDirectoryPattern.test(name));
+    next.removalPending = pending?.length ? pending : undefined;
+  }
+  maintenancePhase("removing");
+  atomicReaJson(reaConfigPath(root), next);
+  for (const path of paths) forgetBuiltinDirectory(path);
+  forceRemoveComponentPaths(container, paths);
+  maintenancePhase("validating");
 }

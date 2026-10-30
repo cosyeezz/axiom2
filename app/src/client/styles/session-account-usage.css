@@ -1,0 +1,18 @@
+/* The shared provider renderer is inline in model headings. In a detail sheet,
+   keep account metadata and quota records readable as full-width stacked rows. */
+.session-account-usage-detail .provider-usage { flex-direction: column; align-items: stretch; gap: 14px; margin: 16px 0; font-size: 12px; }
+.session-account-usage-detail .provider-usage-account { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin: 0; }
+.session-account-usage-detail .provider-usage-account > div { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; }
+.session-account-usage-detail .provider-usage-account dt { color: var(--muted); }
+.session-account-usage-detail .provider-usage-account dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.session-account-usage-detail .provider-usage-metrics { display: grid; align-items: stretch; gap: 14px; width: 100%; }
+.session-account-usage-detail .provider-usage-metric { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: baseline; gap: 3px 12px; width: 100%; }
+.session-account-usage-detail .provider-usage-metric > strong { font-size: 13px; text-align: right; color: var(--fg); }
+.session-account-usage-detail :is(.provider-usage-remaining, .provider-usage-availability, .provider-usage-deadline, .provider-usage-expiries) { grid-column: 1 / -1; min-width: 0; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.session-account-usage-detail .provider-usage-progress { grid-column: 1 / -1; appearance: none; width: 100%; height: 7px; border: 0; border-radius: 4px; overflow: hidden; background: var(--border); color: var(--accent); }
+.session-account-usage-detail .provider-usage-progress::-webkit-progress-bar { background: var(--border); border-radius: 4px; }
+.session-account-usage-detail .provider-usage-progress::-webkit-progress-value { background: var(--accent); border-radius: 4px; }
+.session-account-usage-detail .provider-usage-progress::-moz-progress-bar { background: var(--accent); border-radius: 4px; }
+.session-account-usage-detail .provider-usage-expiries summary { cursor: pointer; }
+.session-account-usage-detail .provider-usage-expiries ol { margin: 4px 0; padding-left: 20px; }
+.session-account-usage-detail .provider-usage-toolbar { color: var(--muted); font-size: 11px; }

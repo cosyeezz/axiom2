@@ -11,7 +11,8 @@ import { TaskDelivery } from "../src/server/tasks/delivery.js";
 import type { Agents } from "../src/server/agents.js";
 import type { Workspace, Session, Draft } from "../src/shared/protocol.js";
 
-for (const state of ["queued", "starting", "inflight"]) test(`child recall ${state}: ID acknowledgment, original draft order and attachments`, async () => {
+for (const state of ["queued", "waiting", "starting", "inflight"]) for (const single of [false, true])
+  test(`child ${single ? "single" : "all"} recall ${state}: ID acknowledgment, original draft order and attachments`, async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-recall-child-")), store = new Store(root);
   try {
     const w = store.execute({ op: "workspace.open", requestId: randomUUID(), params: { path: root, authorized: true } }) as Workspace;
@@ -30,20 +31,26 @@ for (const state of ["queued", "starting", "inflight"]) test(`child recall ${sta
     store.db.prepare("UPDATE tasks SET status=? WHERE id=?").run(state === "queued" ? "queued" : "starting", task);
     let calls = 0;
     const agents = { store, publish: () => {}, info: () => ({ selection }), thread: () => ({ ids: [] }), setQueue: () => {},
-      recallIds: async (to: unknown, ids: string[]) => { calls++; assert.deepEqual(to, target(row())); assert.deepEqual(ids, [one, two]); return [two, one]; },
+      recallIds: async (to: unknown, ids: string[]) => { calls++; assert.deepEqual(to, target(row())); assert.deepEqual(ids, single ? [one] : [one, two]); return single ? [one] : [two, one]; },
     } as unknown as Agents;
     const delivery = new TaskDelivery(agents, records), scheduler = new TaskScheduler(agents, records, delivery);
     scheduler.closing = true; // This focused test must never launch a model.
-    const recalled = await scheduler.recall(row());
-    assert.deepEqual(recalled.drafts, [first, second]);
-    assert.deepEqual(new Set(recalled.ids), new Set([one, two]));
-    assert.equal(calls, state === "queued" ? 0 : 1);
+    assert.deepEqual(await scheduler.recall(row(), "missing"), { drafts: [] });
+    assert.equal(records.drafts.size, 2, "unknown input never falls back to all");
+    const recalled = await scheduler.recall(row(), single ? one : undefined);
+    assert.deepEqual(recalled.drafts, single ? [first] : [first, second]);
+    assert.deepEqual(new Set(recalled.ids), new Set(single ? [one] : [one, two]));
+    assert.equal(calls, ["queued", "waiting"].includes(state) ? 0 : 1);
     assert.equal(records.inputs(row(), "queued")[0].id, delegation);
-    assert.equal(records.drafts.size, 0);
+    assert.equal(records.drafts.size, single ? 1 : 0);
+    if (single) {
+      assert.deepEqual(records.drafts.get(two), second, "other draft retains original image bytes");
+      assert.ok(records.inputs(row(), state).some((input) => input.id === two));
+    }
   } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
-test("child mixed recall failure does not delete locally queued drafts", async () => {
+for (const single of [false, true]) test(`child mixed ${single ? "single" : "all"} recall failure does not delete locally queued drafts`, async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-recall-failure-")), store = new Store(root);
   try {
     const w = store.execute({ op: "workspace.open", requestId: randomUUID(), params: { path: root, authorized: true } }) as Workspace;
@@ -56,7 +63,7 @@ test("child mixed recall failure does not delete locally queued drafts", async (
     store.db.prepare("UPDATE task_inputs SET state='inflight' WHERE id=?").run(sent);
     const agents = { store, publish: () => {}, info: () => ({}), setQueue: () => {}, recallIds: async () => { throw Error("lost ack"); } } as unknown as Agents;
     const scheduler = new TaskScheduler(agents, records, new TaskDelivery(agents, records)); scheduler.closing = true;
-    await assert.rejects(scheduler.recall(row), /lost ack/);
+    await assert.rejects(scheduler.recall(row, single ? sent : undefined), /lost ack/);
     assert.ok(records.inputs(row, "queued").some((input) => input.id === queued));
     assert.equal(records.drafts.size, 2);
   } finally { store.close(); rmSync(root, { recursive: true, force: true }); }

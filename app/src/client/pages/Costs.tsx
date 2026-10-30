@@ -34,10 +34,12 @@ const Report = memo(function Report({ report }: { report: CostReport }) {
   const totals = Object.fromEntries(costCategories.map((category) => [category, sumCosts(report.rows.filter((row) => row.category === category))]));
   const sessionTitle = (id: string) => report.sessions.find((session) => session.id === id)?.title ?? "未知会话";
   const children = report.sessions.filter((session) => session.taskId);
+  const childOnly = children.some((session) => session.id === report.requestedSessionId);
+  const categories = costCategories.filter((category) => (!childOnly || category !== "main") && (category !== "other" || totals.other.records));
   return <>
     <section className="cost-overview" aria-label="费用汇总">
       <div className="cost-total"><span>累计预计费用 · USD</span><Amount value={report.total} />
-        <p>{report.total.records ? `${report.total.records} 条用量记录 · ${children.length} 个子 Agent` : "尚无模型用量记录"}</p>
+        <p>{report.total.records ? `${report.total.records} 条用量记录 · ${childOnly ? "仅当前子会话" : `${children.length} 个子 Agent`}` : "尚无模型用量记录"}</p>
         <dl className="cost-token-facts" aria-label="累计调用 Token 统计">
           <div><dt>累计调用 Token</dt><dd>{costTokens(report.total)}</dd></div>
           {costParts.map((part) => <div key={part}><dt>{costPartLabels[part]}</dt><dd>{report.total.records ? `${number(report.total.tokens[part])}${report.total.unknownTokens ? " + 未知" : ""}` : "—"}</dd></div>)}
@@ -46,17 +48,17 @@ const Report = memo(function Report({ report }: { report: CostReport }) {
         {!!report.total.estimatedRecords && <p className="cost-caution">其中 {report.total.estimatedRecords} 条为公开价估算，合计 ${report.total.estimatedCost?.toFixed(4)}（已包含在总额内），实际渠道、峰谷、服务档位及订阅扣费可能不同。展开模型可查看价格来源与核实日期。</p>}
         {!!report.total.unknownCost && <p className="cost-caution">{report.total.unknownCost} 条记录的价格或用量未知，当前金额不代表完整费用。可在<a href="/model-config.html">模型配置</a>中编辑模型的计费单价；补充价格后从下一次执行生效。</p>}
       </div>
-      <div className="cost-equation">{costCategories.filter((category) => category !== "other" || totals.other.records).map((category) =>
+      <div className="cost-equation">{categories.map((category) =>
         <a href={`#cost-${category}`} key={category}><span>{costLabels[category]}</span><Amount value={totals[category]} /><small>{costTokens(totals[category])} Token</small></a>)}</div>
     </section>
     {report.warnings.length > 0 && <div role="alert" className="cost-warning">{report.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}
-    <section id="cost-main" className="cost-section">
+    {!childOnly && <section id="cost-main" className="cost-section">
       <header><div><h2>主 Agent</h2><p>主会话的对话模型请求，压缩与工具内部调用另列。</p></div><Amount value={totals.main} /></header>
       {report.rows.filter((row) => row.category === "main").map((row) => <Breakdown key={row.id} row={row} />)}
       {!totals.main.records && <p className="cost-empty">暂无主 Agent 用量记录。</p>}
-    </section>
+    </section>}
     <section id="cost-subagent" className="cost-section">
-      <header><div><h2>子 Agent <span>{children.length}</span></h2><p>逐个子任务累计，包含同一子会话后续追问的模型用量。</p></div><Amount value={totals.subagent} /></header>
+      <header><div><h2>{childOnly ? "当前子 Agent" : <>子 Agent <span>{children.length}</span></>}</h2><p>{childOnly ? "仅当前子会话的模型用量，包含后续追问；不含主会话及其他子代理。" : "逐个子任务累计，包含同一子会话后续追问的模型用量。"}</p></div><Amount value={totals.subagent} /></header>
       {children.map((child, index) => {
         const rows = report.rows.filter((row) => row.category === "subagent" && row.sessionId === child.id);
         const title = <h3 className="cost-line-title"><span className="cost-index">{String(index + 1).padStart(2, "0")}</span><span>{child.title}</span></h3>;
@@ -75,7 +77,7 @@ const Report = memo(function Report({ report }: { report: CostReport }) {
       const rows = report.rows.filter((row) => row.category === category);
       if (category === "other" && !rows.length) return null;
       return <section id={`cost-${category}`} className="cost-section" key={category}>
-        <header><div><h2>{costLabels[category]}</h2><p>{category === "compression" ? "主／子会话全部压缩，已应用与未应用的费用均只计一次。" : category === "tool" ? "工具自身上报的模型用量，按工具名称与所属会话归集。" : "其他已记录的模型用量，独立计入总额。"}</p></div><Amount value={totals[category]} /></header>
+        <header><div><h2>{costLabels[category]}</h2><p>{category === "compression" ? childOnly ? "仅当前子会话的压缩，已应用与未应用的费用均只计一次。" : "主／子会话全部压缩，已应用与未应用的费用均只计一次。" : category === "tool" ? childOnly ? "仅当前子会话内工具自身上报的模型用量。" : "工具自身上报的模型用量，按工具名称与所属会话归集。" : "其他已记录的模型用量，独立计入总额。"}</p></div><Amount value={totals[category]} /></header>
         {rows.map((row) => <article className="cost-source" key={row.id}>
           <div className="cost-source-heading"><div><h3>{row.source}{row.timestamp != null && <time dateTime={new Date(row.timestamp).toISOString()}> · {new Date(row.timestamp).toLocaleString("zh-CN", { hour12: false })}</time>}</h3><p>{sessionTitle(row.sessionId)}{row.status ? ` · ${row.status}` : ""}</p></div></div>
           <Breakdown row={row} />
@@ -84,11 +86,11 @@ const Report = memo(function Report({ report }: { report: CostReport }) {
       </section>;
     })}
     <details className="cost-method"><summary id="cost-method-title">计算口径<Icon name="chevron-right" className="cost-chevron" /></summary>
-      <p>总费用 = 主 Agent + 全部子 Agent + 压缩 + 工具内部调用 + 其他模型调用。各分类互不重复。</p>
+      <p>{childOnly ? "总费用 = 当前子 Agent + 当前子会话的压缩 + 工具内部调用 + 其他模型调用。不含主会话及其他子代理，各分类互不重复。" : "总费用 = 主 Agent + 全部子 Agent + 压缩 + 工具内部调用 + 其他模型调用。各分类互不重复。"}</p>
       <p>累计调用 Token = 输入 + 输出 + 缓存读取 + 缓存写入，包含全部分类的已记录用量；每次调用分别累计，不代表当前上下文占用。</p>
       <p>单次费用 = 输入、输出、缓存读取、缓存写入各自的 Token × 对应每百万 Token 单价 ÷ 1,000,000。已有费用保留请求时记录的值，不以当前配置重算；缺价且 Token 明细完整、模型精确匹配时，按公开参考价估算并标记。估算可能用于历史缺价请求，不代表当时价格；未匹配或资料不足仍为未知。阶梯价和缓存策略以模型记录为准。</p>
       <p>保留压缩前、重试及历史分支的已记录消费。失败、取消或未应用摘要不等于未消费；没有返回的用量无法推断。压缩任务的“用量记录”可能合并多次摘要请求。</p>
-      <p>当前会话费用仅包含当前查看会话的用量；累计预计费用与分类汇总包含整个主会话及所属子任务。金额保留四位小数，分项保留六位；公开价估算显示“含估算”，其余未知价格显示未知，实际扣款以供应商账单为准。</p>
+      <p>{childOnly ? "当前会话费用、累计预计费用与分类汇总均仅包含当前子会话的用量。" : "当前会话费用仅包含当前查看会话的用量；累计预计费用与分类汇总包含整个主会话及所属子任务。"}金额保留四位小数，分项保留六位；公开价估算显示“含估算”，其余未知价格显示未知，实际扣款以供应商账单为准。</p>
     </details>
   </>;
 });
@@ -104,7 +106,7 @@ function CostPage({ scope, closeControl, sessionSummary, costs }: { scope: Scope
       </button>{closeControl ?? <a className="cost-back" href="/">返回工作台</a>}
     </div></header>
     <div className="cost-content">
-      {!closeControl && <div className="cost-title"><p>会话费用</p><h1>{report?.title ?? "费用明细"}</h1><span>主 Agent、子 Agent 与模型调用的累计明细</span></div>}
+      {!closeControl && <div className="cost-title"><p>会话费用</p><h1>{report?.title ?? "费用明细"}</h1><span>{report?.sessions.some(session => session.id === scope.sessionId && session.taskId) ? "仅当前子代理及其模型调用的累计明细" : "主 Agent、子 Agent 与模型调用的累计明细"}</span></div>}
       <p className="cost-status" role="status">{!connected ? "连接已断开或正在连接，显示的费用可能尚未更新。" : loading ? report ? "正在更新，暂时显示上次读取的记录…" : "正在读取费用记录…" : report ? "用量变化时自动更新 · 金额以供应商账单为准" : "尚未读取费用"}</p>
       {error && <div className="cost-warning" role="alert"><p>{error}</p><button className="cost-refresh" type="button" disabled={!connected || loading} onClick={refresh}>重新加载</button></div>}
       {sessionSummary?.(sessionTotals)}

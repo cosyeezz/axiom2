@@ -16,7 +16,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
-import { estimateTokens, SessionManager } from "@earendil-works/pi-coding-agent";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { estimateContextMessages, measureContext } from "../src/server/context-usage.js";
 import { startServer } from "../src/server/index.js";
 import { running } from "../src/shared/agent.js";
 import { defaultAutoCompression } from "../src/shared/compression.js";
@@ -197,8 +198,30 @@ test(
       assert.equal(app.agents.compressions.info(scope), null, "invalid choices do not create jobs");
       assert.equal(readFileSync(file, "utf8"), original);
       const raw = app.agents.models.raw.bind(app.agents.models);
-      // Changed model definitions now recover via native summaries; those cases
-      // are exercised independently in compression-recovery.test.ts.
+      let injectConfiguration = true;
+      const changedRevision = t.mock.method(app.agents.models, "raw", async () => {
+        const value = await raw();
+        if (!injectConfiguration) return value;
+        injectConfiguration = false;
+        const changed = JSON.parse(value);
+        changed.providers.fixture.models[0].samplingParams = { top_p: 0.5 };
+        return JSON.stringify(changed);
+      });
+      try {
+        await call("compression.start");
+        await wait(() => summaries.length === 1, "a changed model configuration must still dispatch a summary");
+        const changed = app.agents.compressions.info(scope)!;
+        const dispatched = requests.findLast(isCompressionRequest);
+        assert.equal(changed.state, "running", JSON.stringify(changed));
+        assert.equal(dispatched.top_p, 0.5, "the current model configuration reaches the provider");
+        // Leave the original history intact for the subsequent apply/tail checks.
+        await call("compression.cancel", { id: changed.id });
+        await settled();
+        assert.equal(app.agents.compressions.info(scope)!.state, "cancelled");
+        assert.equal(readFileSync(file, "utf8"), original);
+        summaries.shift();
+        requests.splice(requests.indexOf(dispatched), 1);
+      } finally { changedRevision.mock.restore(); }
       const requestsBeforeIdleCompression = requests.length;
       const stoppedRun = app.agents.info(scope).run;
       const accepted = await call("compression.start", {}, scope, requestId);
@@ -241,6 +264,13 @@ test(
       assert.ok(requests.slice(requestsBeforeIdleCompression).every(isCompressionRequest), "only summary requests are dispatched");
       const snapshotFile = join(root, "compression-snapshots", `${app.agents.compressions.info(scope)!.id}.jsonl`);
       const frozenBranch = SessionManager.open(snapshotFile).getBranch();
+      const frozenJob = app.agents.compressions.info(scope)!;
+      assert.equal(frozenJob.before, measureContext(frozenBranch).tokens);
+      assert.equal(frozenJob.snapshot?.source, measureContext(frozenBranch).source);
+      assert.equal(frozenJob.snapshot?.leafId, frozenBranch.at(-1)!.id);
+      assert.ok(frozenJob.snapshot!.capturedAt! >= frozenJob.startedAt);
+      assert.ok(frozenJob.snapshot!.capturedAt! <= Date.now());
+      assert.equal(frozenJob.nativeBefore, undefined);
       assert.deepEqual(frozenBranch, SessionManager.open(file).getBranch(),
         "the frozen snapshot includes all saved history, including the final failed tool call");
       await agent("prompt", { text: "快照之后的新消息" });
@@ -278,6 +308,9 @@ test(
         app.agents.compressions.info(scope)!.summary,
         /真实 pi 快照摘要/,
       );
+      assert.equal(app.agents.compressions.info(scope)!.before, frozenJob.before, "completion must not replace the frozen reading");
+      assert.deepEqual(app.agents.compressions.info(scope)!.snapshot, frozenJob.snapshot);
+      assert.equal(app.agents.compressions.info(scope)!.nativeBefore, frozenJob.before, "native preparation uses the same occupancy rule on this snapshot");
       assert.ok(app.agents.compressions.info(scope)!.after! > 0);
       assert.ok(app.agents.compressions.info(scope)!.usage!.total > 0);
       assert.ok(app.agents.compressions.info(scope)!.usage!.cacheRead! >= 80, "simulated provider cache-read usage survives native aggregation and IPC");
@@ -303,7 +336,7 @@ test(
       assert.equal(card.compression.number, 1);
       assert.ok(Array.from(card.compression.title).length <= 20);
       const compactedUsage = app.agents.info(scope).usage!;
-      const expectedTokens = SessionManager.open(file).buildSessionProjection().messages.reduce((n, m) => n + estimateTokens(m), 0);
+      const expectedTokens = estimateContextMessages(SessionManager.open(file).buildSessionProjection().messages);
       assert.equal(compactedUsage.context!.tokens, expectedTokens);
       assert.equal(compactedUsage.context!.estimated, true);
       assert.equal(compactedUsage.context!.percent, expectedTokens / 32000 * 100);
@@ -687,6 +720,12 @@ test("running compression snapshots and applies only at paired-tool safe points 
         assert.match(JSON.stringify(summaryRequest.messages), /seed history before active tools/);
         const snapshotFile = join(root, "compression-snapshots", `${app.agents.compressions.info(scope)!.id}.jsonl`);
         const snapshotEntries = readFileSync(snapshotFile, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+        const frozenJob = app.agents.compressions.info(scope)!;
+        const frozenMeasurement = measureContext(SessionManager.open(snapshotFile).getBranch());
+        assert.equal(frozenJob.before, frozenMeasurement.tokens);
+        assert.equal(frozenJob.snapshot?.source, frozenMeasurement.source);
+        assert.ok(frozenJob.snapshot!.capturedAt! >= frozenJob.startedAt);
+        assert.equal(frozenJob.nativeBefore, undefined);
         assert.ok(snapshotEntries.some((entry) => entry.message?.role === "toolResult" && entry.message.toolCallId === "gate-1"),
           "snapshot includes the paired tool and subsequent completed memory preparation");
         assert.ok(snapshotEntries.some((entry) => entry.message?.role === "toolResult" && entry.message.toolCallId === "check-compression-memory"));
@@ -715,13 +754,16 @@ test("running compression snapshots and applies only at paired-tool safe points 
           await wait(() => app.agents.info(scope).usage?.context?.estimated === true,
             "live compression did not publish an estimated context reading");
           const context = app.agents.info(scope).usage!.context!;
-          assert.equal(context.tokens, SessionManager.open(file).buildSessionProjection().messages.reduce((n, m) => n + estimateTokens(m), 0));
+          assert.equal(context.tokens, estimateContextMessages(SessionManager.open(file).buildSessionProjection().messages));
           assert.ok(context.tokens! > 0);
         }
         stream(continuationResponse!, { role: "assistant", content: "safe point reply" });
         await wait(() => !app.agents.active(scope), "active tool run did not settle");
         assert.notEqual(app.agents.info(scope).usage?.context?.estimated, true);
         await wait(() => app.agents.compressions.info(scope)?.state !== "running", "compression did not settle");
+        assert.equal(app.agents.compressions.info(scope)!.before, frozenJob.before);
+        assert.deepEqual(app.agents.compressions.info(scope)!.snapshot, frozenJob.snapshot, "new turns, apply or cancel cannot move the snapshot boundary");
+        assert.equal(app.agents.compressions.info(scope)!.nativeBefore, frozenJob.before);
         assert.ok(readFileSync(file, "utf8").startsWith(beforeBoundary), "safe-point application is append-only");
         const compacted = entries().filter((entry) => entry.type === "compaction");
         assert.equal(compacted.length, mode !== "cancel" ? 1 : 0);

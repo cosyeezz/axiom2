@@ -155,6 +155,44 @@ try {
     for(const action of ['node','service','reconcile-service'])assert.equal((await calls(p,'axiom_setup',action)).length,0);
     await noErrors(p);
   });
+  await scenario('workbench-timeout-notice-is-hidden-with-real-errors-preserved',async()=>{
+    const p=await fresh({service:'running'});
+    await p.evaluate(()=>{
+      const invoke=window.__TAURI_INTERNALS__.invoke;
+      fixture.holdServiceStatus=true;fixture.statusFailure='';fixture.lateStatus=[];
+      window.__TAURI_INTERNALS__.invoke=(name,args={})=>{
+        if(name==='axiom_backend_updates')return Promise.resolve(null); // Unsupported notification source, not a live backend.
+        if(name==='axiom_service'&&args.action==='status'){
+          fixture.calls.push({name,args});
+          if(fixture.holdServiceStatus)return new Promise(resolve=>fixture.lateStatus.push(()=>resolve({state:'running',active:[],desktopView:fixture.view})));
+          if(fixture.statusFailure)return Promise.reject(fixture.statusFailure);
+        }
+        return invoke(name,args);
+      };
+    });
+    await p.getByRole('button',{name:'连接工作台',exact:true}).click();
+    const bar=p.locator('.desktop-workbench-bar:not([hidden])');await bar.waitFor();
+    await p.locator('.startup-global-error').filter({hasText:'客户端响应超时'}).waitFor({state:'attached'});
+    assert.equal(await bar.locator('.desktop-workbench-error').count(),0,'the exact client response timeout must not appear in the workbench bar');
+    for(const width of [1100,712,390]){
+      await p.setViewportSize({width,height:62});
+      assert.ok(!(await bar.innerText()).includes('客户端响应超时'));
+      await p.screenshot({path:resolve(output,`workbench-no-timeout-${width}.png`)});
+    }
+    await p.setViewportSize({width:1100,height:900});
+    await p.getByRole('button',{name:'服务与更新',exact:false}).click();
+    await p.locator('.startup-global-error').filter({hasText:'客户端响应超时'}).waitFor();
+    assert.equal(await p.getByRole('button',{name:'重新读取服务状态',exact:true}).count(),1,'control page retains state verification');
+    await p.evaluate(()=>{fixture.holdServiceStatus=false;fixture.statusFailure='测试原生状态读取失败';for(const release of fixture.lateStatus.splice(0))release();});
+    await p.getByRole('button',{name:'连接工作台',exact:true}).click();
+    await bar.getByRole('alert').filter({hasText:'测试原生状态读取失败'}).waitFor();
+    await p.evaluate(()=>{fixture.statusFailure='';});
+    await waitFor(p,()=>document.querySelector('.connection-status-tag')?.getAttribute('data-state')==='running');
+    assert.equal(await bar.locator('.desktop-workbench-error').count(),0,'normal status polling still recovers');
+    for(const action of ['start','stop'])assert.equal((await calls(p,'axiom_service',action)).length,0);
+    for(const action of ['node','service','reconcile-service'])assert.equal((await calls(p,'axiom_setup',action)).length,0);
+    await noErrors(p);
+  });
   for(const state of ['missing','unmanaged','interrupted','installing'])await scenario(`independent-default-connect-during-${state}`,async()=>{
     const p=await fresh({node:false,service:state==='unmanaged'?'unmanaged':'missing',interrupted:state==='interrupted'});
     if(state==='installing') {await p.evaluate(()=>fixture.setupJob=fixture.makeJob('service','running'));await p.waitForTimeout(160);}

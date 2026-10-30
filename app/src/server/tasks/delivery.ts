@@ -204,7 +204,7 @@ export class TaskDelivery {
       return false; // Damaged transcripts must not trigger replacement or automatic replay.
     }
   }
-  notify(scope: Scope) {
+  notify(scope: Scope, serviceRecovery = false) {
     if (
       this.closing ||
       this.agents.reloads.active(scope) ||
@@ -248,6 +248,7 @@ export class TaskDelivery {
               const receipt = await this.agents.command({ requestId: `notify-${attemptId}`, op: "prompt", ...scope,
               params: { text: "处理子任务完成通知" } }, {
               notification: { ...items[0], items },
+              serviceRecovery,
               onStart: (owner) => { this.store.db.prepare("UPDATE task_notification_attempts SET runId=? WHERE id=?").run(owner.id, attemptId); },
               beforeStart: () => {
                 if (this.closing || this.records.frozen(scope) || items.some((item) =>
@@ -259,8 +260,8 @@ export class TaskDelivery {
                 this.store.db.prepare("UPDATE task_notification_attempts SET runId=? WHERE id=?").run(receipt.runId, attemptId);
             }
           } catch (error) {
-            const known = error instanceof AppError && ["INVALID_CONFIG", "MODEL_UNAVAILABLE", "PARENT_FROZEN", "AGENT_STOPPED", "SHUTTING_DOWN", "NOTIFICATION_NOT_SENT", "RELOAD_BUSY", "AGENT_BUSY", "REVISION_CONFLICT", "PROMPT_PREPARATION_FAILED", "WORKER_START_FAILED"].includes(error.code);
-            const state = error instanceof AppError && error.code === "RELOAD_BUSY" ? "pending" : known ? "failed" : "unknown";
+            const known = error instanceof AppError && ["INVALID_CONFIG", "MODEL_UNAVAILABLE", "PARENT_FROZEN", "AGENT_STOPPED", "SHUTTING_DOWN", "NOTIFICATION_NOT_SENT", "RELOAD_BUSY", "AGENT_BUSY", "REVISION_CONFLICT", "PROMPT_PREPARATION_FAILED", "WORKER_START_FAILED", "EXECUTION_BUSY"].includes(error.code);
+            const state = error instanceof AppError && ["RELOAD_BUSY", "EXECUTION_BUSY"].includes(error.code) ? "pending" : known ? "failed" : "unknown";
             this.reconcileNotifications(scope);
             this.store.db.prepare("UPDATE task_notification_attempts SET state=?,error=? WHERE id=? AND state NOT IN ('delivered','discarded')")
               .run(state, known ? (error as AppError).message : "投递结果未知；须先核对会话记录。", attemptId);

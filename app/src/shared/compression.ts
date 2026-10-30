@@ -29,7 +29,16 @@ export interface Compression {
   startedAt: number;
   endedAt: number | null;
   messageCount: number;
+  /** Frozen occupancy at the snapshot boundary; never replaced by summary results. */
   before: number | null;
+  snapshot?: {
+    capturedAt?: number;
+    leafId: string | null;
+    source: import("./context-usage.js").ContextMeasurementSource;
+  };
+  /** Native summary preparation count, retained separately for diagnosis. */
+  nativeBefore?: number;
+  /** Estimated compacted snapshot only; not live occupancy or proof of application. */
   after: number | null;
   summary: string;
   error: string | null;

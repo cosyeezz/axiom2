@@ -59,12 +59,13 @@ export function Title({
       <div className="title-heading">
         <h1 id="chat-title">{title}</h1>
         <CopyTitle key={`${scope?.sessionId ?? ""}:${title}`} title={title} />
-        <GitBranchBadge key={`${workspace?.id ?? ""}:${workspace?.path ?? ""}`} workspace={workspace} />
         <ConnectionStatus />
       </div>
       <div className="title-meta">
-        <LocalPath textId="title-path" path={workspace?.path ?? ""} disabled={!workspace} onError={onError} copyLabel="复制工作空间路径" openLabel="打开系统文件管理器">
-          {workspace?.path || "未关联文件夹"}
+        <GitBranchBadge key={`${workspace?.id ?? ""}:${workspace?.path ?? ""}`} workspace={workspace} />
+        <LocalPath className="workspace-path" textId="title-path" path={workspace?.path ?? ""} disabled={!workspace} onError={onError} copyLabel="复制工作空间路径" openLabel="打开系统文件管理器" terminal>
+          <Icon name="folder-tree" className="workspace-directory-icon" />
+          <span className="workspace-path-label">{workspace?.path || "未关联文件夹"}</span>
         </LocalPath>
       </div>
     </div>

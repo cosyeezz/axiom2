@@ -1,7 +1,7 @@
 import { getComposerEdit, useComposerEditRevision } from "./composer-edit.js";
 import { TaskBrief } from "../tasks/TaskBrief.js";
 import type { Task } from "../../shared/tasks.js";
-import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { FilePreviewOutlet } from "./FilePreviewHost.js";
 import { useScope, useScopeOrder } from "../transport.js";
 import { updateDraft, getDraft } from "../drafts.js";
@@ -38,8 +38,8 @@ function ThreadActivityGroup({ scope, group, tail, index, animateFold }: {
   return <ProcessFlow scope={scope} group={group} awaitingMore={awaitingMore} activeRunId={activeRunId} settled={!tail} animateFold={animateFold} requesting={requesting} />;
 }
 
-type ThreadProps = { scope: Scope | null; nested?: boolean; readingRevision?: number; task?: Task; briefRevision?: number };
-function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRevision = 0 }: ThreadProps) {
+type ThreadProps = { scope: Scope | null; nested?: boolean; readingRevision?: number; task?: Task; briefRevision?: number; brief?: ReactNode; initialTaskInputId?: string | null };
+function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRevision = 0, brief, initialTaskInputId = task?.initialInputId }: ThreadProps) {
   const index = useScope(scope?.sessionId ? threadScope(scope) : null, emptyThread);
   // Keep the collection subscribed even for an empty or entirely compressed thread.
   const messagesReceived = useScopeOrder(scope?.sessionId ? `messages:${scope.workspaceId}:${scope.sessionId}` : null);
@@ -198,11 +198,11 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
     previousGroups.current.some(previous => !previous.folded && previous.ids.some(id => group.ids.includes(id)))).map(group => group.id));
   useLayoutEffect(() => { previousGroups.current = liveGroups; }, [liveGroups]);
   const editReveal = editing && historyReceived && history.ready ? { messageId: editing.target.messageId, revision: editing.revision } : undefined;
-  const { rows, groups, segments, tailBoundary } = useHistoryRows({ scope, index, history, initialTaskInputId: task?.initialInputId, reveal: editReveal,
+  const { rows, groups, segments, tailBoundary } = useHistoryRows({ scope, index, history, initialTaskInputId, reveal: editReveal,
     renderLive: (group, groupIndex, currentGroups, boundary) => <Fragment>
       {group.selectionChange && <ModelChangeNotice change={group.selectionChange} />}
       {group.activity ? <ThreadActivityGroup scope={scope!} group={group} tail={!boundary && groupIndex === currentGroups.length - 1} index={index} animateFold={folding.has(group.id)} />
-        : <Message scope={scope!} id={group.id} initialTaskInputId={task?.initialInputId} hideThinking={group.hideThinking} activeRunId={activeStatus(index.runStatus) ? index.runId : undefined} />}
+        : <Message scope={scope!} id={group.id} initialTaskInputId={initialTaskInputId} hideThinking={group.hideThinking} activeRunId={activeStatus(index.runStatus) ? index.runId : undefined} />}
     </Fragment> });
   const revealKey = editReveal && rows.find(row => row.messageIds?.includes(editReveal.messageId))?.key;
   const cancelNavigation = () => { timelineNavigation.current?.cancel(); setStepping(null); };
@@ -292,7 +292,7 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
         measure();
       }}>
       <div ref={content} className="container thread-content"><div id={nested ? undefined : "messages"}>
-        {task && <TaskBrief task={task} reveal={briefRevision} />}
+        {brief ?? (task && <TaskBrief task={task} reveal={briefRevision} />)}
         {scope?.sessionId && <Environment scope={scope} />}
         {index.error && <p className="execution-alert">{index.error}</p>}
         {history.error && <p className="execution-alert" role="alert">历史索引读取失败，已保留当前对话。{history.error} <button type="button" className="btn" onClick={history.retry}>重新加载</button></p>}
@@ -313,7 +313,7 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
         </article>)}
         {scope?.sessionId && (pendingModelActivity(index) && (tailBoundary || !groups.at(-1)?.activity && (!groups.at(-1)?.delivery || index.runPhase !== "generating")) ||
           !activeStatus(index.runStatus) && visiblePending.some(item => item.state === "sending" || item.state === "accepted")) && <ModelRequestStatus tool={tailBoundary && index.runPhase === "executing_tools"} />}
-        {historyReceived && !task && !groups.length && !segments.length && !pending.length && !index.error && !history.loading && !history.error && <div className="empty-state">
+        {historyReceived && !task && !brief && !groups.length && !segments.length && !pending.length && !index.error && !history.loading && !history.error && <div className="empty-state">
           <h2>从一个想法，一行代码开始。</h2><p>描述目标、粘贴代码，或附上需要检查的文件。支持 Markdown。</p>
           <div className="quick-prompts">{[["审查代码", "帮我分析这段代码的潜在问题："], ["规划功能", "请帮我规划以下功能的实现步骤："], ["排查错误", "请解释以下错误，并给出排查建议："]].map(([label, text]) =>
             <button className="btn" key={label} disabled={!scope?.sessionId} onClick={() => {

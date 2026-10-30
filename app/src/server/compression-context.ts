@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import {
-  estimateTokens,
   buildSessionProjection,
   type CompactionEntry,
   type CompactionEntryDraft,
@@ -10,10 +9,13 @@ import {
   type SessionBeforeCompactEvent,
 } from "@earendil-works/pi-coding-agent";
 
+import { measureContext } from "./context-usage.js";
+
 type Reader = Pick<SessionManager, "getHeader" | "getBranch">;
 export interface CompressionSnapshot {
   header: SessionHeader;
   entries: SessionEntry[];
+  capturedAt?: number;
 }
 const bytes = (value: unknown) => JSON.stringify(value);
 const copy = <T>(value: T): T => JSON.parse(bytes(value));
@@ -43,7 +45,7 @@ export function captureCompression(manager: Reader): CompressionSnapshot {
   const header = manager.getHeader();
   if (!header || header.type !== "session" || !header.id) throw conflict();
   const entries = manager.getBranch();
-  return copy({ header, entries });
+  return copy({ header, entries, capturedAt: Date.now() });
 }
 
 /** Prepare a stopped snapshot before Pi's retained-tail minimum-size check.
@@ -58,7 +60,7 @@ export function prepareFullCompression(
   const preparation: SessionBeforeCompactEvent["preparation"] = {
     firstKeptEntryId: entries.at(-1)?.id ?? "",
     messagesToSummarize: [], turnPrefixMessages: [], isSplitTurn: false,
-    tokensBefore: projection.messages.reduce((total, message) => total + estimateTokens(message), 0),
+    tokensBefore: measureContext(entries).tokens,
     previousSummary: previous?.type === "compaction" ? previous.summary : undefined,
     fileOps: { read: new Set(), written: new Set(), edited: new Set() }, settings,
   };
@@ -168,7 +170,7 @@ export function applyCompression(
     return false;
   }
   const draft = compressionDraft(manager, snapshot, entry, id);
-  const before = manager.buildSessionProjection().messages.reduce((n, message) => n + estimateTokens(message), 0);
+  const before = measureContext(manager.getBranch()).tokens;
   manager.appendCompaction(draft.summary, draft.firstKeptEntryId, before, draft.details, true, draft.usage);
   if (!compressionPersisted(manager, id)) throw conflict();
   return true;

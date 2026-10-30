@@ -97,6 +97,8 @@ DSH 使用自己的 append-only SessionEvent 日志和模型历史派生机制�
 
 ## 5. 建议的插件边界
 
+后续细化见[通用 Agent Runtime 适配器契约](agent-runtime-adapter-contract.md)：明确核心接口、可选扩展、许可/停止屏障、工具与事件端口及现有调用迁移。本节保留调研阶段的边界简图和最小示意，不代表业务接口已实现。
+
 ```text
 Axiom UI / 记忆业务 / Tasks / 授权 / 费用归属
                     │

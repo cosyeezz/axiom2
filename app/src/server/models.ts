@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { createModelRuntime } from "./model-runtime.js";
+import { credentialMetadata } from "./model-metadata.js";
 import { executionModelsRaw } from "./execution-model-config.js";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import type { Configuration } from "../shared/protocol.js";
@@ -24,7 +25,7 @@ export async function configuration(root: string): Promise<Configuration> {
     const config = JSON.parse(raw.replace(/^\uFEFF/, ""));
     if (!config || !config.providers || typeof config.providers !== "object" || Array.isArray(config.providers)) throw Error();
     let credentialIds: string[] = [];
-    try { credentialIds = Object.keys(JSON.parse(await read("auth.json", "{}"))); } catch { warning(); }
+    try { credentialIds = (await credentialMetadata(join(dir, "auth.json")).list()).map(row => row.providerId); } catch { warning(); }
     const providers = [...new Set([...Object.keys(config.providers), ...credentialIds])];
     result.providerCount = providers.length;
     directory = await mkdtemp(join(tmpdir(), "axiom-model-directory-"));

@@ -14,6 +14,11 @@ import { ExecutionPool, type ExecutionLease } from "./execution-pool.js";
 import { ExecutionProfiles } from "./execution-profile.js";
 import { memoryIncompleteMessages, type MemoryExecutionResult, type MemoryIncompleteReason } from "../shared/memory.js";
 import { sameLease } from "./execution-protocol.js";
+import { selectedAuthPath, selectedCatalogPath } from "./model-account-storage.js";
+const organizerPaths = (dir: string, provider: string) => {
+  const auth = join(dir, "auth.json");
+  return { "models.json": join(dir, "models.json"), "auth.json": selectedAuthPath(provider, auth), "models-store.json": selectedCatalogPath(provider, auth, join(dir, "models-store.json")) };
+};
 
 type Job = { controller: AbortController; provider: string; promise?: Promise<unknown> };
 type MemoryReadOptions = { includeImage?: boolean };
@@ -26,11 +31,12 @@ type RevisionAwareExecution = MemoryExecution & {
 const configurationKeys = new Map<string, string>();
 export function organizerConfigurationKey(dir: string, selection?: Selection) {
   if (!selection) return createHash("sha256").update("no-organizer-selection").digest("hex");
-  const files = ["models.json", "auth.json", "models-store.json"].map(file => {
-    try { const s = statSync(join(dir, file), { bigint: true }); return `${s.dev}:${s.ino}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`; }
+  const paths = organizerPaths(dir, selection.provider);
+  const files = Object.values(paths).map(file => {
+    try { const s = statSync(file, { bigint: true }); return `${s.dev}:${s.ino}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`; }
     catch { return "missing"; }
   });
-  const key = JSON.stringify([dir, selection, files]), cached = configurationKeys.get(key);
+  const key = JSON.stringify([dir, selection, paths, files]), cached = configurationKeys.get(key);
   if (cached) return cached;
   const value = computeConfigurationKey(dir, selection);
   configurationKeys.set(key, value);
@@ -39,9 +45,10 @@ export function organizerConfigurationKey(dir: string, selection?: Selection) {
 }
 function computeConfigurationKey(dir: string, selection: Selection) {
   const hash = createHash("sha256");
-  for (const file of ["models.json", "auth.json", "models-store.json"]) {
+  for (const [file, path] of Object.entries(organizerPaths(dir, selection.provider))) {
+    hash.update(path);
     try {
-      const data = JSON.parse(readFileSync(join(dir, file), "utf8").replace(/^\uFEFF/, ""));
+      const data = JSON.parse(readFileSync(path, "utf8").replace(/^\uFEFF/, ""));
       const provider = file === "models.json" ? data.providers?.[selection.provider] : data[selection.provider];
       // Catalog check timestamps and other providers/models cannot unlock a paused request.
       const selected = file === "models-store.json" ? provider?.models?.find((model: { id: string }) => model.id === selection.id)
