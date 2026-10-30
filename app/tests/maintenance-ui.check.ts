@@ -45,8 +45,13 @@ try {
   assert.equal(await nodeCard.evaluate(node => node.parentElement!.closest(".component-card")?.getAttribute("aria-label")), "示例程序维护");
   assert.equal(await npmCard.evaluate(node => node.parentElement!.closest(".component-card")?.getAttribute("aria-label")), "示例程序维护", "Node and npm are sibling facts, not inverted dependencies");
   assert.equal(await card.getByRole("region", { name: "底层环境维护", exact: true }).evaluate(node => node.parentElement!.closest(".component-card")?.getAttribute("aria-label")), "辅助依赖维护", "the generic card mechanism still recurses to a third level");
-  assert.equal(await card.getByRole("button", { name: "卸载程序", exact: true }).isVisible(), true, "core maintenance remains available during an older task");
-  assert.equal(await card.getByRole("button", { name: "卸载程序", exact: true }).getAttribute("aria-disabled"), null);
+  const blockedRemoval = card.getByRole("button", { name: "卸载程序", exact: true });
+  assert.equal(await blockedRemoval.isVisible(), true, "conflicting maintenance remains discoverable without authorizing preemption");
+  assert.equal(await blockedRemoval.getAttribute("aria-disabled"), "true");
+  assert.equal(await blockedRemoval.evaluate(node => (node as HTMLButtonElement).disabled), false, "the task blocker remains keyboard focusable");
+  await blockedRemoval.evaluate(node => (node as HTMLButtonElement).click());
+  assert.equal(await card.getByRole("group", { name: "卸载示例程序？", exact: true }).count(), 0, "blocked activation cannot create a new uninstall intent");
+  assert.equal(await count(), 0);
   assert.equal(await card.getByRole("button", { name: "检查安装", exact: true }).getAttribute("aria-disabled"), "true", "a conflicting auxiliary check retains its reason");
   await state.selectOption("idle");
   assert.equal(await card.getByRole("heading", { name: "示例程序", exact: true }).count(), 1);

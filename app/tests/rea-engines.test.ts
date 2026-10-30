@@ -154,9 +154,11 @@ test("managed install commits only verified components; failure force-cleans and
   }
 });
 test("probe timeout terminates descendants holding inherited pipes", async () => {
-  const started = Date.now();
-  await assert.rejects(runEngine(process.execPath, ["-e", "require('node:child_process').spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'inherit'}); setInterval(()=>{},1000)"], { cwd: process.cwd(), signal: signal(), timeout: 250 }), /取消、超时/);
-  assert.ok(Date.now() - started < 7000);
+  const root = temporary(), started = Date.now();
+  try {
+    await assert.rejects(runEngine(process.execPath, ["-e", "require('node:child_process').spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'inherit'}); setInterval(()=>{},1000)"], { cwd: root, signal: signal(), timeout: 250 }), /取消、超时/);
+    assert.ok(Date.now() - started < 7000);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test("Ghidra and JADX require healthy scoped doctor reports, never merely a zero exit code", { skip: process.platform === "win32" && process.arch !== "x64" }, async () => {

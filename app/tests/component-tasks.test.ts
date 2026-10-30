@@ -9,6 +9,12 @@ test("component task selection is exact, not a dependency or prefix match", () =
   assert.deepEqual(componentTasks(tasks, "rea").unresolved, []);
   assert.equal(componentTasks(tasks, "absent").current, undefined);
 });
+test("legacy resource overview retains prefix matching and explicit task identity", () => {
+  const tasks = [task("legacy", "resources", "succeeded"), task("child", "resources:skills", "running", 2), task("foreign", "resources-other", "running", 3)];
+  assert.equal(componentTasks(tasks, "resources").current?.id, "child");
+  assert.equal(componentTasks(tasks, "resources", "legacy").current?.id, "legacy");
+  assert.equal(componentTasks(tasks, "resources", "foreign").current, undefined);
+});
 test("active work takes precedence over newer completed checks", () => {
   assert.equal(componentTasks([task("running", "opencli", "running"), task("checked", "opencli", "succeeded", 2)], "opencli").current?.id, "running");
 });

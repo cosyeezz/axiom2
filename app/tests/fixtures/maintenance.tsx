@@ -54,8 +54,8 @@ function Fixture() {
     <ComponentCard regionLabel="示例程序维护" label={longHeader ? "示例程序（用于验证完整名称和省略的超长组件标题）" : "示例程序"} description="可嵌入任意页面的程序管理单元" version={longHeader ? "v1.0.0-private-channel-with-a-very-long-build-identifier-20261028" : "v1.0.0"}
       actions={<ComponentActions context={{ connected, taskRunning: active }} capabilities={[
         { id: "check-install", label: "检查安装", conflictsWithTask: true, execute: () => setFeedback("已读取安装状态。未提交安装。") },
-        { id: "update", label: "更新至 v1.0.1", primary: true, execute: () => { setRequests(value => value + 1); setKind("download"); setTask(sample); } },
-        { id: "uninstall", label: "卸载程序", danger: true, execute: () => setConfirm("remove") },
+        { id: "update", label: "更新至 v1.0.1", primary: true, conflictsWithTask: true, execute: () => { setRequests(value => value + 1); setKind("download"); setTask(sample); } },
+        { id: "uninstall", label: "卸载程序", danger: true, conflictsWithTask: true, execute: () => setConfirm("remove") },
       ]} />}
       availableVersion={longHeader ? "v1.0.1-candidate-with-a-very-long-prerelease-and-build-identifier-20261028" : "v1.0.1"} availableVersionLabel="最新" location={<LocalPath path={fixturePath} onOpen={async () => setPathRequests(value => value + 1)} />}
       details={<p>由原安装器在原位置维护。</p>}

@@ -5,7 +5,8 @@ import { maintenanceActive, type MaintenanceTask } from "../../shared/maintenanc
  * Interrupted or unresolved history is not kept or displayed.
  */
 export function componentTasks(tasks: MaintenanceTask[], resource: string, taskId?: string) {
-  const matching = tasks.filter(task => task.resource === resource && (!taskId || task.id === taskId)).reverse().sort((a, b) => b.createdAt - a.createdAt);
+  // The legacy resources overview also owns its namespaced resource tasks.
+  const matching = tasks.filter(task => (task.resource === resource || resource === "resources" && task.resource.startsWith("resources:")) && (!taskId || task.id === taskId)).reverse().sort((a, b) => b.createdAt - a.createdAt);
   const current = matching.find(maintenanceActive) ?? matching[0];
   return { current, unresolved: [] as MaintenanceTask[], history: [] as MaintenanceTask[] };
 }

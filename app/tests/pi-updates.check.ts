@@ -12,8 +12,13 @@ const server = await createServer({ configFile: resolve("desktop/vite.config.ts"
 await server.listen();
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
 try {
-  const page = await browser.newPage({ viewport: { width: 1100, height: 1000 }, reducedMotion: "reduce" });
-  const errors: string[] = [];
+  const page = await browser.newPage({ viewport: { width: 1100, height: 1000 }, reducedMotion: "reduce", serviceWorkers: "block" });
+  const errors: string[] = [], remote: string[] = [];
+  const fixtureOrigin = new URL(server.resolvedUrls!.local[0]).origin;
+  await page.route("**/*", route => {
+    if (new URL(route.request().url()).origin === fixtureOrigin) return route.continue();
+    remote.push(route.request().url()); return route.abort("blockedbyclient");
+  });
   page.on("pageerror", error => errors.push(error.message));
   await page.addInitScript({ content: "window.__name = value => value;" });
   await page.addInitScript(() => {
@@ -69,8 +74,13 @@ try {
   await page.screenshot({ path: resolve(output, "pi-entry-with-setup.png"), fullPage: true });
   await page.locator(".startup-preparation > summary").click();
   await pi.getByText("未安装", { exact: true }).waitFor();
+  for (const card of [backend, pi]) {
+    const secondary = card.locator(":scope > .component-secondary");
+    assert.equal(await secondary.evaluate(node => (node as HTMLDetailsElement).open), false, "supporting Pi information is folded by default");
+    await secondary.locator(":scope > summary").click();
+  }
   assert.match(await installedSDK.innerText(), /应用内 Pi\s*当前\s*后台未安装/, "absence is explicit only when the backend installation is absent");
-  assert.ok(await pi.getByText("独立使用的 Pi 命令行程序", { exact: true }).isVisible(), "CLI scope is visible without expanding evidence");
+  assert.ok(await pi.getByText("独立使用的 Pi 命令行程序", { exact: true }).isVisible(), "CLI scope is visible after explicitly expanding supporting information");
   assert.equal(await pi.locator(".component-details-toggle").count(), 0);
   await ensureComponentActions(pi);
   assert.equal(await page.evaluate(() => (window as any).piFixture.calls.filter((c: any) => c.action === "pi-refresh").length), 1);
@@ -118,7 +128,7 @@ try {
   await installedSDK.filter({ hasText: "v1.1.0" }).waitFor();
   await pi.getByText(/^未安装/).waitFor();
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-  assert.ok(await backend.locator(":scope > .component-card-notes").getByText(/应用内 Pi 随后台服务更新.*并非运行中进程的版本查询/).isVisible());
+  assert.ok(await backend.locator(":scope > .component-secondary > .component-card-notes").getByText(/应用内 Pi 随后台服务更新.*并非运行中进程的版本查询/).isVisible());
   const location = pi.locator(":scope > .maintenance-panel-heading .component-card-location .local-path");
   assert.ok(await location.isVisible(), "Pi path is directly below its name without a disclosure");
   assert.equal(await pi.locator(":scope > .maintenance-panel-heading .component-card-candidate").innerText(), "最新 v1.1.1", "candidate row shows the latest version with a two-character label");
@@ -183,9 +193,18 @@ try {
   assert.equal(await pi.getByText(/npm http fetch GET 200/).count(), 0, "execution evidence remains internal, not a log viewer");
   assert.ok(await pi.getByText(/安装期间无法计算整体百分比/).isVisible());
   assert.equal(await page.evaluate(() => (window as any).piFixture.calls.find((c: any) => c.action === "pi").version), "confirmed-token");
-  // Disabled header operations stay in the DOM but are hidden (display:none).
-  const hiddenInstall = pi.getByRole("button", { name: "安装终端 Pi", exact: true, includeHidden: true });
-  assert.ok(await hiddenInstall.isDisabled() && await hiddenInstall.isHidden(), "unavailable install is disabled and hidden");
+  // A temporary blocker keeps its discoverable, focusable slot without resubmitting.
+  await ensureComponentActions(pi);
+  const blockedInstall = pi.getByRole("button", { name: "安装终端 Pi", exact: true });
+  assert.ok(await blockedInstall.isVisible(), "blocked installation remains discoverable");
+  assert.equal(await blockedInstall.getAttribute("aria-disabled"), "true");
+  assert.equal(await blockedInstall.evaluate(node => (node as HTMLButtonElement).disabled), false, "temporary blockers remain focusable rather than natively disabled");
+  await blockedInstall.focus();
+  assert.ok(await blockedInstall.evaluate(node => document.activeElement === node));
+  const submissions = await page.evaluate(() => (window as any).piFixture.calls.filter((call: any) => call.action === "pi").length);
+  await blockedInstall.dispatchEvent("click");
+  assert.equal(await page.evaluate(() => (window as any).piFixture.calls.filter((call: any) => call.action === "pi").length), submissions, "a blocked action must not replay installation");
+  assert.equal(await maintenance.locator(".component-confirmation").count(), 0);
   assert.equal(await pi.getAttribute("aria-busy"), "true", "installation is represented as real busy state, not a second version panel");
   assert.ok(await page.locator(".connection-primary-button").isDisabled(), "service control remains locked while terminal installation is running");
   await page.evaluate(() => {
@@ -274,7 +293,8 @@ try {
   const unexpected = await page.evaluate(() => (window as any).piFixture.unexpected);
   assert.deepEqual(unexpected, [], "unknown IPC names or actions must never receive fixture success");
   assert.deepEqual(errors, []);
-  await writeFile(resolve(output, "result.json"), JSON.stringify({ passed: true, widths, errors, unexpected, scope: "actual React page with fixture IPC; no real installation" }, null, 2));
+  assert.deepEqual(remote, [], "the offline fixture must not request external resources");
+  await writeFile(resolve(output, "result.json"), JSON.stringify({ passed: true, widths, errors, unexpected, remote, scope: "actual React page with fixture IPC; no real installation" }, null, 2));
   console.log("Pi UI passed: fresh install, upgrade, confirmation snapshot, queued polling, progress, errors, legacy and six widths.");
 } catch (error) {
   for (const [index, page] of browser.contexts().flatMap(context => context.pages()).entries()) {

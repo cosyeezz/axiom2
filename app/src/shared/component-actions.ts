@@ -1,5 +1,5 @@
 /** Presentation contract for integrated components. Execution remains with the installer.
- * Core maintenance is preemptive: old checks, revisions and running jobs are not gates.
+ * Adapters retain their task, revision, authorization and recovery gates.
  * Download caches, external installers and parent-owned runtimes stay separate capabilities.
  */
 export type ComponentActionId = "check-install" | "check-environment" | "check-versions" | "install" | "update" | "reinstall" | "switch-version" | "repair" | "uninstall" | "download-package" | "install-cached" | "open-installer" | "cleanup-package";
@@ -10,7 +10,7 @@ export type ComponentActionCapability = {
   support?: "supported" | "unsupported" | "unknown";
   /** False means no useful operation, not temporarily busy. */
   applicable?: boolean;
-  /** A real adapter prerequisite; never put old revision/check or history gates here. */
+  /** A current adapter prerequisite, including unverified task or stale authorization. */
   blockedReason?: string;
   conflictsWithTask?: boolean;
   primary?: boolean;
@@ -23,11 +23,10 @@ export const componentActionIcons: Readonly<Record<ComponentActionId, string>> =
   install: "download", update: "arrow-up-to-line", reinstall: "rotate-cw", "switch-version": "switch-version", repair: "repair",
   uninstall: "trash-2", "download-package": "download-package", "install-cached": "install-cached", "open-installer": "open-installer", "cleanup-package": "cleanup-package",
 };
-const preemptive = new Set<ComponentActionId>(["install", "update", "reinstall", "switch-version", "repair", "uninstall"]);
 export function resolveComponentActions(capabilities: readonly ComponentActionCapability[], context: ComponentActionContext): ComponentActionState[] {
   return capabilities.filter(item => (item.support ?? "supported") === "supported" && item.applicable !== false).map(item => {
-    const reason = !context.connected ? "连接已断开，操作未发送；请重连后重试。" : context.sending ? "正在提交请求，请稍后重试。" : item.blockedReason
-      ?? (!preemptive.has(item.id) && item.conflictsWithTask && context.taskRunning ? "组件正在执行操作，完成或取消后可重试。" : undefined);
+    const reason = !context.connected ? "连接已断开，操作未发送；请重连后重试。" : context.sending ? "正在提交请求，请稍后重试。" : item.blockedReason?.trim()
+      || (item.conflictsWithTask && context.taskRunning ? "组件正在执行操作，完成或取消后可重试。" : undefined);
     return { ...item, icon: componentActionIcons[item.id], available: !reason, reason };
   });
 }

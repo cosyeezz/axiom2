@@ -16,11 +16,25 @@ test("capability absence is different from a temporary blocker", () => {
   assert.equal(actions[0].reason, "请先下载映像");
   assert.equal(actions[1].available, true);
 });
-test("core maintenance preempts tasks instead of becoming a historical-state gate", () => {
+test("core maintenance retains conflicting task gates without hiding actions", () => {
   const ids: ComponentActionId[] = ["install", "update", "reinstall", "switch-version", "repair", "uninstall"];
   const actions = resolveComponentActions(ids.map(id => ({ id, label: id, conflictsWithTask: true })), { connected: true, taskRunning: true });
-  assert.ok(actions.every(action => action.available && !action.reason));
+  assert.equal(actions.length, ids.length);
+  assert.ok(actions.every(action => !action.available && action.reason?.includes("完成或取消")));
+  assert.ok(resolveComponentActions(ids.map(id => ({ id, label: id, conflictsWithTask: true })), connected).every(action => action.available));
+  assert.equal(resolveComponentActions([{ id: "check-versions", label: "只读检查", conflictsWithTask: false }], { connected: true, taskRunning: true })[0].available, true);
   assert.equal(resolveComponentActions([{ id: "install", label: "安装", blockedReason: "宿主未安装" }], { connected: true, taskRunning: true })[0].reason, "宿主未安装");
+});
+test("empty or whitespace reasons cannot bypass a conflicting task", () => {
+  for (const blockedReason of [undefined, "", " ", "\n\t"]) {
+    for (const id of Object.keys(componentActionIcons) as ComponentActionId[]) {
+      const capability = { id, label: id, conflictsWithTask: true, blockedReason };
+      const blocked = resolveComponentActions([capability], { connected: true, taskRunning: true })[0];
+      assert.equal(blocked.available, false, `${id}: ${JSON.stringify(blockedReason)}`);
+      assert.match(blocked.reason!, /完成或取消/);
+      assert.equal(resolveComponentActions([capability], connected)[0].available, true);
+    }
+  }
 });
 test("auxiliary operations expose real task conflicts without disappearing", () => {
   const ids: ComponentActionId[] = ["check-install", "check-environment", "check-versions", "download-package", "install-cached", "open-installer", "cleanup-package"];
