@@ -9,6 +9,7 @@ import { configuration } from "../src/server/models.js";
 import { Logins } from "../src/server/auth.js";
 import { fileURLToPath } from "node:url";
 import { closeModelNetworks } from "../src/server/model-network.js";
+import { readModelCredential } from "../src/server/model-account-storage.js";
 
 const providerId = "codebuddy-cn";
 test("CodeBuddy is built in across login, reopened settings, catalog, configuration and snapshot runtimes", { timeout: 60000 }, async () => {
@@ -17,6 +18,10 @@ test("CodeBuddy is built in across login, reopened settings, catalog, configurat
   const previousNodeOptions = process.env.NODE_OPTIONS;
   const previousFixture = process.env.AXIOM_CODEBUDDY_FIXTURE_DIR;
   const previousFetch = globalThis.fetch;
+  const executionKeys = ["AXIOM_EXECUTION_PROFILE", "AXIOM_MODEL_ACCOUNT_BINDINGS", "AXIOM_MODEL_MANAGED_ACCOUNTS"] as const;
+  const executionEnvironment = Object.fromEntries(executionKeys.map(key => [key, process.env[key]]));
+  // A temporary login fixture must not inherit the agent's captured managed-account routes.
+  for (const key of executionKeys) delete process.env[key];
   // Login now runs in a child process. Install a fail-closed transport there as well as here.
   const preload = fileURLToPath(new URL("./fixtures/codebuddy-network.cjs", import.meta.url));
   process.env.NODE_OPTIONS = `${previousNodeOptions ?? ""} --require=${JSON.stringify(preload)}`;
@@ -58,13 +63,14 @@ test("CodeBuddy is built in across login, reopened settings, catalog, configurat
       assert.ok(Date.now() < completionDeadline, `Login completion timed out: ${state.status}; ${state.message}`);
       await delay(10);
     }
-    assert.equal(logins.get(owner, flow.id).state.status, "completed");
+    assert.equal(logins.get(owner, flow.id).state.status, "completed", logins.get(owner, flow.id).state.message);
     const requests = readFileSync(join(root, "requests.jsonl"), "utf8").trim().split("\n").map(line => JSON.parse(line));
     assert.ok(requests.some(request => request.path === "/v2/plugin/auth/token"));
     assert.ok(requests.every(request => request.worker === "1"));
     assert.equal(changed, 1);
     assert.equal(opened, "https://copilot.tencent.com/login?fixture");
-    const stored = JSON.parse(readFileSync(join(service.dir, "auth.json"), "utf8"))[providerId];
+    const stored = readModelCredential(providerId, join(service.dir, "auth.json"));
+    assert.ok(stored?.type === "oauth");
     assert.equal(stored.access, "FIXTURE-ACCESS");
     assert.equal(stored.refresh, "FIXTURE-REFRESH");
     assert.equal(await service.raw(), '{"providers":{}}');
@@ -79,7 +85,9 @@ test("CodeBuddy is built in across login, reopened settings, catalog, configurat
     const catalog = await reopened.catalog(providerId, view.revision);
     assert.equal(catalog.source, "native");
     assert.equal(catalog.models.length, 11);
-    assert.match(catalog.message, /未向供应商查询实时列表/);
+    assert.match(catalog.message, /原生目录/);
+    const catalogRequests = readFileSync(join(root, "requests.jsonl"), "utf8").trim().split("\n").map(line => JSON.parse(line));
+    assert.ok(catalogRequests.some(request => request.path === "/v3/config" && request.method === "GET" && request.worker === "1"));
     const configured = await configuration(root);
     assert.equal(configured.error, undefined);
     assert.equal(configured.available.filter(item => item.provider === providerId).length, 11);
@@ -97,7 +105,7 @@ test("CodeBuddy is built in across login, reopened settings, catalog, configurat
         const body = JSON.parse(String(init?.body));
         assert.equal(body.stream, true);
         assert.equal(body.store, undefined);
-        return new Response('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', { headers: { "content-type": "text/event-stream" } });
+        return new Response('data: {"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', { headers: { "content-type": "text/event-stream" } });
       },
     });
     assert.equal(result.stopReason, "stop", result.errorMessage);
@@ -107,6 +115,10 @@ test("CodeBuddy is built in across login, reopened settings, catalog, configurat
     await logins.close();
     await closeModelNetworks(root);
     globalThis.fetch = previousFetch;
+    for (const key of executionKeys) {
+      if (executionEnvironment[key] === undefined) delete process.env[key];
+      else process.env[key] = executionEnvironment[key];
+    }
     if (previousNodeOptions === undefined) delete process.env.NODE_OPTIONS;
     else process.env.NODE_OPTIONS = previousNodeOptions;
     if (previousFixture === undefined) delete process.env.AXIOM_CODEBUDDY_FIXTURE_DIR;

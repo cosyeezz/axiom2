@@ -16,6 +16,9 @@ const fixtureFetch = async (input, init) => {
     body = existsSync(join(root, 'browser-opened'))
       ? { code: 0, data: { accessToken: 'FIXTURE-ACCESS', refreshToken: 'FIXTURE-REFRESH', expiresIn: 3600 } }
       : { code: 11217 };
+  } else if (url.pathname === '/v3/config' && !url.search && init?.method === 'GET') {
+    if (new Headers(init.headers).get('authorization') !== 'Bearer FIXTURE-ACCESS') throw new Error('Fixture catalog did not receive the normal credential');
+    body = { code: 0, data: { models: [] } };
   } else throw new Error(`Unexpected fixture request: ${init?.method} ${url.pathname}`);
   appendFileSync(join(root, 'requests.jsonl'), JSON.stringify({ method: init.method, path: url.pathname, worker: process.env.AXIOM_MODEL_NETWORK_WORKER }) + '\n');
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });

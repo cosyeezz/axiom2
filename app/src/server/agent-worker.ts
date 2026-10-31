@@ -59,6 +59,7 @@ import { agentSessionUsage } from "./agent-session-usage.js";
 import { installKiroCompactionUsage } from "./kiro-compaction-usage.js";
 import { installNativeCompactionUsage } from "./native-compaction-usage.js";
 import { disableKiroCacheWarming } from "./kiro-cache-policy.js";
+import { freshCodeBuddyRunIdentity, withCodeBuddyRunIdentity } from "./codebuddy-run-identity.js";
 import { installNativeCompactionPolicy } from "./native-compaction-policy.js";
 import { CompressionMemory } from "./compression-memory.js";
 import { compressionError } from "./compression-error.js";
@@ -1025,8 +1026,12 @@ async function run(input: WorkerInput) {
     const baseStream = session.agent.streamFunction;
     const accountObserver = createSessionAccountObserver(session.modelRuntime, join(process.env.AXIOM_PI_DIR || join(input.root, "pi"), "auth.json"),
       proof => runSend({ type: "model-account-proof", ...proof }));
+    // A fresh logical run owns one continuation across tools, not per HTTP call.
+    // Resume/synthetic cross-run preservation is not established; do not invent it.
+    const codeBuddyRunIdentity = freshCodeBuddyRunIdentity(input, session.sessionManager.getSessionId());
     const observedStream = latency.wrap((model, context, options) => {
       if (modelRequestError) throw modelRequestError;
+      options = withCodeBuddyRunIdentity(model, options, codeBuddyRunIdentity);
       let quotaRequest: AccountRequestContext | undefined;
       if (options?.sessionId === session!.sessionManager.getSessionId()) {
         // Report application only when a real session request is about to start.

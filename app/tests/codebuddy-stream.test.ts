@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createModels, getSupportedThinkingLevels, isContextOverflow, Type, type Context, type AssistantMessage, type ModelThinkingLevel } from "@earendil-works/pi-ai";
+import { createModels, getSupportedThinkingLevels, isContextOverflow, Type, type Context, type AssistantMessage, type ModelThinkingLevel, type SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { codeBuddyProvider } from "../src/server/providers/codebuddy-cn.js";
 
 function fixture() {
@@ -72,7 +72,7 @@ test("CodeBuddy native stream preserves prompts and hooks, parses simultaneous t
   let payloads = 0, responses = 0, events = 0;
   const result = await models.completeSimple(model, context, {
     apiKey: "FIXTURE", reasoning: "high", maxRetries: 0,
-    onPayload(payload) { payloads++; return { ...(payload as object), stream: false, temperature: 0.2 }; },
+    onPayload(payload) { payloads++; return { ...(payload as object), temperature: 0.2 }; },
     onResponse(response) { responses++; assert.equal(response.status, 200); },
     onProviderStreamEvent() { events++; },
     fetch: async (input, init) => {
@@ -81,8 +81,8 @@ test("CodeBuddy native stream preserves prompts and hooks, parses simultaneous t
       assert.equal(headers.get("authorization"), "Bearer FIXTURE");
       assert.equal(headers.get("x-product"), "SaaS");
       assert.equal(headers.get("x-ide-type"), "CLI");
-      assert.equal(headers.get("user-agent"), "CLI/2.173.0 CodeBuddy/2.173.0");
-      assert.equal(headers.get("x-ide-version"), "2.173.0");
+      assert.equal(headers.get("user-agent"), "CLI/2.179.0 CodeBuddy/2.179.0");
+      assert.equal(headers.get("x-ide-version"), "2.179.0");
       const body = JSON.parse(String(init?.body));
       assert.equal(body.stream, true);
       assert.equal(body.reasoning_effort, "high");
@@ -103,8 +103,8 @@ test("CodeBuddy native stream preserves prompts and hooks, parses simultaneous t
     },
   });
   assert.equal(result.stopReason, "stop", result.errorMessage);
-  assert.equal(result.content.find(block => block.type === "text")?.text, "Hello world");
-  assert.equal(result.content.find(block => block.type === "thinking")?.thinking, "Think twice");
+  assert.equal(result.content.filter(block => block.type === "text").map(block => block.text).join(""), "Hello world");
+  assert.equal(result.content.filter(block => block.type === "thinking").map(block => block.thinking).join(""), "Think twice");
   assert.equal(result.usage.output, 12);
   assert.equal(result.usage.cacheRead, 20);
   assert.equal(result.usage.totalTokens, 112);
@@ -135,15 +135,22 @@ test("CodeBuddy tools aggregate fragmented arguments and replay tool results wit
   assert.equal(result.stopReason, "stop", result.errorMessage);
 });
 
-test("CodeBuddy reasoning is opt-in and explicit none/off omit summaries, not the disable signal", async () => {
+test("CodeBuddy Pi tool schema cannot coerce arguments or publish complete candidates on failure", async () => {
+  const { models, model } = fixture(); let complete = 0;
+  const stream = models.streamSimple(model, context, { apiKey: "FIXTURE", fetch: async () => sse([chunk({ tool_calls: [{ index: 0, id: "bad-typed-call", type: "function", function: { name: "read", arguments: '{"path":42}' } }] }, "tool_calls")]) });
+  for await (const event of stream) if (event.type === "toolcall_end") complete++;
+  const response = await stream.result(); assert.equal(response.stopReason, "error"); assert.equal(complete, 0);
+});
+
+test("CodeBuddy UI off and explicit native off compatibility retain the disable signal",  async () => {
   const { models, model } = fixture();
-  for (const effort of [undefined, "none", "off"]) {
+  for (const reasoning of [undefined, "off"] as const) {
     const result = await models.completeSimple(model, context, {
-      apiKey: "FIXTURE", maxRetries: 0,
-      onPayload: payload => ({ ...(payload as object), reasoning_effort: effort, reasoning_summary: "auto" }),
+      // Pi UI off is undefined; string off additionally tests the native JavaScript compatibility boundary.
+      apiKey: "FIXTURE", maxRetries: 0, reasoning: reasoning as SimpleStreamOptions["reasoning"],
       fetch: async (_input, init) => {
         const body = JSON.parse(String(init?.body));
-        assert.equal(body.reasoning_effort, effort === undefined ? undefined : "none");
+        assert.equal(body.reasoning_effort, "none");
         assert.equal(body.reasoning_summary, undefined);
         return sse([chunk({ content: "done" }, "stop")]);
       },
@@ -151,13 +158,38 @@ test("CodeBuddy reasoning is opt-in and explicit none/off omit summaries, not th
     assert.equal(result.stopReason, "stop", result.errorMessage);
   }
   // The non-simple API must use the same protocol adapter.
-  const result = await models.complete(model, context, { apiKey: "FIXTURE", maxRetries: 0, reasoningEffort: "low", fetch: async (_input, init) => {
+  const result = await models.complete(model, context, { apiKey: "FIXTURE", maxRetries: 0, reasoningEffort: "high", fetch: async (_input, init) => {
     const body = JSON.parse(String(init?.body));
-    assert.equal(body.reasoning_effort, "low");
+    assert.equal(body.reasoning_effort, "high");
     assert.equal(body.reasoning_summary, "auto");
     return sse([chunk({ content: "done" }, "stop")]);
   } });
   assert.equal(result.stopReason, "stop", result.errorMessage);
+});
+
+test("CodeBuddy caller sampling overrides defaults without silently raising explicit output caps", async () => {
+  const { models, model } = fixture(); let sent = 0;
+  const configured = { ...model, samplingParams: { temperature: 1, max_tokens: 100 }, samplingParamsByThinkingLevel: { off: { temperature: 0.8 } } };
+  for (const samplingParams of [undefined, { temperature: 0.3, max_tokens: 8 }]) {
+    const result = await models.completeSimple(configured, context, { apiKey: "FIXTURE", reasoning: undefined, temperature: 0.2, maxTokens: 16, samplingParams,
+      fetch: async (_input, init) => { const body = JSON.parse(String(init?.body)); sent++;
+        assert.equal(body.temperature, samplingParams?.temperature ?? 0.2); assert.equal(body.max_tokens, samplingParams?.max_tokens ?? 16);
+        return sse([chunk({ content: "OK" }, "stop")]); } });
+    assert.equal(result.stopReason, "stop", result.errorMessage);
+  }
+  const denied = await models.completeSimple(configured, context, { apiKey: "FIXTURE", maxTokens: 16, samplingParams: { max_tokens: 17 },
+    fetch: async () => { sent++; return sse([chunk({ content: "unexpected" }, "stop")]); } });
+  assert.equal(denied.stopReason, "error"); assert.equal(sent, 2);
+});
+
+test("CodeBuddy SDK hooks cannot silently override caller stream, reasoning or tools", async () => {
+  const { models, model } = fixture(); let sent = 0;
+  for (const patch of [{ stream: false }, { reasoning_effort: "high" }, { reasoning_summary: "auto" }, { tools: [] }]) {
+    const result = await models.completeSimple(model, context, { apiKey: "FIXTURE", reasoning: undefined, maxRetries: 0,
+      onPayload: payload => ({ ...(payload as object), ...patch }), fetch: async () => { sent++; return sse([chunk({}, "stop")]); } });
+    assert.equal(result.stopReason, "error"); assert.match(result.errorMessage!, /受保护参数/);
+  }
+  assert.equal(sent, 0);
 });
 
 test("CodeBuddy UI off maps to explicit none for GLM and DeepSeek without suppressing received thinking", async () => {
@@ -187,7 +219,7 @@ test("CodeBuddy surfaces HTTP-200 business errors, stream errors and incomplete 
     [new Response("SECRET", { status: 401 }), /401.*重新登录/],
     [new Response(JSON.stringify({ code: 11102 }), { headers: { "content-type": "application/json" } }), /11102/],
     [sse([{ code: 6004, msg: "SECRET" }]), /6004/],
-    [sse([chunk({ content: "partial" })]), /finish_reason/],
+    [sse([chunk({ content: "partial" })]), /完整成功终态/],
   ] as const) {
     const result = await models.completeSimple(model, context, { apiKey: "FIXTURE", maxRetries: 0, fetch: async () => response });
     assert.equal(result.stopReason, "error");
@@ -207,7 +239,7 @@ test("CodeBuddy normalizes nested HTTP and SSE errors before SDK parsing without
     ["SSE message overflow", event({ error: { message: `Prompt is too long: 12345 ${secret}` } }), /context_length_exceeded/, true],
     ["SSE unknown error", event({ error: { code: "unknown", message: secret, metadata: { raw: secret } } }), /CodeBuddy 请求失败/, false],
     ["SSE named error", event({ code: 11102, message: secret }, "error"), /11102.*选择其他模型/, false],
-    ["SSE malformed named error", new Response(`event: error\ndata: ${secret}\n\n`, { headers: { "content-type": "text/event-stream" } }), /CodeBuddy 请求失败/, false],
+    ["SSE malformed named error", new Response(`event: error\ndata: ${secret}\n\n`, { headers: { "content-type": "text/event-stream" } }), /CodeBuddy 请求失败（HTTP 502）/, false],
     ["SSE nested quota", event({ error: { code: 6004, message: `prompt is too long ${secret}` } }), /6004.*429/, false],
     ["HTTP auth", new Response(JSON.stringify({ code: 401, msg: secret })), /401.*重新登录/, false],
     ["HTTP model access", new Response(JSON.stringify({ code: 11102, msg: secret })), /11102.*选择其他模型/, false],
@@ -244,7 +276,7 @@ test("CodeBuddy authentication, permission and quota codes cannot be hidden by n
         });
         assert.equal(result.stopReason, "error");
         assert.equal(isContextOverflow(result, model.contextWindow), false, `${code}/${nestedCode}/SSE=${stream}`);
-        const pattern = stream ? code === 11102 ? /11102.*选择其他模型/ : new RegExp(`HTTP ${expected}`) : new RegExp(`^${expected}(?::| )`);
+        const pattern = code === 11102 ? /11102.*选择其他模型/ : new RegExp(`HTTP ${expected}`);
         assert.match(result.errorMessage!, pattern);
         assert.ok(!result.errorMessage?.includes("PRIVATE_ECHO"));
       }
@@ -266,7 +298,7 @@ test("CodeBuddy known HTTP-200 business failures retain correct statuses and do 
       fetch: async () => new Response(JSON.stringify({ code, msg: "PRIVATE_ECHO" }), { headers: { "retry-after": "7" } }),
     });
     assert.equal(result.stopReason, "error");
-    assert.match(result.errorMessage!, new RegExp(`^${expected}(?::| )`), `code ${code}`);
+    assert.match(result.errorMessage!, code === 11102 ? /11102.*选择其他模型/ : new RegExp(`HTTP ${expected}`), `code ${code}`);
     assert.ok(!result.errorMessage?.includes("PRIVATE_ECHO"));
   }
 });

@@ -41,12 +41,13 @@ async function registerModelProvider(runtime: ModelRuntime, providerId: string) 
   if (!definition || runtime.getRegisteredNativeProvider(providerId)) return;
   const provider = await definition.load();
   if (runtime.getRegisteredNativeProvider(providerId)) return;
-  if (providerId === "kiro" || providerId === "codebuddy-cn") recognizeProviderRequestTransport(provider);
+  if (providerId === "kiro") recognizeProviderRequestTransport(provider);
+  else if (providerId === "codebuddy-cn") recognizeProviderRequestTransport(provider, (await import("../native-providers/codebuddy/http.js")).codeBuddyNativeFetch);
   // pi registers synchronously but starts an unawaited refresh afterwards. Keep
   // registration from mutating a worker's captured model files in the background.
   const refresh = runtime.refresh;
   runtime.refresh = async () => ({ aborted: false, errors: new Map() });
-  if (providerId === "kiro") {
+  if (providerId === "kiro" || providerId === "codebuddy-cn") {
     // Pi uses getAllModels for composition, but getModels for native API routing.
     // Keep the real catalog (including an empty one) separate from the composed
     // chat models, so valid explicit models never fall through to a global API.
@@ -78,6 +79,31 @@ async function registerModelProvider(runtime: ModelRuntime, providerId: string) 
     // Arbitrary API keys still reach the native rejection path, never the wire.
     const requestOptions = <T extends { apiKey?: string }>(model: { provider: string }, options: T | undefined): T | undefined =>
       model.provider === "kiro" && options?.apiKey?.startsWith("axiom-kiro-native:")
+        ? { ...options, apiKey: undefined } : options;
+    runtime.stream = (model, context, options) => stream(model, context, requestOptions(model, options));
+    runtime.streamSimple = (model, context, options) => streamSimple(model, context, requestOptions(model, options));
+  }
+  if (providerId === "codebuddy-cn") {
+    const { assertCodeBuddyChatModel, CODEBUDDY_TICKET_PREFIX } = await import("./providers/codebuddy-chat.js");
+    const getAuth = runtime.getAuth.bind(runtime);
+    runtime.getAuth = (async (target: Parameters<typeof getAuth>[0] | string, options?: Parameters<typeof getAuth>[1]) => {
+      if (typeof target !== "string" && target.provider === providerId) {
+        assertCodeBuddyChatModel(target as Parameters<typeof assertCodeBuddyChatModel>[0]);
+        if (target.type && target.type !== "chat" || !runtime.getModels(providerId).some(model => model.id === target.id))
+          throw new Error("CodeBuddy 原生调用必须使用当前目录或显式配置的聊天模型。");
+      }
+      try { return await (typeof target === "string" ? getAuth(target, options) : getAuth(target, options)); }
+      catch (error) {
+        // Pi can include full failed header/API-key command text in configuration errors.
+        // This boundary precedes native chat; never let those strings enter session history.
+        if (typeof target === "string" ? target === providerId : target.provider === providerId)
+          throw new Error("CodeBuddy 认证或请求头配置解析失败；未回显敏感数据。");
+        throw error;
+      }
+    }) as typeof runtime.getAuth;
+    const stream = runtime.stream.bind(runtime), streamSimple = runtime.streamSimple.bind(runtime);
+    const requestOptions = <T extends { apiKey?: string }>(model: { provider: string }, options: T | undefined): T | undefined =>
+      model.provider === providerId && options?.apiKey?.startsWith(CODEBUDDY_TICKET_PREFIX)
         ? { ...options, apiKey: undefined } : options;
     runtime.stream = (model, context, options) => stream(model, context, requestOptions(model, options));
     runtime.streamSimple = (model, context, options) => streamSimple(model, context, requestOptions(model, options));

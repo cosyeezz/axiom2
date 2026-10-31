@@ -51,10 +51,19 @@ export function installSessionRetryPolicy(session: AgentSession): void {
       if (previousReader) nativeReaders.set(settings, previousReader); else nativeReaders.delete(settings);
     }
   };
-  bridge._willRetryAfterAgentEnd = event =>
-    withPolicy(sessionRetrySettings(settings), () => willRetry.call(session, event));
-  bridge._prepareRetry = message => {
+  // CodeBuddy native currently owns a zero-replay policy. Its diagnostic alone
+  // does not disable Pi's generic 429/5xx retry or failed-history omission.
+  const messagePolicy = (message?: Pick<AssistantMessage, "provider">): RetryPolicy => {
     const policy = sessionRetrySettings(settings);
+    return message?.provider === "codebuddy-cn" ? { ...policy, enabled: false } : policy;
+  };
+  bridge._willRetryAfterAgentEnd = event => {
+    const messages = (event as { messages?: { role: string; provider?: string }[] })?.messages;
+    const lastAssistant = messages?.findLast(message => message.role === "assistant");
+    return withPolicy(messagePolicy(lastAssistant as AssistantMessage | undefined), () => willRetry.call(session, event));
+  };
+  bridge._prepareRetry = message => {
+    const policy = messagePolicy(message);
     const delay = policy.delaysMs?.[Math.min(session.retryAttempt, policy.delaysMs.length - 1)];
     // Native min(base * 2^(attempt-1), cap) equals the desired delay when base=cap.
     // No extra timer or outer retry loop; long waits remain natively cancellable.

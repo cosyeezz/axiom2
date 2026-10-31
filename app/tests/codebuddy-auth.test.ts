@@ -21,7 +21,7 @@ test("CodeBuddy browser login polls GET with encoded state and preserves token e
     assert.equal(headers.get("x-no-authorization"), "true");
     assert.equal(headers.get("x-no-enterprise-id"), "true");
     assert.equal(headers.get("x-no-department-info"), "true");
-    assert.equal(headers.get("user-agent"), "CLI/2.173.0 CodeBuddy/2.173.0");
+    assert.equal(headers.get("user-agent"), "CLI/2.179.0 CodeBuddy/2.179.0");
     assert.equal(init?.redirect, "error");
     assert.ok(init?.signal);
     if (calls++ === 0) {

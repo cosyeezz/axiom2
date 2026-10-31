@@ -13,11 +13,19 @@ const initialApis = new Map(httpApis.map(api => {
   return [api, { stream: provider?.stream, streamSimple: provider?.streamSimple }] as const;
 }));
 const nativeResult = createAssistantMessageEventStream().result;
-const nativeHttp = new WeakMap<Provider, Pick<Provider, "stream" | "streamSimple">>();
+const nativeHttp = new WeakMap<Provider, Pick<Provider, "stream" | "streamSimple"> & { transport?: typeof fetch }>();
 
 /** Called only for the application's known built-in factories, not extensions. */
-export function recognizeProviderRequestTransport(provider: Provider) {
-  nativeHttp.set(provider, { stream: provider.stream, streamSimple: provider.streamSimple });
+export function recognizeProviderRequestTransport(provider: Provider, transport?: typeof fetch) {
+  nativeHttp.set(provider, { stream: provider.stream, streamSimple: provider.streamSimple, transport });
+}
+
+/** Observability must wrap the provider's sender, not silently replace it with generic Fetch. */
+export function providerRequestDefaultTransport(runtime: Pick<ModelRuntime, "getRegisteredProviderConfig" | "getRegisteredNativeProvider">,
+  model: Parameters<StreamFn>[0]): typeof fetch | undefined {
+  if (runtime.getRegisteredProviderConfig(model.provider)?.streamSimple) return undefined;
+  const native = runtime.getRegisteredNativeProvider(model.provider), known = native && nativeHttp.get(native);
+  return native && known && known.stream === native.stream && known.streamSimple === native.streamSimple ? known.transport : undefined;
 }
 
 export function providerRequestHttpTransport(runtime: Pick<ModelRuntime, "getRegisteredProviderConfig" | "getRegisteredNativeProvider">,
@@ -28,7 +36,9 @@ export function providerRequestHttpTransport(runtime: Pick<ModelRuntime, "getReg
     const known = nativeHttp.get(native);
     if (!known || known.stream !== native.stream || known.streamSimple !== native.streamSimple) return false;
     if (model.api === "kiro-chat" && model.provider === "kiro") return true;
-    if (model.provider !== "codebuddy-cn") return false;
+    // Native CodeBuddy no longer delegates to the global OpenAI API registry.
+    if (model.provider === "codebuddy-cn" && model.api === "openai-completions" && known.transport) return true;
+    return false;
   }
   if (!httpApis.includes(model.api) || model.api === "openai-codex-responses" && options?.transport !== "sse") return false;
   const initial = initialApis.get(model.api), current = getApiProvider(model.api);
@@ -37,7 +47,8 @@ export function providerRequestHttpTransport(runtime: Pick<ModelRuntime, "getReg
 
 /** Observe completion promises, never consume/replay stream events or response bodies. */
 export function observeProviderRequests<F extends StreamFn>(base: F, emit: (event: ProviderRequestEvent) => void,
-  httpTransport: (model: Parameters<StreamFn>[0], options: Parameters<StreamFn>[2]) => boolean): F {
+  httpTransport: (model: Parameters<StreamFn>[0], options: Parameters<StreamFn>[2]) => boolean,
+  defaultTransport?: (model: Parameters<StreamFn>[0]) => typeof fetch | undefined): F {
   const observed: StreamFn = (model, context, options) => {
     // Pi routes this into runtime.streamSimple again with the physical model.
     if (model.api === "pi-virtual") return base(model, context, options);
@@ -65,7 +76,7 @@ export function observeProviderRequests<F extends StreamFn>(base: F, emit: (even
       return replacement;
     } };
     if (physicalHttp) {
-      const fetcher = options?.fetch ?? globalThis.fetch;
+      const fetcher = options?.fetch ?? defaultTransport?.(model) ?? globalThis.fetch;
       next.fetch = async (...args: Parameters<typeof fetch>) => {
         // Kiro enterprise profile discovery also uses options.fetch, before onPayload.
         // Auth/catalog preparation is not inference and must keep the original transport.
@@ -109,6 +120,7 @@ export function installProviderRequestObserver(runtime: ModelRuntime) {
   };
   const httpTransport = (model: Parameters<StreamFn>[0], options: Parameters<StreamFn>[2]) =>
     providerRequestHttpTransport(runtime, model, options);
-  runtime.stream = observeProviderRequests(runtime.stream.bind(runtime), emit, httpTransport);
-  runtime.streamSimple = observeProviderRequests(runtime.streamSimple.bind(runtime), emit, httpTransport);
+  const defaultTransport = (model: Parameters<StreamFn>[0]) => providerRequestDefaultTransport(runtime, model);
+  runtime.stream = observeProviderRequests(runtime.stream.bind(runtime), emit, httpTransport, defaultTransport);
+  runtime.streamSimple = observeProviderRequests(runtime.streamSimple.bind(runtime), emit, httpTransport, defaultTransport);
 }

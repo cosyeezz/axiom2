@@ -24,51 +24,66 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-import {
-  createProvider, envApiKeyAuth, lazyApi,
-  type StreamOptions,
-} from "@earendil-works/pi-ai";
+import { envApiKeyAuth, type Credential, type Provider } from "@earendil-works/pi-ai";
 import { codeBuddyOAuth } from "./codebuddy-auth.js";
 import { codeBuddyBaseUrl, codeBuddyHeaders, codeBuddyId, codeBuddyModels } from "./codebuddy-models.js";
-import { codeBuddyFetch } from "./codebuddy-response.js";
+import { codeBuddyChat } from "./codebuddy-chat.js";
+import { createCodeBuddyCatalog } from "../../native-providers/codebuddy/catalog.js";
+import { CodeBuddyProtocolError } from "../../native-providers/codebuddy/failure.js";
+import { validCodeBuddyToken } from "../../native-providers/codebuddy/json.js";
 
-const completions = lazyApi(() => import("@earendil-works/pi-ai/api/openai-completions"));
-
-function streamOptions<T extends StreamOptions>(options?: T): T & StreamOptions {
+export type CodeBuddyProvider = Provider<"openai-completions"> & { dispose(): void; catalogState(): { source: "builtin" | "network"; refresh: "idle" | "pending" | "succeeded" | "failed"; permissionsVerified: false } };
+export function codeBuddyProvider(options: { fetch?: typeof fetch } = {}): CodeBuddyProvider {
+  const chat = codeBuddyChat({ apiKey: envApiKeyAuth("CodeBuddy 国内版访问令牌", ["CODEBUDDY_CN_API_KEY"]), oauth: codeBuddyOAuth(options) }, options.fetch);
+  const catalog = createCodeBuddyCatalog(options.fetch);
+  let models = codeBuddyModels(), scope: string | undefined;
+  let ambient = false, scopeType: Credential["type"] | undefined;
+  let source: "builtin" | "network" = "builtin", refresh: "idle" | "pending" | "succeeded" | "failed" = "idle";
+  const credentialAccess = (credential: Credential | undefined) => credential?.type === "oauth" ? credential.access : credential?.key;
+  const reset = () => { catalog.invalidate(); chat.invalidate(); scope = undefined; scopeType = undefined; ambient = false; models = codeBuddyModels(); source = "builtin"; refresh = "idle"; };
   return {
-    ...options,
-    fetch: codeBuddyFetch(options?.fetch ?? globalThis.fetch),
-    async onPayload(payload, model) {
-      const transformed = await options?.onPayload?.(payload, model);
-      const body: Record<string, unknown> = { ...((transformed ?? payload) as Record<string, unknown>), stream: true };
-      if (typeof body.reasoning_effort === "string" && !["none", "off"].includes(body.reasoning_effort)) {
-        body.reasoning_summary = "auto";
-      } else {
-        // Pi maps UI off to "none". Omitting that signal is not equivalent:
-        // a live GLM off request still returned thinking. Keep the explicit
-        // disable value, without summary; never hide received thinking instead.
-        if (body.reasoning_effort === "none" || body.reasoning_effort === "off") body.reasoning_effort = "none";
-        else delete body.reasoning_effort;
-        delete body.reasoning_summary;
+    id: codeBuddyId, name: "CodeBuddy 国内版", baseUrl: codeBuddyBaseUrl, headers: codeBuddyHeaders, auth: chat.auth,
+    getModels: () => structuredClone(models),
+    catalogState: () => ({ source, refresh, permissionsVerified: false }),
+    filterModels(items, credential) {
+      // Synchronous availability after logout/account switch must not expose the previous account's cloud list.
+      const access = credentialAccess(credential);
+      const builtinIds = new Set(codeBuddyModels().map(model => model.id));
+      // Pi availability supplies the STORED credential, not the resolved env/config key.
+      // Offline refresh/reconfiguration invalidates this ambient snapshot before another key is selected.
+      if (!access && ambient && scopeType === "api_key" && (!credential || credential.type === "api_key")) return items;
+      return scope !== undefined && access !== scope ? items.filter(model => builtinIds.has(model.id)) : items;
+    },
+    async refreshModels(context) {
+      context.signal.throwIfAborted();
+      if (context.baseUrl !== undefined && ![codeBuddyBaseUrl, `${codeBuddyBaseUrl}/`].includes(context.baseUrl)) throw new CodeBuddyProtocolError("target");
+      let access = credentialAccess(context.credential);
+      // Pi resolves API-key credentials through auth.resolve for the network phase.
+      // Redeem that RAM handoff here, never send the opaque ticket as a bearer.
+      if (context.allowNetwork) access = chat.consumeAccess(access);
+      if (!validCodeBuddyToken(access)) {
+        await context.publish({ update: () => { reset(); ambient = !context.credential || context.credential.type === "api_key" && !context.credential.key; } });
+        return;
       }
-      // Preserve all system messages, tools and tool results. The upstream may
-      // reject agent prompts; replacing them silently would discard user constraints.
-      return body;
+      const current = access;
+      if (!await context.publish({ update: () => {
+        if (scope !== undefined && scope !== current) chat.invalidate();
+        const snapshot = catalog.get(current); scope = current; scopeType = context.credential?.type;
+        if (!context.allowNetwork) ambient = false;
+        models = codeBuddyModels(snapshot.models); source = snapshot.source;
+        refresh = context.allowNetwork ? "pending" : "idle";
+      } })) return;
+      if (!context.allowNetwork) return;
+      try {
+        const snapshot = await catalog.refresh(current, context.signal);
+        context.signal.throwIfAborted();
+        await context.publish({ update: () => { scope = current; models = codeBuddyModels(snapshot.models); source = snapshot.source; refresh = "succeeded"; } });
+      } catch (error) {
+        await context.publish({ update: () => { refresh = "failed"; } });
+        throw error;
+      }
     },
-  } as T & StreamOptions;
-}
-
-export function codeBuddyProvider() {
-  return createProvider({
-    id: codeBuddyId, name: "CodeBuddy 国内版", baseUrl: codeBuddyBaseUrl, headers: codeBuddyHeaders,
-    auth: {
-      apiKey: envApiKeyAuth("CodeBuddy 国内版访问令牌", ["CODEBUDDY_CN_API_KEY"]),
-      oauth: codeBuddyOAuth(),
-    },
-    models: codeBuddyModels(),
-    api: {
-      stream: (model, context, options) => completions.stream(model, context, streamOptions(options)),
-      streamSimple: (model, context, options) => completions.streamSimple(model, context, streamOptions(options)),
-    },
-  });
+    stream: (model, context, input) => chat.stream(model, context, input), streamSimple: chat.stream,
+    dispose() { reset(); catalog.dispose(); chat.dispose(); },
+  };
 }
