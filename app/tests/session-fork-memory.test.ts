@@ -40,7 +40,11 @@ test("fork inherits current memory at any message cut and uses independent paths
     assert.equal(readFileSync(join(target, "details", "目标", "核验.md"), "utf8"), "VERIFIED");
     for (const text of ["BRANCH_FIRST", "BRANCH_REOPENED"]) {
       await f.call("prompt", { text }, scope); await f.idle(scope);
-      const system = f.requests.at(-1).messages.filter((message: { role: string }) => ["system", "developer"].includes(message.role));
+      // Background title generation can finish after the chat; do not inspect the last request blindly.
+      const chat = f.requests.findLast(request => request.messages.some((message: { role: string; content: unknown }) =>
+        message.role === "user" && (JSON.stringify(message.content) ?? "").includes(text)));
+      assert.ok(chat, `missing branch chat request for ${text}`);
+      const system = chat.messages.filter((message: { role: string }) => ["system", "developer"].includes(message.role));
       assert.ok(JSON.stringify(system).includes(target));
       assert.ok(!JSON.stringify(system).includes(source));
       assert.ok(f.app.agents.info(scope).environment!.systemPrompt!.includes(memoryInstruction(join(target, "MEMORY.md"))));

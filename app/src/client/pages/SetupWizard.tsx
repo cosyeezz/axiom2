@@ -21,7 +21,7 @@ function readJob(value: unknown): Job | null {
   const job = value as Job;
   return { ...job, foreground: job.foreground === true, repairable: job.repairable === true, action: typeof job.action === "string" ? job.action : "", message: typeof job.message === "string" ? job.message : "正在核实安装状态", lines: Array.isArray(job.lines) ? job.lines.filter(line => typeof line === "string") : [] };
 }
-export default function SetupWizard({ remote, service, blocked, onBusy, onComplete, onDetection, controls, children }: { remote: boolean; service: { state: string } | null; blocked: boolean; onBusy: (busy: boolean) => void; onComplete: () => void; onDetection: (detection: PreparationDetection) => void; controls?: Ref<SetupControls>; children?: ReactNode }) {
+export default function SetupWizard({ remote, service, blocked, onBusy, onComplete, onDetection, controls, children, target }: { target?: "node" | "tailscale"; remote: boolean; service: { state: string } | null; blocked: boolean; onBusy: (busy: boolean) => void; onComplete: () => void; onDetection: (detection: PreparationDetection) => void; controls?: Ref<SetupControls>; children?: ReactNode }) {
   const history = useDesktopMaintenanceHistory("setup");
   const [budgets, setBudgets] = useState(defaultMaintenanceBudgets);
   const [environment, setEnvironment] = useState<Environment | null>(null);
@@ -200,7 +200,7 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
   const evidencePending = (name: string) => history.tasks.some(task => task.resource === name && ["running", "cancelling", "unknown", "interrupted"].includes(task.status));
   return <section ref={workflow} tabIndex={-1} className="setup-simple" aria-label={remote ? "远程连接准备" : "本地连接准备"}>
     {history.error && <p className="maintenance-warning" role="status">{history.error}<button className="maintenance-text-button" onClick={() => void history.refresh()}>重新读取维护证据</button></p>}
-    {(["node", "tailscale", "service"] as const).filter(name => name === (remote ? "tailscale" : "node") || name === "service" && !remote || job?.action === name || evidencePending(name) || history.tasks.some(task => task.resource === name) || !!error && errorOwner === name).map(name => {
+    {(["node", "tailscale", "service"] as const).filter(name => name === target || name === (remote ? "tailscale" : "node") || name === "service" && !remote || job?.action === name || evidencePending(name) || history.tasks.some(task => task.resource === name) || !!error && errorOwner === name).map(name => {
       const ownsJob = job?.action === name;
       const ownsStatus = ownsJob || !job && name === (remote ? "tailscale" : "node");
       const ownsFeedback = errorOwner === name;

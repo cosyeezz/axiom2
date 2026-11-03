@@ -4,8 +4,8 @@ import { fetchKiroCatalog } from "../src/server/providers/kiro-catalog.js";
 import { kiroProvider } from "../src/server/providers/kiro.js";
 import type { KiroCredential } from "../src/server/providers/kiro-auth.js";
 
-const credential = (): KiroCredential => ({ type: "oauth", access: "ACCESS-PRIVATE", refresh: "REFRESH-PRIVATE",
-  expires: Date.now() + 3600_000, authMethod: "builder-id", authRegion: "us-east-1" });
+const credential = (authMethod: KiroCredential["authMethod"] = "builder-id"): KiroCredential => ({ type: "oauth", access: "ACCESS-PRIVATE", refresh: "REFRESH-PRIVATE",
+  expires: Date.now() + 3600_000, authMethod, authRegion: "us-east-1" });
 const model = { modelId: "partial-only", tokenLimits: { maxInputTokens: 4096, maxOutputTokens: 512 } };
 function deferred<T>() {
   let resolve!: (value: T) => void, reject!: (reason: unknown) => void;
@@ -23,10 +23,11 @@ async function bounded<T>(promise: Promise<T>): Promise<T> {
 }
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 
-test("catalog abort bounds a signal-ignoring fetch and cancels its late body without waiting for cleanup", async () => {
+for (const authMethod of ["builder-id", "identity-center"] as const) {
+test(`${authMethod} catalog abort bounds a signal-ignoring fetch and cancels its late body without waiting for cleanup`, async () => {
   const response = deferred<Response>(), started = deferred<void>(), abort = new AbortController();
   let calls = 0, cancellations = 0;
-  const pending = fetchKiroCatalog(credential(), abort.signal, async () => {
+  const pending = fetchKiroCatalog(credential(authMethod), abort.signal, async () => {
     calls++; started.resolve(); return response.promise;
   });
   await started.promise;
@@ -38,19 +39,20 @@ test("catalog abort bounds a signal-ignoring fetch and cancels its late body wit
   assert.equal(calls, 1); assert.equal(cancellations, 1);
 });
 
-test("catalog observes late transport rejection after cancellation without leaking its secret", async () => {
-  const response = deferred<Response>(), abort = new AbortController();
-  const pending = fetchKiroCatalog(credential(), abort.signal, async () => response.promise);
+test(`${authMethod} catalog observes late transport rejection after cancellation without leaking its secret`, async () => {
+  const response = deferred<Response>(), started = deferred<void>(), abort = new AbortController();
+  const pending = fetchKiroCatalog(credential(authMethod), abort.signal, async () => { started.resolve(); return response.promise; });
+  await started.promise;
   abort.abort();
   await assert.rejects(bounded(pending), /abort/i);
   response.reject(Error("ACCESS-PRIVATE late network failure"));
   await tick(); // node:test also fails on unhandled rejections.
 });
 
-test("catalog abort bounds a stalled body even when reader cancellation never settles", async () => {
+test(`${authMethod} catalog abort bounds a stalled body even when reader cancellation never settles`, async () => {
   const reading = deferred<void>(), abort = new AbortController();
   let cancellations = 0;
-  const pending = fetchKiroCatalog(credential(), abort.signal, async () => new Response(new ReadableStream({
+  const pending = fetchKiroCatalog(credential(authMethod), abort.signal, async () => new Response(new ReadableStream({
     pull() { reading.resolve(); return new Promise(() => {}); },
     cancel() { cancellations++; return new Promise(() => {}); },
   })));
@@ -60,6 +62,8 @@ test("catalog abort bounds a stalled body even when reader cancellation never se
   await assert.rejects(bounded(pending), error => error === reason);
   assert.equal(cancellations, 1);
 });
+
+}
 
 test("catalog HTTP and declared-size failures do not wait for an uncooperative body cancel", async () => {
   for (const kind of ["http", "declared-size"] as const) {

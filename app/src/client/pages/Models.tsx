@@ -1,9 +1,10 @@
 import { lazy, Suspense, useMemo, useRef, useState } from "react";
 import { AddProvider, ProviderAddMenu } from "../models/AddProvider.js";
-import { Icon, SettingsSidebar } from "../components.js";
+import { Dialog, Icon, SettingsSidebar } from "../components.js";
+import type { AddModelAccount } from "../../shared/model-accounts.js";
 import { ConfirmDialog } from "../ConfirmDialog.js";
 import { ProviderConnection } from "../models/ProviderConnection.js";
-import { ModelAccountRecovery } from "../models/ModelAccountRecovery.js";
+import { ProviderAccounts } from "../models/ProviderAccounts.js";
 import { MountOnVisit } from "../MountOnVisit.js";
 import { useConfiguration } from "../models/useConfiguration.js";
 import { SettingsHeader } from "../settings/SettingsHeader.js";
@@ -12,9 +13,10 @@ import "../styles/model-interactions.css";
 const ModelLogin = lazy(() => import("./ModelLogin.js").then(module => ({ default: module.ModelLogin })));
 const ModelRegistry = lazy(() => import("../models/ModelRegistry.js").then(module => ({ default: module.ModelRegistry })));
 export default function Models() {
-  const [accountAddition] = useState(() => new URLSearchParams(location.search).get("add-account") === "1");
-  const [adding, setAdding] = useState(accountAddition);
-  const [accountLabel, setAccountLabel] = useState(""), [accountRegion, setAccountRegion] = useState(""), [accountError, setAccountError] = useState("");
+  const [adding, setAdding] = useState(() => new URLSearchParams(location.search).get("add-account") === "1");
+  const [preferredProvider, setPreferredProvider] = useState<string>();
+  const [account, setAccount] = useState<AddModelAccount>();
+  const [accountBusy, setAccountBusy] = useState(false);
   const supplierSearch = useRef<HTMLInputElement>(null);
   const {
     config,
@@ -38,8 +40,6 @@ export default function Models() {
     editor,
     editorDirty,
     setEditor,
-    showKey,
-    setShowKey,
     feedback,
     feedbackError,
     copyFeedback,
@@ -54,15 +54,14 @@ export default function Models() {
     stageEditor,
     add,
     select,
-    logoutProvider,
     removeProvider,
     changeTab,
     copyButton,
     rows,
   } = useConfiguration();
-  const startLogin = (flow: NonNullable<typeof login>) => {
-    if (accountAddition && !accountLabel.trim()) { setAccountError("请先填写账号名称。"); document.getElementById("account-label")?.focus(); return; }
-    setAccountError(""); setAdding(false); setLogin(flow);
+  const startLogin = (flow: NonNullable<typeof login>, account: AddModelAccount) => {
+    if (dirty || editor || busy || needsReconcile || !account.label.trim()) return;
+    setAccount(account); setAdding(false); setLogin(flow);
   };
   const hasError = feedback ? feedbackError : !!config.error;
   const loading = !revision && !hasError;
@@ -78,13 +77,7 @@ export default function Models() {
       <SettingsSidebar page="models" />
       <main className="settings-main" id="content">
         <SettingsHeader page="models" />
-        {accountAddition ? <section className="account-add-context" aria-label="独立添加账号">
-          <div className="row-between"><h2>添加账号</h2><a href="/model-accounts.html">返回多账号管理</a></div>
-          <p className="field-help">此入口独立保存新账号，不覆盖原账号；登录成功后自动返回，新供应商首个账号可直接使用。同一供应商共用连接和模型列表，不会为账号复制模型配置。</p>
-          <div className="grid-2"><div className="field"><label htmlFor="account-label">账号名称</label><input id="account-label" className="input" required maxLength={160} value={accountLabel} disabled={!!login || busy} placeholder="工作账号 / 个人账号" onChange={event => setAccountLabel(event.target.value)} /></div>
-            <div className="field"><label htmlFor="account-region">区域或备注</label><input id="account-region" className="input" maxLength={160} value={accountRegion} disabled={!!login || busy} placeholder="可选，不改变服务端点" onChange={event => setAccountRegion(event.target.value)} /></div></div>
-          {accountError && <p role="alert" className="auth-error">{accountError}</p>}
-        </section> : <p className="field-help"><a href="/model-accounts.html">多账号管理 →</a> 单账号在此管理；直接登录会替换当前账号，需要保留多个账号时请使用多账号管理。</p>}
+        <p className="field-help">账号提供认证，连接决定请求方式，模型定义调用目标。每次登录只新增账号，不覆盖已有认证。</p>
         <span className="configuration-progress" role="status" aria-live="polite" aria-atomic="true">
           {busy && !hasError ? feedback : ""}
         </span>
@@ -100,7 +93,7 @@ export default function Models() {
           {feedback || config.error}
         </p>}
         {!hasError && config.warning && <p className="configuration-feedback" role="status">{config.warning}</p>}
-        <div className="container" inert={busy} aria-busy={busy}>
+        <div className="container" inert={busy || accountBusy} aria-busy={busy || accountBusy}>
           <div className="configuration-layout">
             <section
               className="supplier-panel"
@@ -112,7 +105,7 @@ export default function Models() {
                 </h2>
                 <ProviderAddMenu
                   disabled={!revision || needsReconcile || busy || !!login}
-                  oauth={() => setAdding(true)}
+                  oauth={() => { setPreferredProvider(undefined); setAdding(true); }}
                   custom={() => { setAdding(false); add(); }}
                 />
               </div>
@@ -156,30 +149,7 @@ export default function Models() {
               </div>
             </section>
             <div className="supplier-detail">
-              {login ? (
-                <Suspense fallback={<p role="status">正在加载登录界面…</p>}>
-                <ModelLogin
-                  {...login}
-                  inline
-                  revision={revision}
-                  account={accountAddition ? { label: accountLabel.trim(), region: accountRegion.trim() } : undefined}
-                  onComplete={() => { if (accountAddition) location.replace("/model-accounts.html?added=1"); else void refreshAuthentication(login.providerId); }}
-                  close={() => {
-                    setLogin(null);
-                    void refreshAuthentication(login.providerId).then(() => document.getElementById("add-supplier")?.focus());
-                  }}
-                />
-                </Suspense>
-              ) : adding ? (
-                <AddProvider
-                  templates={templates}
-                  connections={providers}
-                  blocked={dirty || !!editor || busy || needsReconcile}
-                  accountAddition={accountAddition}
-                  login={(providerId, proxy, type) => startLogin({ providerId, type, ...(type === "oauth" ? { proxy } : {}) })}
-                  close={() => { setAdding(false); document.getElementById("add-supplier")?.focus(); }}
-                />
-              ) : !p ? (
+              {!p ? (
                 <div className="empty-details">
                   <h2>{loading ? "正在读取本地配置…" : "连接你的模型"}</h2>
                   <p>{loading ? "仅读取配置和已保存的认证记录，不验证登录状态。" : "点击供应商旁的「+」，选择账号授权或自定义接口。"}</p>
@@ -210,19 +180,12 @@ export default function Models() {
                         )
                       ) {
                         e.preventDefault();
-                        changeTab(
-                          e.key === "Home"
-                            ? "suppliers"
-                            : e.key === "End"
-                              ? "models"
-                              : tab === "models"
-                                ? "suppliers"
-                                : "models",
-                        );
+                        const tabs = ["accounts", "suppliers", "models"];
+                        changeTab(tabs[e.key === "Home" ? 0 : e.key === "End" ? 2 : (tabs.indexOf(tab) + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length]);
                       }
                     }}
                   >
-                    {["suppliers", "models"].map((id) => (
+                    {["accounts", "suppliers", "models"].map((id) => (
                       <button
                         className="config-tab"
                         id={`${id}-tab`}
@@ -233,14 +196,19 @@ export default function Models() {
                         tabIndex={tab === id ? 0 : -1}
                         onClick={() => changeTab(id)}
                       >
-                        {id === "suppliers" ? "连接配置" : "模型配置"}
+                        {id === "accounts" ? "账号与认证" : id === "suppliers" ? "连接与请求" : "模型配置"}
                         {dirty && <span className="draft-indicator" aria-label="未保存" />}
                       </button>
                     ))}
                   </nav>
                   {p.auth?.error && !p.key.trim() && <p className="auth-error" role="alert">配置错误 · {p.auth.error}</p>}
                   {p.notices?.map(notice => <p className="field-help" key={notice}>{notice}</p>)}
-                  <ModelAccountRecovery providerId={p.providerId} blocked={dirty || !!editor || busy || needsReconcile} activated={() => refreshAuthentication(p.providerId)} />
+                  <div id="accounts-screen" role="tabpanel" aria-labelledby="accounts-tab" hidden={tab !== "accounts"}>
+                    {p.originalId ? <MountOnVisit key={p.id} active={tab === "accounts"}><ProviderAccounts providerId={p.providerId}
+                      blocked={dirty || !!editor || busy || needsReconcile || !!login} changed={() => refreshAuthentication(p.providerId)} busyChanged={setAccountBusy}
+                      add={() => { setPreferredProvider(p.providerId); setAdding(true); }} /></MountOnVisit>
+                      : <p className="field-help">请先在「连接与请求」中填写并保存连接，再添加账号。</p>}
+                  </div>
                   <ProviderConnection
                     {...{
                       p,
@@ -248,16 +216,11 @@ export default function Models() {
                       tab,
                       templates,
                       patch,
-                      showKey,
-                      setShowKey,
                       dirty,
                       editor,
                       busy,
                       needsReconcile,
-                      setLogin: startLogin,
-                      accountAddition,
                       feedback: feedbackError ? feedback : "",
-                      logoutProvider,
                       removeProvider,
                     }}
                   />
@@ -320,7 +283,7 @@ export default function Models() {
                       title: "放弃修改？",
                       confirmLabel: "放弃修改",
                       danger: true,
-                      text: "丢弃本页所有草稿及临时密钥，重新读取已发布配置；不会改变服务端配置。",
+                      text: "丢弃本页所有配置草稿，重新读取已发布配置；不会改变服务端配置。",
                       proceed: () => void load(),
                     });
                   }}
@@ -338,7 +301,7 @@ export default function Models() {
                       title: "重新读取配置？",
                       confirmLabel: "放弃并重新读取",
                       danger: true,
-                      text: "这会丢弃当前未保存修改和临时密钥。取消可继续编辑。",
+                      text: "这会丢弃当前未保存的配置修改。取消可继续编辑。",
                       proceed: () => void load(),
                     });
                     else void load();
@@ -358,6 +321,15 @@ export default function Models() {
             服务端配置已更新；当前草稿未被覆盖。请重新读取后合并，过期保存会被拒绝。
           </p>
         )}
+        {adding && !login && <Dialog title="添加账号" onClose={() => setAdding(false)} className="settings-dialog model-account-dialog">
+          <AddProvider templates={templates} connections={providers} preferredProvider={preferredProvider}
+            blocked={!revision || dirty || !!editor || busy || needsReconcile || connection !== "已连接本地服务"}
+            login={(providerId, proxy, type, account) => startLogin({ providerId, type, ...(type === "oauth" && proxy ? { proxy } : {}) }, account)}
+            close={() => setAdding(false)} />
+        </Dialog>}
+        {login && <Suspense fallback={<p role="status">正在加载登录界面…</p>}><ModelLogin {...login} revision={revision} account={account}
+          onComplete={() => { const providerId = login.providerId; setLogin(null); changeTab("accounts"); void refreshAuthentication(providerId); }}
+          close={() => { const providerId = login.providerId; setLogin(null); void refreshAuthentication(providerId); }} /></Suspense>}
         {decision && (
           <ConfirmDialog key={decision.title} title={decision.title} description={decision.text}
             subject={decision.subject} warning={decision.warning} confirmLabel={decision.confirmLabel} danger={decision.danger}

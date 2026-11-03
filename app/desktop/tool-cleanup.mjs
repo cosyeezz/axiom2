@@ -2,11 +2,11 @@
 // service URL; the webview can supply only an operation and its fixed parameters.
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-const reads = new Set(['resources.get', 'rea.get', 'rtk.get', 'opencli.get', 'modelProxy.get', 'maintenance.get']);
+const reads = new Set(['resources.get', 'rea.get', 'rtk.get', 'ffmpeg.get', 'opencli.get', 'modelProxy.get', 'maintenance.get']);
 const removals = new Map([
   ['resources.remove', ['id', 'clearCredentials']], ['rea.uninstall', []],
   ['rea.engine-uninstall', ['engine']], ['rea.clearDownloads', ['engine']], ['rea.uninstallSkill', []], ['rea.uninstallMcp', []],
-  ['rtk.uninstall', []], ['rtk.cleanupStats', []], ['rtk.cleanupOriginals', []], ['opencli.uninstall', []],
+  ['ffmpeg.uninstall', []], ['rtk.uninstall', []], ['rtk.cleanupStats', []], ['rtk.cleanupOriginals', []], ['opencli.uninstall', []],
   ['modelProxy.uninstall', ['kernel']],
 ]);
 const scopedRemovals = new Set(['rtk.uninstall', 'rtk.cleanupStats', 'rtk.cleanupOriginals', 'opencli.uninstall', 'rea.uninstall', 'rea.engine-uninstall', 'rea.clearDownloads', 'modelProxy.uninstall']);

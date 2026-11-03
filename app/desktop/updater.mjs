@@ -294,7 +294,7 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     await mkdir(directory, { recursive: true, mode: 0o700 });
     const db = new DatabaseSync(join(directory, "jobs.sqlite"));
     try {
-      db.exec("PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS job (id INTEGER PRIMARY KEY CHECK(id=1), token TEXT NOT NULL, pid INTEGER NOT NULL, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS maintenance_control (token TEXT PRIMARY KEY, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS maintenance_history (token TEXT PRIMARY KEY, pid INTEGER NOT NULL, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS client_installer (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL)");
+      db.exec("PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS job (id INTEGER PRIMARY KEY CHECK(id=1), token TEXT NOT NULL, pid INTEGER NOT NULL, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS maintenance_control (token TEXT PRIMARY KEY, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS maintenance_history (token TEXT PRIMARY KEY, pid INTEGER NOT NULL, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS client_installer (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS client_download (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL)");
       return operation(db);
     } finally { db.close(); }
   }
@@ -372,7 +372,8 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   }
   async function reconcile(payload = {}) {
     if (await reconcileArchive(payload)) return status();
-    const installed = await installation(true);
+    const current = await job();
+    const installed = current?.kind === "client" ? null : await installation(true);
     const reconciler = await createUpdaterReconciler(root);
     const persist = (db, row, value) => {
       const body = JSON.stringify(value);
@@ -542,7 +543,15 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     const actual = createHash("sha256").update(bytes).digest("hex");
     if (actual !== asset.sha256) throw Error(`${name} SHA-256 不符：预期 ${asset.sha256}，实际 ${actual}。已拒绝安装，请重新下载。`);
 
-    await writeFile(destination, bytes, { mode: 0o600 });
+    // Replace the cache entry atomically; never follow an invalid cached symlink
+    // or overwrite another hard link's contents after a failed cache check.
+    const temporary = `${destination}.${randomBytes(16).toString("hex")}.tmp`;
+    try {
+      execution?.signal.throwIfAborted();
+      await writeFile(temporary, bytes, { mode: 0o600, flag: "wx" });
+      execution?.signal.throwIfAborted();
+      await rename(temporary, destination);
+    } finally { await rm(temporary, { force: true }); }
     return destination;
   }
   async function validFile(path, asset) {
@@ -562,6 +571,19 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     try { candidate = stored ? validateInstallerRecord(JSON.parse(stored.body)) : current?.kind === 'client' && current.phase === 'ready' && !current.running ? validateInstallerRecord({ version: current.version, asset: current.asset, taskId: current.task?.id, readyAt: current.updatedAt }) : null; }
     catch { candidate = null; }
     return { candidate, body: stored?.body };
+  }
+  // Non-MSI downloads are artifacts, not permission to launch an installer.
+  // Keep the legacy MSI receipt separate so old clients cannot misinterpret a DMG/DEB.
+  async function downloadedClient() {
+    const stored = await database(db => db.prepare('SELECT body FROM client_download WHERE id=1').get());
+    try {
+      const value = stored && JSON.parse(stored.body);
+      if (!value || value.platform !== platform || value.arch !== arch || value.name !== clientAsset || !Number.isFinite(value.readyAt) || !/^[a-f0-9-]{36}$/.test(value.taskId)) return null;
+      const release = validateClientRelease({ version: value.version, checkedAt: value.readyAt, assets: { [value.name]: value.asset } });
+      const path = join(directory, `${release.assets[value.name].sha256}-${value.name}`);
+      if (!await validFile(path, value.asset)) return null;
+      return { version: value.version, name: value.name, readyAt: value.readyAt, path };
+    } catch { return null; }
   }
   async function status() {
     const current = await job();
@@ -594,7 +616,7 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     if (current) { current.reconciled = current.reconciliation?.state === "complete" && !updaterOwnerPresent(root); delete current.pid; delete current.token; delete current.installer; delete current.reconciliation; }
     const pi = ['archive-preview', 'archive-remove'].includes(current?.kind) ? null : await piStatus();
     if (current?.kind === "pi" && ["failed", "cancelled", "unknown", "interrupted"].includes(current.task?.status) && pi.release && pi.release.token === current.version) pi.release.token = null;
-    return { clientPlatform: platform, clientAsset, clientCheckedAt: matchingClient?.checkedAt ?? null, clientReleaseError: matchingClient?.error ?? null, clientRelease: matchingClient?.release ?? null,
+    return { clientDownloadSupported: !!clientAsset, clientDownload: await downloadedClient(), clientPlatform: platform, clientAsset, clientCheckedAt: matchingClient?.checkedAt ?? null, clientReleaseError: matchingClient?.error ?? null, clientRelease: matchingClient?.release ?? null,
       releaseError: releaseError?.message ?? null, installationError, clientInstaller, archiveCleanup: await json(archivePreviewFile), pi, serviceRemoval: await json(serviceRemovalFile), serviceRemovalPending: await serviceRemovalPending(root), serviceVersion, serviceInstallation, serviceError, managed: installed?.managed ?? false, release: release ? validateRelease(release) : null,
       job: current, budgets: await json(join(directory, "budgets.json"), budgetsDefault), recovery, log, execution: current?.kind === "pi" ? await logTail(log) : null };
   }
@@ -866,7 +888,8 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
       }
       return;
     }
-    const installed = await installation();
+    // Downloading the desktop application does not mutate or require a backend installation.
+    const installed = kind === "client" ? null : await installation();
     if (kind === "recover") {
       await restore(installed);
       await progress("complete", "之前的服务程序已恢复。", { running: false, servicePending: false });
@@ -876,7 +899,6 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     const client = kind === "client" ? await json(clientReleaseFile) : null;
     if (kind === "client" && (client?.platform !== platform || client?.arch !== arch || !client.release || client.error)) throw Error("请先检查本平台客户端更新。");
     const release = kind === "client" ? validateClientRelease(client.release) : validateRelease(await json(releaseFile));
-    if (kind === "client" && clientAsset !== "Axiom2.msi") throw Error("本平台请通过发布页下载安装客户端。");
     if (version !== release.version) throw Error("更新版本已变化，请重新检查并确认。");
     if (kind === "service") {
       // A cached release is not authority to install an old "latest". Recheck at
@@ -887,10 +909,26 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
       if (version !== fresh.version || previous.url !== current.url || previous.sha256 !== current.sha256 || previous.size !== current.size) throw Error("最新版本或发布附件已变化，请重新检查并确认；未停止旧服务。");
       await updateService(installed, fresh);
     } else if (kind === "client") {
-      const installer = await download(release, "Axiom2.msi");
-      const artifact = { version: release.version, asset: release.assets['Axiom2.msi'], taskId: execution.task.id, readyAt: Date.now() };
-      await database(db => db.prepare('INSERT OR REPLACE INTO client_installer VALUES(1,?)').run(JSON.stringify(artifact)));
-      await progress("ready", "客户端安装包已校验，点击“运行安装器”继续。", { running: false, installer, asset: release.assets["Axiom2.msi"] });
+      const path = await download(release, clientAsset);
+      const artifact = { version: release.version, asset: release.assets[clientAsset], taskId: execution.task.id, readyAt: Date.now() };
+      execution.signal.throwIfAborted();
+      await execution.phase("verifying", "正在登记已校验安装包…", false);
+      // Close cancellation at the receipt commit boundary. A request accepted
+      // before capabilities closed must still win, even before the next tick.
+      await database(db => {
+        db.exec("BEGIN IMMEDIATE");
+        const control = db.prepare('SELECT body FROM maintenance_control WHERE token=?').get(owner.token);
+        if (control && JSON.parse(control.body).cancel) throw Object.assign(Error("已取消下载，未登记新的安装包。"), { code: "cancelled" });
+        execution.signal.throwIfAborted();
+        if (clientAsset === "Axiom2.msi") db.prepare('INSERT OR REPLACE INTO client_installer VALUES(1,?)').run(JSON.stringify(artifact));
+        else db.prepare('INSERT OR REPLACE INTO client_download VALUES(1,?)').run(JSON.stringify({ ...artifact, name: clientAsset, platform, arch }));
+        db.exec("COMMIT");
+      });
+      if (clientAsset === "Axiom2.msi") {
+        await progress("ready", "客户端安装包已校验，点击“运行安装器”继续。", { running: false, installer: path, asset: artifact.asset });
+      } else {
+        await progress("ready", "客户端安装包已下载并校验，请从所在文件夹手动安装；当前客户端及后台均未退出。", { running: false, asset: artifact.asset, assetName: clientAsset });
+      }
     } else throw Error("不支持的更新任务");
   }
   async function releasePiLock() {
@@ -973,7 +1011,7 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   async function start(kind, version) {
     if (!["archive-preview", "archive-remove", "service", "service-remove-preview", "service-uninstall", "client", "recover", "pi", "pi-uninstall", "pi-remove-preview", "check", "pi-check", "pi-refresh"].includes(kind)) throw Error("不支持的更新任务");
     if (kind === "pi") await piEnvironment();
-    else if (!["archive-preview", "archive-remove", "service-remove-preview", "service-uninstall", "pi-check", "pi-refresh", "pi-uninstall", "pi-remove-preview", "check"].includes(kind)) await installation();
+    else if (!["archive-preview", "archive-remove", "service-remove-preview", "service-uninstall", "pi-check", "pi-refresh", "pi-uninstall", "pi-remove-preview", "check", "client"].includes(kind)) await installation();
     const reserved = await claim(kind, version);
     let child, transferred = false;
     try {

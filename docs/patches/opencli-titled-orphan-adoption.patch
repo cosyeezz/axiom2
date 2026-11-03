@@ -1,0 +1,26 @@
+--- a/extension/src/background.ts	2026-11-02 15:14:47
++++ b/extension/src/background.ts	2026-11-02 15:14:47
+@@ -771,6 +771,23 @@
+     }
+   }
+ 
++  // 5th layer: titled orphans stranded by a browser restart. The ledger above
++  // lives in chrome.storage.session, so a restart clears it while the group
++  // keeps its title; the placeholder fallback below only recovers a container
++  // that was parked as the unique idle tab, which fails as soon as its window
++  // held a second tab at release time. Without this layer every restart strands
++  // the old container and the next command opens another window. Only adopt a
++  // group whose window holds nothing but that group and blank tabs, so a
++  // user-created group of the same name can never be hijacked.
++  const idleMarkerUrl = await idlePlaceholderUrl();
++  for (const group of await chrome.tabGroups.query({ title: CONTAINER_TAB_GROUP_TITLE[role] })) {
++    if (groupsById.has(group.id)) continue;
++    const windowTabs = await chrome.tabs.query({ windowId: group.windowId });
++    if (windowTabs.length === 0) continue;
++    const foreign = windowTabs.some(tab => tab.groupId !== group.id && tab.url !== BLANK_PAGE && tab.url !== idleMarkerUrl);
++    if (!foreign) groupsById.set(group.id, group);
++  }
++
+   // A persisted extension-owned placeholder is evidence across browser restarts;
+   // group titles, colors, and restored numeric IDs are not.
+   if (groupsById.size === 0) {

@@ -94,7 +94,9 @@ export class Logins {
         throw new AppError("AUTH_UNSUPPORTED", "该供应商不支持所选认证方式");
       // Snapshot only for visible preference defaults; no secret is sent to the page.
       const previousCredential = readModelCredential(providerId, join(this.models.dir, "auth.json"));
-      if (account !== undefined) staged = this.accounts.prepare(providerId, account);
+      // Every interactive login appends a credential slot, including older callers.
+      // A missing label must never select the destructive legacy login path.
+      staged = this.accounts.prepare(providerId, account ?? { label: `${providerId} 账号` });
       if (proxy !== undefined) {
         if (type !== "oauth") throw new AppError("INVALID_INPUT", "仅 OAuth 登录支持在授权时选择代理。");
         await this.models.configureLoginProxy(providerId, proxy, current);
@@ -183,18 +185,13 @@ export class Logins {
           : "按 pi 认证提示完成登录；关闭或取消会终止当前流程。";
         send();
       };
-      const loginDir = staged?.dir ?? this.models.dir;
+      const loginDir = staged.dir;
       const operation = this.network(this.models.root, loginDir, providerId, join(loginDir, "models.json"), "login", { type },
         { signal: controller.signal, prompt, notify })
         .then(async () => {
-          if (staged) await this.accounts.commit(staged, type, true);
-          else {
-            const persisted = await this.models.runtime();
-            if (!(await persisted.listCredentials()).some((c) => c.providerId === providerId && c.type === type))
-              throw new CredentialSynchronizationError(providerId, "login", undefined, { cause: Error("Credential not persisted") });
-          }
+          await this.accounts.commit(staged!, type, true);
           flow.state.status = "completed";
-          flow.state.message = staged ? "账号已独立保存；已有供应商的账号选择不变，新供应商首个账号可直接使用。" : "pi 已保存认证；这不代表模型调用已验证。";
+          flow.state.message = "账号已追加保存；已有默认账号不变，首个账号可直接使用。认证保存不代表模型调用已验证。";
         })
         .catch(async (error) => {
           flow.state.status = "failed";

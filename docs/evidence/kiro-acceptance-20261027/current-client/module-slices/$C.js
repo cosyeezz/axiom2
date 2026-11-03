@@ -1,0 +1,1 @@
+function $C(t,e,r="CodeWhisperer"){let n=x5o(e);if(!n)return;P.debug(`${r}: adding TokenType header '${n}' for auth method '${e}'`);let s=c(a=>async l=>(k5o(l,n),a(l)),"d");t.middlewareStack.add(s,{step:"build"})};

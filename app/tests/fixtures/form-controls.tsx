@@ -29,7 +29,7 @@ const parts = [{ name: "xl/workbook.xml", text: `<workbook xmlns:r="urn:relation
 function ProviderFixture() {
   const [provider, setProvider] = useState<ProviderDraft>({ id: "fixture-provider", providerId: "", name: "", api: "openai-completions", url: "", key: "", headers: [], body: [], models: [] });
   return <><ProviderConnection p={provider} storage={undefined} tab="suppliers" templates={[{ id: "fixture-api", name: "示例供应商", api: "openai-completions", url: "https://example.invalid/v1" }]}
-    patch={patch => setProvider(value => ({ ...value, ...patch }))} showKey={false} setShowKey={() => {}} dirty={false} editor={null} busy={false} needsReconcile={false} setLogin={() => {}} feedback="" logoutProvider={() => {}} removeProvider={() => {}} />
+    patch={patch => setProvider(value => ({ ...value, ...patch }))} dirty={false} editor={null} busy={false} needsReconcile={false} feedback="" removeProvider={() => {}} />
     <button id="lock-provider" onClick={() => setProvider(value => ({ ...value, originalId: value.providerId }))}>模拟已有供应商</button></>;
 }
 function Fixture() {

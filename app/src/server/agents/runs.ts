@@ -29,6 +29,7 @@ type Live = {
   storageFailed?: boolean;
   terminating?: boolean;
   validatingIdle?: boolean;
+  ownerEnded?: boolean;
   closed?: boolean;
   modelRevision?: number;
   modelSelection?: Selection;
@@ -70,6 +71,18 @@ export class AgentRuns {
     const live = this.live.get(scope.sessionId);
     return live?.run.id === runId && this.pool.isActive(live.lease.ref) ? live.lease.ref : undefined;
   }
+  /** Main-only tool admission; never trust role/scope fields supplied in tool parameters. */
+  webLease(scope: Scope, runId: string) {
+    try { this.store.session(scope.workspaceId, scope.sessionId); } catch { return undefined; }
+    const live = this.live.get(scope.sessionId);
+    return live && live.scope.workspaceId === scope.workspaceId && live.run.id === runId && !live.task &&
+      !live.ownerEnded && this.windowCurrent(live) ? live.lease.ref : undefined;
+  }
+  private endOwner(live: Live) {
+    if (live.ownerEnded) return;
+    live.ownerEnded = true;
+    this.onEnding?.(live.scope, live.run);
+  }
   /** Only an acknowledged request from this live lease can identify its fixed stored-account binding. */
   accountUsageTarget(scope: Scope): SessionAccountTarget | null {
     this.store.session(scope.workspaceId, scope.sessionId);
@@ -89,6 +102,7 @@ export class AgentRuns {
   closing = false;
   onEvent?: (scope: Scope, run: Run, event: any) => void;
   onSettled?: (scope: Scope, run: Run) => void;
+  onEnding?: (scope: Scope, run: Run) => void;
   active(scope: Scope) {
     this.store.session(scope.workspaceId, scope.sessionId);
     return this.live.has(scope.sessionId) || this.pending.has(scope.sessionId);
@@ -447,8 +461,10 @@ export class AgentRuns {
             streaming: event.status === "running",
           });
         }
-        if (event.type === "done" && !live.storageFailed)
+        if (event.type === "done" && !live.storageFailed) {
           live.finish = { status: event.status, error: event.error, reasonCode: event.reasonCode };
+          this.endOwner(live);
+        }
         if (["done", "usage"].includes(event.type) && event.usage)
           this.store.db
             .prepare("UPDATE agent_sessions SET usage=? WHERE sessionId=?")
@@ -492,7 +508,7 @@ export class AgentRuns {
       }
     };
     let dispatched = false, startAcknowledged = false;
-    const onError = (error: Error) => { live.window?.close(); live.finish = { status: "failed", error: errorMessage(error, "工作进程启动失败：未收到具体错误原因。") }; };
+    const onError = (error: Error) => { this.endOwner(live); live.window?.close(); live.finish = { status: "failed", error: errorMessage(error, "工作进程启动失败：未收到具体错误原因。") }; };
     const onClose = () => {
       if (dispatched && !startAcknowledged && !live.finish)
         live.finish = { status: "interrupted", error: "工作进程在启动消息发送确认前退出。", reasonCode: "UNCERTAIN" };
@@ -507,6 +523,7 @@ export class AgentRuns {
     const settle = (keepAlive: boolean) => {
       if (settled) return;
       settled = true;
+      this.endOwner(live);
       startup.settled = true;
       live.window?.close();
       live.receive = undefined;
@@ -630,6 +647,7 @@ export class AgentRuns {
     await live.exit;
   }
   private stopLive(live: Live, source: StopSource = "user") {
+    this.endOwner(live);
     live.window?.close();
     if (live.run.status === "stopping") return;
     live.run.status = "stopping";
@@ -646,6 +664,7 @@ export class AgentRuns {
   }
   // The pool revokes reuse before terminating the owned process tree.
   private kill(live: Live) {
+    this.endOwner(live);
     live.window?.close();
     clearTimeout(live.timer);
     if (live.terminating) return;

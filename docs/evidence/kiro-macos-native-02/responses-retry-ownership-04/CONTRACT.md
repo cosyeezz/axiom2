@@ -1,0 +1,5 @@
+# Retry ownership and reason mapping — static04
+
+New implementation decision: establish Gx/native client cache identity/lifetime and complete Responses reason normalization so adaptive state is not shared/reset speculatively and usage/validation failures are not mistaken for throttling. Reuse static01–03 evidence for all established algorithms; those cases remain CLOSED.
+
+Same KAS0.66.70 acp-server.js at /private/tmp/kiro-current-kas-member01-k5vna1mo/node_modules/@kiro/agent/dist/server/acp-server.js,15025207B,SHA256 bf79b2b0fa7ae68653abdf117b4a4dbf064fec6fa7ca49500115f3f2f67581b1. Exclusive static.claim, hash recheck. Only exact-symbol locations and necessary direct caller/callee windows; max8 windows,<=18000B each,<=80000B total,<=5 extraction rounds and150s aggregate extraction-command wall time. Stop when answered or budget exhausted. No official execution/full AST/model requests/credentials/settings or production edits. Raw public source snippets with offsets may be retained; distinguish runtime unknowns and don't infer resolved semver from dependency ranges.

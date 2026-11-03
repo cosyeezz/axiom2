@@ -19,6 +19,7 @@ import "../styles/connect.css";
 import "../styles/confirmation-inline.css";
 import "../styles/process-motion.css";
 import "../styles/connect-layout.css";
+import "../styles/startup-components-layout.css";
 
 type View = "control" | "workbench";
 type Service = { artifact?: { download: { state: "verified" | "absent" | "unknown" }; installation: { state: "verified" | "absent" | "unknown"; version?: string } }; desktopView?: View; state: "starting" | "running" | "stopped" | "stopping" | "missing" | "unmanaged"; active: string[]; url?: string; log?: string; message?: string; background?: boolean };
@@ -41,6 +42,15 @@ export default function Connect() {
   const [remoteBusy, setRemoteBusy] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [preparation, setPreparation] = useState(false);
+  const [preparationTarget, setPreparationTarget] = useState<"node" | "tailscale" | undefined>();
+  useEffect(() => { setPreparationTarget(undefined); }, [device]);
+  function showPreparation(target: "node" | "tailscale") {
+    setPreparationTarget(target); setPreparation(true);
+    requestAnimationFrame(() => {
+      const panel = document.querySelector<HTMLElement>(".setup-simple");
+      panel?.scrollIntoView({ block: "nearest" }); panel?.focus({ preventScroll: true });
+    });
+  }
   const [detection, setDetection] = useState<PreparationDetection>({ environment: null, checking: true, failed: false });
   // Preserve the connection card's original feedback; maintenance controls live below.
   const installationFailed = !detection.job?.running && !detection.uncertain && (detection.job?.task?.status === "failed" || !detection.job?.task && detection.job?.phase === "error");
@@ -260,14 +270,14 @@ export default function Connect() {
           {mode === "remote" && installing && <p className="connect-message" role="status">{detection.foreground ? "本机安装在可见终端继续，切换设备不会中断。" : "本机安装仍在后台进行，切换设备不会中断。"}</p>}
         </div>
         <section className="startup-maintenance startup-update-section" hidden={mode !== "local"}>
-          <DesktopUpdates controls={updates} service={serviceKnown ? service : null} serviceBusy={!!busy || installing || localConnecting || !serviceKnown} onBusyChange={setUpdating} onAvailableChange={setUpdateAvailable} onServiceChange={() => void act("status")} onInstallService={primaryAction} onMaintainService={(version, requireLatest) => { setPreparation(true); setup.current?.maintainService(version, requireLatest); }} />
+          <DesktopUpdates controls={updates} detection={detection} onPrepare={showPreparation} service={serviceKnown ? service : null} serviceBusy={!!busy || installing || localConnecting || !serviceKnown} onBusyChange={setUpdating} onAvailableChange={setUpdateAvailable} onServiceChange={() => void act("status")} onInstallService={primaryAction} onMaintainService={(version, requireLatest) => { setPreparation(true); setup.current?.maintainService(version, requireLatest); }} />
         </section>
         <aside className="startup-tools" aria-label="本机维护">
-        <div className="startup-tools-heading"><h2>维护工具</h2><p>环境准备与组件管理</p></div>
+        <div className="startup-tools-heading"><h2>更多维护</h2></div>
         <details className="startup-maintenance" hidden={mode !== "local"}><summary><Icon name="package" /><span className="startup-tool-copy">组件管理<small>查看安装位置与清理选项</small></span><Icon name="chevron-down" /></summary><DesktopEnvironment environment={detection.environment} serviceState={serviceKnown ? service?.state : undefined} /></details>
         {detection.attention && <div className="maintenance-warning startup-recovery-notice" role="status"><Icon name="circle-help" /><span>上次安装需要核实。</span><button className="maintenance-text-button" onClick={showRecovery}>核实并恢复<Icon name="chevron-right" /></button></div>}
         <details className="startup-preparation" open={preparation} onToggle={event => setPreparation(event.currentTarget.open)}><summary><ConnectionIcon name="package" /><span className="startup-tool-copy">环境与安装<small>{detection.checking ? "检查中" : detectionUnknown ? "待检查" : readyToInstall ? "环境已就绪" : "需要准备"}</small></span><Icon name="chevron-down" /></summary>
-          <SetupWizard controls={setup} remote={mode === "remote"} service={serviceKnown ? service : null} blocked={!!busy || updating || localConnecting || !serviceKnown} onBusy={setInstalling} onComplete={() => void act("status")} onDetection={setDetection} />
+          <SetupWizard controls={setup} target={preparationTarget} remote={mode === "remote"} service={serviceKnown ? service : null} blocked={!!busy || updating || localConnecting || !serviceKnown} onBusy={setInstalling} onComplete={() => void act("status")} onDetection={setDetection} />
         </details>
         </aside>
         {error && <p className={errorPending ? "connect-message startup-global-error" : "connect-error startup-global-error"} role={errorPending ? "status" : "alert"}>{error}<IconButton label="重新读取服务状态" icon="refresh-cw" disabled={!!busy} onClick={() => void act("status")} /></p>}

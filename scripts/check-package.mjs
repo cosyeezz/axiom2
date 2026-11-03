@@ -34,7 +34,7 @@ const request = (url, options = {}) => fetch(url, { ...options, signal: options.
 try {
   const [packed] = JSON.parse(npm(["pack", "--ignore-scripts", "--foreground-scripts=false", "--json", "--pack-destination", temporary]));
   const paths = packed.files.map((file) => file.path);
-  for (const file of ["npm-shrinkwrap.json", "bin/axiom2.mjs", "bin/service.mjs", "app/dist/server/index.js", "app/dist/server/agent-worker.js", "app/dist/server/compression-worker.js", "app/dist/client/index.html"])
+  for (const file of ["npm-shrinkwrap.json", "bin/axiom2.mjs", "bin/service.mjs", "app/dist/server/index.js", "app/dist/server/agent-worker.js", "app/dist/server/compression-worker.js", "app/dist/native-providers/index.js", "app/dist/client/index.html"])
     assert.ok(paths.includes(file), `Missing runtime file: ${file}`);
   const nativeArchitectures = process.env.AXIOM_VERIFIED_PACKAGE_DIR ? ["x64", "arm64"] : process.platform === "linux" ? [process.arch] : [];
   const nativeDigests = {}, nativeAssets = {};
@@ -173,8 +173,8 @@ try {
     for (const shim of ["axiom2", "axiom2.cmd", "axiom2.ps1"]) {
       await assert.rejects(access(join(installed, "node_modules/.bin", shim)), { code: "ENOENT" });
     }
-    for (const worker of ["agent-worker.js", "compression-worker.js"]) {
-      execFileSync(process.execPath, ["--input-type=module", "-e", "await import(process.argv[1]);", pathToFileURL(join(installed, "app/dist/server", worker)).href], {
+    for (const entry of ["server/agent-worker.js", "server/compression-worker.js", "native-providers/index.js"]) {
+      execFileSync(process.execPath, ["--input-type=module", "-e", "await import(process.argv[1]);", pathToFileURL(join(installed, "app/dist", entry)).href], {
         cwd: temporary, env: serviceEnv, encoding: "utf8", timeout: 30_000,
       });
     }

@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "scope": "Standalone environment design only; no real detection/install",
+  "widths": [
+    320,
+    390,
+    760,
+    761,
+    1024,
+    1120
+  ],
+  "checks": [
+    "environment and service details",
+    "Tailscale install mock",
+    "mock environment detection",
+    "mock update check",
+    "no horizontal overflow"
+  ],
+  "errors": []
+}

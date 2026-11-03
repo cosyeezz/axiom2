@@ -2,7 +2,8 @@ import "./pi-settings-storage.js";
 import { getAgentDir, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { AppError } from "../shared/protocol.js";
 import { executionModelsRaw } from "./execution-model-config.js";
-import { accountBindings } from "./model-account-storage.js";
+import { accountBindings, managedAccountProviders } from "./model-account-storage.js";
+import { accountAdmissionRevision } from "./model-account-admission.js";
 import { capabilityFileDigest, type CapabilityRuntime } from "./capability-resources.js";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -128,14 +129,16 @@ export class ExecutionProfiles {
     try { localResources(); resourceVersion = captured?.version ?? resources(); verifiable = captured?.verifiable ?? true; }
     catch { resourceVersion = randomUUID(); verifiable = false; }
     const provider = input.selection?.provider;
+    const admissionRevision = accountAdmissionRevision(input.modelDir, provider);
     const env = { ...process.env, AXIOM_PI_DIR: input.modelDir, AXIOM_MODEL_PROVIDER: provider ?? "",
-      AXIOM_MODEL_ACCOUNT_BINDINGS: JSON.stringify(accountBindings(input.modelDir)) };
+      AXIOM_MODEL_ACCOUNT_BINDINGS: JSON.stringify(accountBindings(input.modelDir)),
+      AXIOM_MODEL_MANAGED_ACCOUNTS: JSON.stringify(managedAccountProviders(input.modelDir)) };
     const execArgv = source ? ["--import", import.meta.resolve("tsx")] : [];
     const reuse: ReuseMode = input.entry === "agent" ? (verifiable && ready ? "same-session" : "single-use") : input.entry === "memory" && input.mode === "D" ? "cross-binding" : "single-use";
     const profileHash = digest(stable({ schema: 1, adapter: 1, build: contentRevision(workerPath), sdk: sdkVersions, node: process.version,
       entry: input.entry, reuse, cwd: canonicalPath(input.cwd), agentDir: resolve(this.root, "pi"),
       modelDir: canonicalPath(input.modelDir), env, execArgv, modelDigest, configRevision, settings, resourceVersion,
-      selection: input.entry === "agent" ? input.selection : null, provider, capabilities: input.capabilities ?? null }));
+      selection: input.entry === "agent" ? input.selection : null, provider, admissionRevision, capabilities: input.capabilities ?? null }));
     let snapshot = this.snapshots.get(modelDigest);
     if (snapshot) {
       try { snapshot.valid = snapshot.valid && modelRevision(readFileSync(snapshot.path, 'utf8')) === modelDigest; }
@@ -153,6 +156,9 @@ export class ExecutionProfiles {
       let check: ExecutionRejection['check'] = 'capability_file', resource: ExecutionRejection['resource'];
       let scanRejection: Readonly<ExecutionRejection> = { check: 'resource_scan', cause: 'other' };
       try {
+        check = 'auth';
+        if (accountAdmissionRevision(input.modelDir, provider) !== admissionRevision) return rejectExecution(onReject, { check });
+        check = 'capability_file';
         if (!(input.capabilities?.files.every(file => {
           const name = basename(file.path);
           resource = name === 'settings.json' ? 'settings' : name === 'mcp.json' ? 'mcp' : name === 'SKILL.md' ? 'skills' : 'other';

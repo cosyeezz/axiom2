@@ -51,11 +51,11 @@ export function installSessionRetryPolicy(session: AgentSession): void {
       if (previousReader) nativeReaders.set(settings, previousReader); else nativeReaders.delete(settings);
     }
   };
-  // CodeBuddy native currently owns a zero-replay policy. Its diagnostic alone
+  // These native providers own a zero-replay policy. Provider maxRetries:0 alone
   // does not disable Pi's generic 429/5xx retry or failed-history omission.
   const messagePolicy = (message?: Pick<AssistantMessage, "provider">): RetryPolicy => {
     const policy = sessionRetrySettings(settings);
-    return message?.provider === "codebuddy-cn" ? { ...policy, enabled: false } : policy;
+    return ["codebuddy-cn", "qoder", "qoder-cn"].includes(message?.provider ?? "") ? { ...policy, enabled: false } : policy;
   };
   bridge._willRetryAfterAgentEnd = event => {
     const messages = (event as { messages?: { role: string; provider?: string }[] })?.messages;

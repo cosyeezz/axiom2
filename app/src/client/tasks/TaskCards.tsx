@@ -86,7 +86,6 @@ export const TaskCards = memo(function TaskCards({
         </div>;
       })}
       {window.previous !== null && <button type="button" className="task-open-link" disabled={window.loading || !window.current} onClick={() => void window.more()}>加载更早的子任务</button>}
-      {window.loading && <p role="status">正在同步任务…</p>}
       {(window.error || navigationError) && <p role="alert">{navigationError || window.error} <button type="button" className="task-open-link" onClick={() => { setNavigationError(""); void window.retry(); }}>重试</button></p>}
     </section>
   );

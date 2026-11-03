@@ -51,7 +51,13 @@ test("OAuth automatic callback cancels manual prompt; device flow needs no code 
       } },
     });
     await runtime.refresh({ allowNetwork: false });
-    service.runtime = async () => runtime;
+    const createRuntime = service.runtime.bind(service);
+    service.runtime = async (...args) => {
+      const fresh = await createRuntime(...args);
+      fresh.registerNativeProvider(runtime.getRegisteredNativeProvider("openai")!);
+      if (!args[1]) await fresh.refresh({ allowNetwork: false });
+      return fresh;
+    };
     const { revision } = await service.load();
     const first = await logins.start(owner, "openai", "oauth", revision);
     await until(() => !!logins.get(owner, first.id).state.prompt);

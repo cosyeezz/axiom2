@@ -91,10 +91,10 @@ export function ComponentCard({ label, headingId, regionLabel, className = "", b
         {availableVersion && <span className="component-card-candidate"><span className="component-version-label">{availableVersionLabel}</span> <span className="component-version-value">{availableVersion}</span></span>}
       </div>}
     </div>
-    {statusNote && <p className="maintenance-note component-card-status">{statusNote}</p>}
+    {statusNote && <p className="maintenance-note component-card-status" role="status">{statusNote}</p>}
     {!secondaryLabel && supportingInfo}
     {summary && <div className="component-card-summary">{summary}</div>}
-    {secondaryLabel && <details className="component-secondary"><summary><span>{secondaryLabel}</span><Icon name="chevron-down" /></summary>{supportingInfo}{environmentView}</details>}
+    {secondaryLabel && <details className="component-secondary" onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary><span>{secondaryLabel}</span><Icon name="chevron-down" /></summary>{supportingInfo}{environmentView}</details>}
     <div className="maintenance-resource-content">{children}</div>
     {feedback && <div className="component-card-feedback" aria-live="polite">{feedback}</div>}
     {maintenance}
@@ -112,7 +112,28 @@ export function ComponentConfirmation({ title, description, warning, children, c
   useEffect(() => {
     const trigger = document.activeElement as HTMLElement | null, node = surface.current;
     node?.scrollIntoView({ block: "nearest" }); node?.focus({ preventScroll: true });
-    return () => { if (document.activeElement === document.body || node?.contains(document.activeElement)) trigger?.focus({ preventScroll: true }); };
+    const ownerHeading = node?.closest(".component-card")?.querySelector<HTMLElement>(":scope > .maintenance-panel-heading h3");
+    const canFocus = (element: HTMLElement | null | undefined): boolean => {
+      if (!element?.isConnected || !element.getClientRects().length || getComputedStyle(element).visibility === "hidden") return false;
+      // Chromium can retain layout boxes for content inside closed details.
+      for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+        if (ancestor instanceof HTMLDetailsElement && !ancestor.open && !ancestor.querySelector(":scope > summary")?.contains(element)) return false;
+      }
+      return true;
+    };
+    return () => {
+      if (document.activeElement !== document.body && !node?.contains(document.activeElement)) return;
+      if (trigger && canFocus(trigger)) { trigger.focus({ preventScroll: true }); return; }
+      // A confirmation stays visible even if the trigger's supporting details close.
+      // Restore focus to a visible disclosure instead of a now-hidden nested action.
+      for (let ancestor = trigger?.parentElement; ancestor; ancestor = ancestor.parentElement) {
+        if (ancestor instanceof HTMLDetailsElement && !ancestor.open) {
+          const summary = ancestor.querySelector<HTMLElement>(":scope > summary");
+          if (summary && canFocus(summary)) { summary.focus({ preventScroll: true }); return; }
+        }
+      }
+      if (ownerHeading && canFocus(ownerHeading)) ownerHeading.focus({ preventScroll: true });
+    };
   }, []);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const submit = async () => {

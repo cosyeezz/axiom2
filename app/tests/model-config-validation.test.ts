@@ -12,7 +12,7 @@ const provider = () => ({
   name: "示例供应商",
   api: "openai-completions",
   url: "https://api.example.com/v1",
-  key: "PRIVATE-API-KEY",
+  key: "",
   headers: [],
   body: [],
   models: [{ id: "example-model", name: "示例模型", levels: ["none"], headers: [], body: [] }],

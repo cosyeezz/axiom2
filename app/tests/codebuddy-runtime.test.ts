@@ -10,6 +10,7 @@ import { Logins } from "../src/server/auth.js";
 import { fileURLToPath } from "node:url";
 import { closeModelNetworks } from "../src/server/model-network.js";
 import { readModelCredential } from "../src/server/model-account-storage.js";
+import { ModelAccountService } from "../src/server/model-accounts.js";
 
 const providerId = "codebuddy-cn";
 test("CodeBuddy is built in across login, reopened settings, catalog, configuration and snapshot runtimes", { timeout: 60000 }, async () => {
@@ -109,7 +110,12 @@ test("CodeBuddy is built in across login, reopened settings, catalog, configurat
       },
     });
     assert.equal(result.stopReason, "stop", result.errorMessage);
-    await snapshot.logout(providerId);
+    const accounts = new ModelAccountService(reopened);
+    const accountView = await accounts.list();
+    const active = accountView.accounts.find(row => row.providerId === providerId && row.active);
+    assert.ok(active);
+    await accounts.remove(active.id, accountView.revision);
+    assert.equal((await accounts.list()).accounts.filter(row => row.providerId === providerId).length, 0);
     assert.equal((await configuration(root)).available.filter(item => item.provider === providerId).length, 0);
   } finally {
     await logins.close();

@@ -49,11 +49,11 @@ export function SessionAccountUsage({ scope }: { scope?: Scope }) {
       aria-haspopup="dialog" aria-expanded={open} data-tooltip={`${title}；点击查看详情`}
       onClick={event => setOpened(open ? undefined : { identity: value.identity, trigger: event.currentTarget })}><Icon name="chart-pie" /></button>
     {open && opened && <MetricDetail trigger={opened.trigger} title="套餐用量" subtitle={`${source} · ${value.account.label}`} className="session-account-usage-detail" onClose={() => setOpened(undefined)}
-      footer={<a href="/model-accounts.html" target="_blank" rel="noopener noreferrer">管理账号与刷新官方额度</a>}>
+      footer={<a href={`/model-config.html?provider=${encodeURIComponent(value.providerId)}`} target="_blank" rel="noopener noreferrer">管理账号与刷新官方额度</a>}>
       <p className="metric-note">{value.providerId} · {email && <span title={value.usage.account?.email ? "来自官方额度信息" : "来自授权信息，仅供账号区分"}>{email} · </span>}
         {value.source === "execution" ? "按本次执行固定的认证槽显示，不跟随后续全局切号。" : "会话未执行，显示所选模型下次执行的默认账号；不是上次调用的账号。"}</p>
       <ProviderUsage providerId={value.providerId} revision={value.identity} accountId={value.account.id} cached={value.usage} accountMetadata={value.account} progressMode="remaining" />
-      <p className="metric-note">仅展示已保存的官方查询记录，不代表本会话的消耗或费用。打开此面板不会发起额度查询或刷新认证；需要新数据时可在多账号管理中刷新。</p>
+      <p className="metric-note">仅展示已保存的官方查询记录，不代表本会话的消耗或费用。打开此面板不会发起额度查询或刷新认证；需要新数据时可在模型服务的账号页刷新。</p>
     </MetricDetail>}
   </>;
 }

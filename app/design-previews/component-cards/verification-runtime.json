@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "scope": "Design only; no real updates or installation",
+  "checks": [
+    "four top-level cards",
+    "unified runtime details",
+    "optional CLI Pi mock installation",
+    "update check mock",
+    "responsive no overflow 320–1120"
+  ],
+  "errors": []
+}

@@ -135,6 +135,7 @@ pub(crate) fn scan(root: &Path, shared_pi: Option<PathBuf>, path_dirs: Vec<PathB
         ("setup", "首次安装文件", "可能包含安装包、解压目录及未结束任务的归属记录；不能把整个目录视为可删除缓存。", vec![(root.join("setup"), "安装包、临时运行文件与任务记录")]),
         ("updates", "更新与恢复文件", "恢复备份和待核实任务可能仍在使用这些文件；清理前需要检查维护事务。", vec![(root.join("updates"), "更新下载与维护记录")]),
         ("opencli", "OpenCLI", "包含托管版本及旧版本；外部 npm 安装和浏览器扩展另行管理。", vec![(root.join("integrations/opencli.json"), "工具配置"), (root.join("integrations/opencli"), "程序与旧版本")]),
+        ("ffmpeg", "FFmpeg 与 FFprobe", "本地媒体预处理双程序；视频、帧图与技能独立保留。", vec![(root.join("integrations/ffmpeg/config.json"), "工具配置"), (root.join("integrations/ffmpeg"), "双程序、旧版本与专属环境"), (root.join("cache/ffmpeg-unavailable"), "损坏安装的命令诊断缓存")]),
         ("rtk", "RTK", "程序、过滤设置、效果记录和保留原文需分别选择清理范围。", vec![(root.join("integrations/rtk/config.json"), "工具配置"), (root.join("integrations/rtk"), "程序、统计与原文")]),
         ("rea", "REA 与分析引擎", "主程序、各引擎和手动下载包是独立项目；关闭 Skill/MCP 接入不会删除包内代码。", vec![(root.join("integrations/rea/config.json"), "工具配置"), (root.join("integrations/rea/versions"), "主程序与旧版本"), (root.join("integrations/rea/engines"), "托管分析引擎"), (root.join("integrations/rea/downloads"), "手动安装下载包")]),
         ("model-proxy", "模型代理组件", "内核、导入组件、运行文件与订阅配置分开管理；运行目录存在不代表进程已经退出。", vec![(root.join("integrations/model-proxy/config.json"), "代理配置"), (root.join("integrations/model-proxy/versions"), "Xray、mihomo 与旧版本"), (root.join("integrations/model-proxy/importer"), "导入组件与下载包"), (root.join("integrations/model-proxy/runs"), "线路运行文件")]),
@@ -146,7 +147,7 @@ pub(crate) fn scan(root: &Path, shared_pi: Option<PathBuf>, path_dirs: Vec<PathB
         if path != root.join("pi") { items.push(item("shared-pi", "共享 Pi 目录", "来自 AXIOM_PI_DIR；可能与终端 Pi 或其他应用共享。本次不读取配置正文。", vec![(path, "共享配置与资源")], &mut budget)); }
     }
     if let Some(path) = executable { items.push(item("client", "桌面客户端", "这里只检查当前可执行文件；客户端完整安装包和系统注册应由系统卸载器处理。", vec![(path, "当前桌面程序")], &mut budget)); }
-    let commands = ["pi", "node", "npm", "tailscale", "opencli", "rtk", "java", "jadx", "ghidra", "wasm-decompile"];
+    let commands = ["pi", "node", "npm", "tailscale", "opencli", "rtk", "ffmpeg", "ffprobe", "java", "jadx", "ghidra", "wasm-decompile"];
     let mut seen = HashSet::new();
     let mut command_locations = vec![];
     let mut path_incomplete = path_dirs.len() > MAX_PATH_DIRS;

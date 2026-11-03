@@ -45,6 +45,9 @@ import type { StopSource } from "../shared/tasks.js";
 import type { WorkerInput } from "./agent-worker.js";
 import { AgentViews } from "./agents/views.js";
 import { AgentRuns } from "./agents/runs.js";
+import { WebReadHost } from "./web-access/rpc.js";
+import { WebSearchHost } from "./web-access/search-rpc.js";
+import { WebSearchService } from "./web-access/search-service.js";
 import { PersistedInputCursor } from "./agents/persisted-inputs.js";
 import { Compressions } from "./compressions.js";
 import { skillsInput } from "../shared/skills.js";
@@ -62,6 +65,8 @@ export class Agents {
   readonly memories: Memories;
   readonly titles: SessionTitles;
   readonly continuations: MemoryContinuations;
+  private readonly web: WebReadHost;
+  private readonly search: WebSearchHost;
   private memoryQueries = new Map<string, { scope: Scope; controller: AbortController }>();
   readonly compressions: Compressions;
   private readonly views: AgentViews;
@@ -227,6 +232,8 @@ export class Agents {
     await Promise.all([this.runs.stopProviders(providers, confirmed), ...starts.map(start => start.done)]);
   }
   async close() {
+    this.web.close();
+    this.search.close();
     this.views.closeWindows();
     const starts = [...this.starts.values()];
     for (const start of starts) start.controller.abort();
@@ -262,10 +269,20 @@ export class Agents {
     });
     this.views = new AgentViews(store, publish, observed);
     this.runs = new AgentRuns(store, this.views, publish, this.pool);
+    this.web = new WebReadHost(owner => this.runs.webLease(owner, owner.runId),
+      (owner, reply) => { this.signal(owner, owner.runId, reply); });
+    this.search = new WebSearchHost(owner => this.runs.webLease(owner, owner.runId),
+      (owner, reply) => { this.signal(owner, owner.runId, reply); }, new WebSearchService(store.root));
+    this.runs.onEnding = (scope, run) => {
+      this.web.end({ ...scope, runId: run.id });
+      this.search.end({ ...scope, runId: run.id });
+    };
     this.compressions = new Compressions(this);
     this.continuations = new MemoryContinuations(this);
     this.reloads = new SessionReloads(this);
     this.runs.onEvent = (scope, run, event) => {
+      if (this.web.handle({ ...scope, runId: run.id }, event)) return;
+      if (this.search.handle({ ...scope, runId: run.id }, event)) return;
       if (event.type === "provider_request") this.titles.request(scope, run);
       if (event.type === "message") this.titles.message(scope, run, event.message);
       this.reloads.event(scope, run.id, event);

@@ -57,6 +57,7 @@ import { ModelProxyService } from "./integrations/model-proxy.js";
 import { closeModelNetworks } from "./model-network.js";
 import { ReaService, type ReaDependencies } from "./integrations/rea.js";
 import { RtkService, type RtkDependencies } from "./integrations/rtk.js";
+import { FfmpegService, type FfmpegDependencies } from "./integrations/ffmpeg.js";
 import { OpenCliService, type OpenCliExecute } from "./integrations/opencli.js";
 import { compressionPreferencesScope } from "../shared/compression.js";
 import { taskPreferencesScope } from "../shared/tasks.js";
@@ -71,7 +72,7 @@ import {
 } from "../shared/protocol.js";
 
 export async function startServer(
-  options: { usageSidecar?: UsageSidecarOptions; backendUpdates?: BackendUpdateOptions; rea?: ReaDependencies; rtk?: RtkDependencies; root?: string; port?: number; dev?: boolean; openMemoryFile?: OpenMemoryFile; pickFolder?: PickFolder; pickPaths?: PickPaths; pickResources?: PickPaths; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string; openExtension?: (target: "store" | "download") => Promise<void>; runtime?: import("./integrations/managed-node.js").ManagedNodeProvider } } = {},
+  options: { usageSidecar?: UsageSidecarOptions; backendUpdates?: BackendUpdateOptions; rea?: ReaDependencies; rtk?: RtkDependencies; ffmpeg?: FfmpegDependencies; root?: string; port?: number; dev?: boolean; openMemoryFile?: OpenMemoryFile; pickFolder?: PickFolder; pickPaths?: PickPaths; pickResources?: PickPaths; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string; openExtension?: (target: "store" | "download") => Promise<void>; runtime?: import("./integrations/managed-node.js").ManagedNodeProvider } } = {},
 ) {
   let remoteAccess: RemoteAccess | undefined;
   const store = new Store(options.root ?? dataRoot());
@@ -158,6 +159,7 @@ export async function startServer(
     if (scope === "builtin-tools:opencli") return opencli.snapshot();
     if (scope === "builtin-tools:rea") return rea.snapshot();
     if (scope === "builtin-tools:rtk") return rtk.snapshot();
+    if (scope === "builtin-tools:ffmpeg") return ffmpeg.snapshot();
     if (scope === "builtin-tools:model-proxy") return modelProxy.snapshot();
     if (scope === "capability-preferences") return { revision: agents.capabilities.preferences().revision };
     if (scope === "authentication") return null;
@@ -260,10 +262,11 @@ export async function startServer(
     }, 100);
   };
   let invalidateTaskWindows: ((changed: string) => void) | undefined;
+  let taskWindowNeedsRefresh: ((key: string, changed: string) => boolean) | undefined;
   const publish = (scope: string, data?: unknown, accountingUpdate = false) => {
     invalidateTaskWindows?.(scope);
     for (const key of taskWindowInvalidations(scope, () => [...subscriptions.values()].flatMap(scopes => [...scopes])))
-      publish(key, { revision: seq + 1 });
+      if (!taskWindowNeedsRefresh || taskWindowNeedsRefresh(key, scope)) publish(key, { revision: seq + 1 });
     // Explicit memory charges use the same owner routing as transcript and task changes.
     if (scope.startsWith("costs:") && !accountingUpdate) { scheduleCosts(scope.split(":")[1]); return; }
     if (scope.startsWith("sessions:")) attention?.observe(scope.slice("sessions:".length));
@@ -334,12 +337,14 @@ export async function startServer(
   // Component mutations never reserve session admission or retire Agent workers.
   const rea = new ReaService(store.root, () => publish("builtin-tools:rea"), options.rea);
   const rtk = new RtkService(store.root, () => publish("builtin-tools:rtk"), options.rtk);
+  const ffmpeg = new FfmpegService(store.root, () => publish("builtin-tools:ffmpeg"), options.ffmpeg);
   const opencli = new OpenCliService(store.root, () => publish("builtin-tools:opencli"), options.openCli?.execute, options.openCli?.locateNpm, options.openCli?.openExtension, undefined, options.openCli?.runtime);
   agents = new Agents(store, models, publish, options.openMemoryFile, (scope) => receivers(scope).length > 0);
   const resources = new Resources(store, models.dir, () => { publish("resources"); publish("capability-preferences"); }, async () => {});
   const skillFiles = new SkillFiles(agents.capabilities, (directory, signal) => fileManager.open(directory, signal), options.openMemoryFile);
   const tasks = new Tasks(agents);
   invalidateTaskWindows = changed => tasks.invalidateWindows(changed);
+  taskWindowNeedsRefresh = (key, changed) => tasks.windowNeedsRefresh(key, changed);
   const recovery = new ServiceRecoveryCoordinator(agents, tasks);
   attention = new SessionAttention(store, publish);
   store.beforeArchiveWorkspace = (workspaceId) => {
@@ -383,6 +388,9 @@ export async function startServer(
     }
   };
   models.beforeLogout = async (providers, confirmed) => {
+    // Preflight every execution kind before the first stop or cache invalidation.
+    agents.memories.runner?.checkProviders?.(providers, confirmed);
+    await tasks.stopProviders(providers, confirmed, true);
     await agents.memories.runner?.stopProviders?.(providers, confirmed);
     await tasks.stopProviders(providers, confirmed);
   };
@@ -544,6 +552,8 @@ export async function startServer(
           data = c.op === "resources.get" || c.op === "resources.detail" ? await resources.command(c) : await store.external(c, () => resources.command(c));
         } else if (c.op.startsWith("rea.")) {
           data = ["rea.get", "rea.refresh"].includes(c.op) ? await rea.command(c) : await store.external(c, () => rea.command(c));
+        } else if (c.op.startsWith("ffmpeg.")) {
+          data = c.op === "ffmpeg.get" ? await ffmpeg.command(c) : await store.external(c, () => ffmpeg.command(c));
         } else if (c.op.startsWith("rtk.")) {
           data = ["rtk.get", "rtk.stats", "rtk.refresh"].includes(c.op) ? await rtk.command(c) : await store.external(c, () => rtk.command(c));
         } else if (c.op.startsWith("modelProxy.")) {
@@ -621,6 +631,13 @@ export async function startServer(
           else if (c.op === "accounts.activate") {
             data = await store.external(c, () => modelAccounts.activate(c.params!.accountId, c.params!.revision));
             await refreshConfiguration();
+          } else if (c.op === "accounts.rename") {
+            data = await store.external(c, () => modelAccounts.rename(c.params!.accountId, c.params!.label, c.params!.revision));
+            await refreshConfiguration();
+          } else if (c.op === "accounts.remove") {
+            try {
+              data = await store.external(c, () => modelAccounts.remove(c.params!.accountId, c.params!.revision, c.params!.replacementId, c.params!.confirmStop === true));
+            } finally { await refreshConfiguration().catch(() => {}); }
           } else if (c.op === "accounts.usage") {
             // The connection already aborts all registered reads on close; avoid one
             // extra socket listener per visible card and honor explicit read.cancel.
@@ -1125,6 +1142,7 @@ export async function startServer(
       await opencli.close();
       await rea.close();
       await rtk.close();
+      await ffmpeg.close();
       await Promise.all([openDialog.close(), fileManager.close(), terminal.close()]);
       for (const ws of sockets.clients) {
         logins.disconnect(ws);

@@ -1,0 +1,2 @@
+# 添加两模型
+用户明确授权。使用 catalog-01 的真实目录条目，仅追加 claude-opus-5.5、claude-sonnet-5.5，完整 configuration.get 草稿经正常 configuration.save 持久化（最多1次 save，无目录/模型调用），保留原有 deepseek 与其他供应商。add-models.claim wx，任何结果不重复。45秒上限、socket关闭；前后 RAM 核 settings、账号索引、其他供应商及代理不变，save后再次get核模型存在。不改默认模型或账号，不备份/记录敏感配置；失败只记固定分类。该case为正常配置写入，不是模型实发或CLI对齐。

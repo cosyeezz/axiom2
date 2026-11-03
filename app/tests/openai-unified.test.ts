@@ -11,6 +11,8 @@ import { modelDisplay } from "../src/shared/model-display.js";
 import { Logins } from "../src/server/auth.js";
 import { ModelService } from "../src/server/model-service.js";
 import { fixtureLoginNetwork } from "./model-network-fixture.js";
+import { ModelAccountService } from "../src/server/model-accounts.js";
+import { accountDirectory } from "../src/server/model-account-storage.js";
 
 const user = (content: string): Message => ({ role: "user", content, timestamp: 1 });
 // Invented JWT-format fixture, never a real token or account.
@@ -62,7 +64,7 @@ test("OpenAI keeps native Codex identity, OAuth and catalog without migrating di
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
-test("default OpenAI OAuth saves only the main Codex credential through the existing login flow", async t => {
+test("default OpenAI OAuth appends a Codex account without replacing either legacy credential", async t => {
   const f = fixture(), previous = process.env.AXIOM_PI_DIR; process.env.AXIOM_PI_DIR = f.dir;
   const service = new ModelService(f.root, null), runtime = await service.runtime();
   const native = runtime.getProvider(openAIProviderId)!;
@@ -82,8 +84,12 @@ test("default OpenAI OAuth saves only the main Codex credential through the exis
     logins.answer(owner, login.id, prompt.id, "fixture-code");
     for (let n = 0; service.authActive && n < 100; n++) await new Promise(resolve => setTimeout(resolve, 10));
     assert.equal(logins.get(owner, login.id).state.status, "completed");
-    const auth = JSON.parse(readFileSync(f.options.authPath, "utf8"));
-    assert.equal(auth[openAIProviderId].access, access); assert.equal(auth.openai.key, "FIXTURE_LEGACY_KEY");
+    assert.equal(readFileSync(f.options.authPath, "utf8"), f.original);
+    const list = await new ModelAccountService(service).list();
+    const appended = list.accounts.find(account => account.providerId === openAIProviderId && !account.legacy)!;
+    assert.ok(appended); assert.equal(appended.active, false);
+    const auth = JSON.parse(readFileSync(join(accountDirectory(service.dir, appended.id), "auth.json"), "utf8"));
+    assert.equal(auth[openAIProviderId].access, access);
     assert.equal(existsSync(join(f.root, "model-usage")), false);
   } finally { await logins.close(); if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous; rmSync(f.root, { recursive: true, force: true }); }
 });

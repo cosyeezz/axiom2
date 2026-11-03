@@ -95,6 +95,39 @@ test("Kiro off does not inject Claude controls or override literal user tags; GP
   assert.equal(result.providerThinkingLevel, "none");
 });
 
+test("Sonnet SDK and Agent default or off report actual high effort without claiming disabled thinking", async () => {
+  const target = model("claude-sonnet-5.5");
+  const fetch: typeof globalThis.fetch = async (url, init) => {
+    assert.equal(String(url), "https://runtime.us-east-1.kiro.dev/v1/responses");
+    const body = JSON.parse(String(init?.body));
+    assert.deepEqual(body.reasoning, { effort: "high" });
+    assert.doesNotMatch(JSON.stringify(body.input), /thinking_mode|thinking_effort/);
+    const item = { id: "message-fixture", type: "message", role: "assistant", content: [{ type: "output_text", text: "ok" }] };
+    const events = [{ type: "response.output_item.added", output_index: 0, item: { ...item, content: [] } },
+      { type: "response.output_text.delta", output_index: 0, item_id: item.id, content_index: 0, delta: "ok" },
+      { type: "response.output_text.done", output_index: 0, item_id: item.id, content_index: 0, text: "ok" },
+      { type: "response.output_item.done", output_index: 0, item },
+      { type: "response.completed", response: { id: "response-fixture", model: target.id, status: "completed", output: [item] } }];
+    return new Response(events.map(e => `data: ${JSON.stringify(e)}\n\n`).join(""), { headers: { "content-type": "text/event-stream" } });
+  };
+  const bare = await run(target, {}, context(), fetch);
+  assert.equal(bare.result.stopReason, "stop"); assert.equal(bare.result.providerThinkingLevel, "high");
+  for (const explicitOff of [false, true]) {
+    const models = await setup(); let calls = 0;
+    const agent = new Agent({ initialState: { model: target, ...(explicitOff ? { thinkingLevel: "off" as const } : {}) },
+      streamFn: (m, c, options) => {
+        calls++; assert.ok(Object.hasOwn(options ?? {}, "reasoning")); assert.equal(options?.reasoning, undefined);
+        return models.streamSimple(m, c, { ...options, fetch });
+      } });
+    await agent.prompt("fixture");
+    const last = agent.state.messages.at(-1)!; assert.equal(calls, 1); assert.equal(last.role, "assistant");
+    if (last.role === "assistant") {
+      assert.equal(last.stopReason, "stop", last.errorMessage); assert.equal(last.providerThinkingLevel, "high");
+      assert.ok(last.diagnostics?.some(d => d.type === "kiro-thinking-off-unavailable"));
+    }
+  }
+});
+
 test("Kiro GPT profiles use reasoning.effort, never Claude output_config or XML budget tags", async () => {
   for (const id of ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]) {
     for (const reasoning of ["low", "medium", "high", "xhigh", "max"] as const) {
@@ -112,6 +145,9 @@ test("Kiro rejects unsupported grades and invalid budgets before fetch, never si
     [model(), { reasoning: "minimal" }], [model(), { reasoning: "xhigh" }], [model(), { reasoning: "extreme" }],
     [model("claude-sonnet-4.6"), { reasoning: "max" }], [model("claude-sonnet-4.5"), { reasoning: "max" }],
     [model("unknown"), { reasoning: "high" }], [model(), { reasoning: "high", thinkingBudgets: { high: 20000 } }],
+    [model("claude-sonnet-5.5"), { thinkingBudgets: { high: 20000 } }],
+    [model("claude-sonnet-5.5"), { reasoning: undefined, thinkingBudgets: { high: 20000 } }],
+    [model("claude-sonnet-5.5"), { reasoning: "high", thinkingBudgets: { high: 20000 } }],
     ...[null, [], 1000, { high: NaN }, { high: Infinity }, { high: 0 }, { high: -1 }, { high: 1023 }, { high: 24577 }, { high: 1024.5 }, { high: "20000" }, { xhigh: 20000 }].map(thinkingBudgets => [model("claude-sonnet-4.5"), { reasoning: "high", thinkingBudgets }]),
   ] as [Model<"kiro-chat">, SimpleStreamOptions][];
   for (const [target, options] of invalid) {

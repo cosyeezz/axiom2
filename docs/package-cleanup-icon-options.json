@@ -1,0 +1,1101 @@
+{
+  "generatedAt": "2026-10-29T13:33:48.427Z",
+  "purpose": "Clear registered installer cache, not uninstall components",
+  "source": "Iconify public API and icon-sets.iconify.design",
+  "count": 50,
+  "libraries": 14,
+  "items": [
+    {
+      "code": "P-01",
+      "id": "lucide:package-minus",
+      "prefix": "lucide",
+      "name": "package-minus",
+      "group": "安装包与归档",
+      "sha256": "c94034eb172c58c173085bc6fbbc0186e76c4b40c297743920b71c209ac61a36",
+      "collection": "Lucide",
+      "author": {
+        "name": "Lucide Contributors",
+        "url": "https://github.com/lucide-icons/lucide"
+      },
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/lucide/package-minus/",
+      "licenseFile": "component-icon-options-licenses/lucide.txt",
+      "licenseSha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+      "note": ""
+    },
+    {
+      "code": "P-02",
+      "id": "lucide:package-x",
+      "prefix": "lucide",
+      "name": "package-x",
+      "group": "安装包与归档",
+      "sha256": "931639771fc3db2bd26ca4d92eb18e2c4c8e70da4c70cc9c64760a322d56b517",
+      "collection": "Lucide",
+      "author": {
+        "name": "Lucide Contributors",
+        "url": "https://github.com/lucide-icons/lucide"
+      },
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/lucide/package-x/",
+      "licenseFile": "component-icon-options-licenses/lucide.txt",
+      "licenseSha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+      "note": ""
+    },
+    {
+      "code": "P-03",
+      "id": "lucide:archive-x",
+      "prefix": "lucide",
+      "name": "archive-x",
+      "group": "安装包与归档",
+      "sha256": "8e2d5226431b416aae7e3b4817f22754e22d283916b61133ffdf4c060aaa992a",
+      "collection": "Lucide",
+      "author": {
+        "name": "Lucide Contributors",
+        "url": "https://github.com/lucide-icons/lucide"
+      },
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/lucide/archive-x/",
+      "licenseFile": "component-icon-options-licenses/lucide.txt",
+      "licenseSha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+      "note": ""
+    },
+    {
+      "code": "P-04",
+      "id": "mdi:archive-minus-outline",
+      "prefix": "mdi",
+      "name": "archive-minus-outline",
+      "group": "安装包与归档",
+      "sha256": "eb73da5e14d1609691b36eb1967411e9c1c31370f3410e1adfe55a89bb6e4521",
+      "collection": "Material Design Icons",
+      "author": {
+        "name": "Pictogrammers",
+        "url": "https://github.com/Templarian/MaterialDesign"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/Templarian/MaterialDesign/blob/master/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/mdi/archive-minus-outline/",
+      "licenseFile": "component-icon-options-licenses/mdi.txt",
+      "licenseSha256": "3bae6305bcaa6d10219b999f65c342034c2d40b1c0e8567fa08605e73ccba829",
+      "note": ""
+    },
+    {
+      "code": "P-05",
+      "id": "mdi:archive-remove-outline",
+      "prefix": "mdi",
+      "name": "archive-remove-outline",
+      "group": "安装包与归档",
+      "sha256": "e2d768327fec08ba5ceede7a9b6ab2b08c4f681c4211f0cf383eaa60dbb0e43e",
+      "collection": "Material Design Icons",
+      "author": {
+        "name": "Pictogrammers",
+        "url": "https://github.com/Templarian/MaterialDesign"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/Templarian/MaterialDesign/blob/master/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/mdi/archive-remove-outline/",
+      "licenseFile": "component-icon-options-licenses/mdi.txt",
+      "licenseSha256": "3bae6305bcaa6d10219b999f65c342034c2d40b1c0e8567fa08605e73ccba829",
+      "note": ""
+    },
+    {
+      "code": "P-06",
+      "id": "lucide:broom",
+      "prefix": "lucide",
+      "name": "broom",
+      "group": "清扫与释放缓存",
+      "sha256": "a308245d1fad54d991963667680121d4753af0e636d6fb488d71098b461b64e8",
+      "collection": "Lucide",
+      "author": {
+        "name": "Lucide Contributors",
+        "url": "https://github.com/lucide-icons/lucide"
+      },
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/lucide/broom/",
+      "licenseFile": "component-icon-options-licenses/lucide.txt",
+      "licenseSha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+      "note": ""
+    },
+    {
+      "code": "P-07",
+      "id": "lucide:broom-sparkles",
+      "prefix": "lucide",
+      "name": "broom-sparkles",
+      "group": "清扫与释放缓存",
+      "sha256": "ee4806410ab3796b2819d378864b3d3130f2ead70ab602a32c9bac20ff095f4a",
+      "collection": "Lucide",
+      "author": {
+        "name": "Lucide Contributors",
+        "url": "https://github.com/lucide-icons/lucide"
+      },
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/lucide/broom-sparkles/",
+      "licenseFile": "component-icon-options-licenses/lucide.txt",
+      "licenseSha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+      "note": ""
+    },
+    {
+      "code": "P-08",
+      "id": "ph:broom",
+      "prefix": "ph",
+      "name": "broom",
+      "group": "清扫与释放缓存",
+      "sha256": "f83e1a2c23df4d27ceae76b15cd687ba675593cc77199dbbdbcd27c3fe98aaab",
+      "collection": "Phosphor",
+      "author": {
+        "name": "Phosphor Icons",
+        "url": "https://github.com/phosphor-icons/core"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/phosphor-icons/core/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/ph/broom/",
+      "licenseFile": "component-icon-options-licenses/ph.txt",
+      "licenseSha256": "b5b1f1da112d18ea2147decfd48ddc1bf2b5aeb6c265381579340e95b15a2bb2",
+      "note": ""
+    },
+    {
+      "code": "P-09",
+      "id": "mingcute:broom-line",
+      "prefix": "mingcute",
+      "name": "broom-line",
+      "group": "清扫与释放缓存",
+      "sha256": "56c5612ff51682c00dae166ee59d7fa26f8c410cbfc81aabbec038e8f43d3925",
+      "collection": "MingCute Icon",
+      "author": {
+        "name": "MingCute Design",
+        "url": "https://github.com/Richard9394/MingCute"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/Richard9394/MingCute/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/mingcute/broom-line/",
+      "licenseFile": "component-icon-options-licenses/mingcute.txt",
+      "licenseSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "note": ""
+    },
+    {
+      "code": "P-10",
+      "id": "hugeicons:brush-cleaning",
+      "prefix": "hugeicons",
+      "name": "brush-cleaning",
+      "group": "清扫与释放缓存",
+      "sha256": "17bbaba73f7057e6f092e89f407a25a0df7b19d2ace35a39ba55a445768e45c2",
+      "collection": "Huge Icons",
+      "author": {
+        "name": "Hugeicons",
+        "url": "https://icon-sets.iconify.design/icon-sets/hugeicons/"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT"
+      },
+      "source": "https://icon-sets.iconify.design/hugeicons/brush-cleaning/",
+      "licenseFile": "component-icon-options-licenses/hugeicons.txt",
+      "licenseSha256": "1658d8213209df7b9b86dfc05d724ede48d00dbc27abc15976ec7adec9601cde",
+      "note": ""
+    },
+    {
+      "code": "P-11",
+      "id": "hugeicons:clean",
+      "prefix": "hugeicons",
+      "name": "clean",
+      "group": "清扫与释放缓存",
+      "sha256": "0f407dd1969e0844d38fc53ed298ddee0d415771836d8850cf7d25530d0927fb",
+      "collection": "Huge Icons",
+      "author": {
+        "name": "Hugeicons",
+        "url": "https://icon-sets.iconify.design/icon-sets/hugeicons/"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT"
+      },
+      "source": "https://icon-sets.iconify.design/hugeicons/clean/",
+      "licenseFile": "component-icon-options-licenses/hugeicons.txt",
+      "licenseSha256": "1658d8213209df7b9b86dfc05d724ede48d00dbc27abc15976ec7adec9601cde",
+      "note": ""
+    },
+    {
+      "code": "P-12",
+      "id": "hugeicons:cleaning-bucket",
+      "prefix": "hugeicons",
+      "name": "cleaning-bucket",
+      "group": "清扫与释放缓存",
+      "sha256": "e1409151d7185d9e4128473633fb0c251e2c7a414a6a63f3f83f394ae1184505",
+      "collection": "Huge Icons",
+      "author": {
+        "name": "Hugeicons",
+        "url": "https://icon-sets.iconify.design/icon-sets/hugeicons/"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT"
+      },
+      "source": "https://icon-sets.iconify.design/hugeicons/cleaning-bucket/",
+      "licenseFile": "component-icon-options-licenses/hugeicons.txt",
+      "licenseSha256": "1658d8213209df7b9b86dfc05d724ede48d00dbc27abc15976ec7adec9601cde",
+      "note": ""
+    },
+    {
+      "code": "P-13",
+      "id": "carbon:clean",
+      "prefix": "carbon",
+      "name": "clean",
+      "group": "清扫与释放缓存",
+      "sha256": "c8fb571bac2c5b52ed003156ef96ec69035af7a61a07610b4c1077eb37671e7f",
+      "collection": "Carbon",
+      "author": {
+        "name": "IBM",
+        "url": "https://github.com/carbon-design-system/carbon/tree/main/packages/icons"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0"
+      },
+      "source": "https://icon-sets.iconify.design/carbon/clean/",
+      "licenseFile": "component-icon-options-licenses/carbon.txt",
+      "licenseSha256": "037b3e9eaff51477b270e9082f54b99175e4dd893548654f00995045b68294b8",
+      "note": ""
+    },
+    {
+      "code": "P-14",
+      "id": "solar:broom-linear",
+      "prefix": "solar",
+      "name": "broom-linear",
+      "group": "清扫与释放缓存",
+      "sha256": "5f5c5e8db3503e16787274460f2883df9f60a6bcb1f9160ddfdf6b4ccb9e0a4d",
+      "collection": "Solar",
+      "author": {
+        "name": "480 Design",
+        "url": "https://www.figma.com/community/file/1166831539721848736"
+      },
+      "license": {
+        "title": "CC BY 4.0",
+        "spdx": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/"
+      },
+      "source": "https://icon-sets.iconify.design/solar/broom-linear/",
+      "licenseFile": "component-icon-options-licenses/solar.txt",
+      "licenseSha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+      "note": ""
+    },
+    {
+      "code": "P-15",
+      "id": "material-symbols:cleaning-services-outline",
+      "prefix": "material-symbols",
+      "name": "cleaning-services-outline",
+      "group": "清扫与释放缓存",
+      "sha256": "80eb6066b0cb6b264e1ce803486f550c492dd4ffef719165fa3697c598d9bae9",
+      "collection": "Material Symbols",
+      "author": {
+        "name": "Google",
+        "url": "https://github.com/google/material-design-icons"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/google/material-design-icons/blob/master/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/material-symbols/cleaning-services-outline/",
+      "licenseFile": "component-icon-options-licenses/material-symbols.txt",
+      "licenseSha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+      "note": ""
+    },
+    {
+      "code": "P-16",
+      "id": "material-symbols:cleaning-outline",
+      "prefix": "material-symbols",
+      "name": "cleaning-outline",
+      "group": "清扫与释放缓存",
+      "sha256": "dac50af606273e62a14230583626690f5fc737195dce0309bbe9227aa98399ba",
+      "collection": "Material Symbols",
+      "author": {
+        "name": "Google",
+        "url": "https://github.com/google/material-design-icons"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/google/material-design-icons/blob/master/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/material-symbols/cleaning-outline/",
+      "licenseFile": "component-icon-options-licenses/material-symbols.txt",
+      "licenseSha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+      "note": ""
+    },
+    {
+      "code": "P-17",
+      "id": "fluent:broom-24-regular",
+      "prefix": "fluent",
+      "name": "broom-24-regular",
+      "group": "清扫与释放缓存",
+      "sha256": "8a1ca7ef7b3fefd193ab185450c3bcd027a944fd910d682182045ab993245f89",
+      "collection": "Fluent UI System Icons",
+      "author": {
+        "name": "Microsoft Corporation",
+        "url": "https://github.com/microsoft/fluentui-system-icons"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/microsoft/fluentui-system-icons/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/fluent/broom-24-regular/",
+      "licenseFile": "component-icon-options-licenses/fluent.txt",
+      "licenseSha256": "69bc45dc42b9acb96a69823adbc6ae538374e3c0bde169b855b32c48eaaef52f",
+      "note": ""
+    },
+    {
+      "code": "P-18",
+      "id": "fluent:broom-sparkle-20-regular",
+      "prefix": "fluent",
+      "name": "broom-sparkle-20-regular",
+      "group": "清扫与释放缓存",
+      "sha256": "ff613036cd09d5747670b2b4b184d7d26b6fb41c0b3cae2cee43ac06c118d450",
+      "collection": "Fluent UI System Icons",
+      "author": {
+        "name": "Microsoft Corporation",
+        "url": "https://github.com/microsoft/fluentui-system-icons"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/microsoft/fluentui-system-icons/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/fluent/broom-sparkle-20-regular/",
+      "licenseFile": "component-icon-options-licenses/fluent.txt",
+      "licenseSha256": "69bc45dc42b9acb96a69823adbc6ae538374e3c0bde169b855b32c48eaaef52f",
+      "note": ""
+    },
+    {
+      "code": "P-19",
+      "id": "lucide:folder-minus",
+      "prefix": "lucide",
+      "name": "folder-minus",
+      "group": "缓存目录移除",
+      "sha256": "9bfc54823462f80fd90a505a73fef1055357f8ff5f6637d4ddcc19a00761febf",
+      "collection": "Lucide",
+      "author": {
+        "name": "Lucide Contributors",
+        "url": "https://github.com/lucide-icons/lucide"
+      },
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/lucide/folder-minus/",
+      "licenseFile": "component-icon-options-licenses/lucide.txt",
+      "licenseSha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+      "note": ""
+    },
+    {
+      "code": "P-20",
+      "id": "lucide:folder-x",
+      "prefix": "lucide",
+      "name": "folder-x",
+      "group": "缓存目录移除",
+      "sha256": "f73e6b558dee9d86cc999afcbbb0eaf2513ffdc0c9b482b6ae7ced21447a7255",
+      "collection": "Lucide",
+      "author": {
+        "name": "Lucide Contributors",
+        "url": "https://github.com/lucide-icons/lucide"
+      },
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/lucide/folder-x/",
+      "licenseFile": "component-icon-options-licenses/lucide.txt",
+      "licenseSha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+      "note": ""
+    },
+    {
+      "code": "P-21",
+      "id": "tabler:folder-minus",
+      "prefix": "tabler",
+      "name": "folder-minus",
+      "group": "缓存目录移除",
+      "sha256": "b1074d28e1196d4d9e21d6eabbd1b3c28db4c3c82b53227839cb323cbdfffc97",
+      "collection": "Tabler Icons",
+      "author": {
+        "name": "Paweł Kuna",
+        "url": "https://github.com/tabler/tabler-icons"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/tabler/folder-minus/",
+      "licenseFile": "component-icon-options-licenses/tabler.txt",
+      "licenseSha256": "b740a1d46122672da62833e97f7e7c8a13fa85cbc7445b584b297cc00dde93db",
+      "note": ""
+    },
+    {
+      "code": "P-22",
+      "id": "tabler:folder-x",
+      "prefix": "tabler",
+      "name": "folder-x",
+      "group": "缓存目录移除",
+      "sha256": "573baeef5322e05bda6f602401a5740e8d8a1a492255921f78275973e3db95d4",
+      "collection": "Tabler Icons",
+      "author": {
+        "name": "Paweł Kuna",
+        "url": "https://github.com/tabler/tabler-icons"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/tabler/folder-x/",
+      "licenseFile": "component-icon-options-licenses/tabler.txt",
+      "licenseSha256": "b740a1d46122672da62833e97f7e7c8a13fa85cbc7445b584b297cc00dde93db",
+      "note": ""
+    },
+    {
+      "code": "P-23",
+      "id": "ph:folder-minus",
+      "prefix": "ph",
+      "name": "folder-minus",
+      "group": "缓存目录移除",
+      "sha256": "5450b16bbd51f9eb37e890002632b61a0d21119f0ebd7a66cbfb06a78a8b23e1",
+      "collection": "Phosphor",
+      "author": {
+        "name": "Phosphor Icons",
+        "url": "https://github.com/phosphor-icons/core"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/phosphor-icons/core/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/ph/folder-minus/",
+      "licenseFile": "component-icon-options-licenses/ph.txt",
+      "licenseSha256": "b5b1f1da112d18ea2147decfd48ddc1bf2b5aeb6c265381579340e95b15a2bb2",
+      "note": ""
+    },
+    {
+      "code": "P-24",
+      "id": "ph:folder-simple-minus",
+      "prefix": "ph",
+      "name": "folder-simple-minus",
+      "group": "缓存目录移除",
+      "sha256": "9828385b264aa5914f603b9cdf86912d70d7a93052829e510609d34fe8925306",
+      "collection": "Phosphor",
+      "author": {
+        "name": "Phosphor Icons",
+        "url": "https://github.com/phosphor-icons/core"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/phosphor-icons/core/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/ph/folder-simple-minus/",
+      "licenseFile": "component-icon-options-licenses/ph.txt",
+      "licenseSha256": "b5b1f1da112d18ea2147decfd48ddc1bf2b5aeb6c265381579340e95b15a2bb2",
+      "note": ""
+    },
+    {
+      "code": "P-25",
+      "id": "mingcute:folder-minus-line",
+      "prefix": "mingcute",
+      "name": "folder-minus-line",
+      "group": "缓存目录移除",
+      "sha256": "676638c774210beca2f293a43280946e6549a795c490822997634c12284ee9c1",
+      "collection": "MingCute Icon",
+      "author": {
+        "name": "MingCute Design",
+        "url": "https://github.com/Richard9394/MingCute"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/Richard9394/MingCute/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/mingcute/folder-minus-line/",
+      "licenseFile": "component-icon-options-licenses/mingcute.txt",
+      "licenseSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "note": ""
+    },
+    {
+      "code": "P-26",
+      "id": "mingcute:folder-delete-line",
+      "prefix": "mingcute",
+      "name": "folder-delete-line",
+      "group": "缓存目录移除",
+      "sha256": "551fa11fadd2717f09811a3834bcb513461a7abe0606a658eaeda7017c904ff1",
+      "collection": "MingCute Icon",
+      "author": {
+        "name": "MingCute Design",
+        "url": "https://github.com/Richard9394/MingCute"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/Richard9394/MingCute/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/mingcute/folder-delete-line/",
+      "licenseFile": "component-icon-options-licenses/mingcute.txt",
+      "licenseSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "note": ""
+    },
+    {
+      "code": "P-27",
+      "id": "ri:folder-reduce-line",
+      "prefix": "ri",
+      "name": "folder-reduce-line",
+      "group": "缓存目录移除",
+      "sha256": "6e63e5ac433e6a4f24756689ba2e2b69b563bb386a6a34b7443ddea4d1313588",
+      "collection": "Remix Icon",
+      "author": {
+        "name": "Remix Design",
+        "url": "https://github.com/cyberalien/RemixIcon"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/cyberalien/RemixIcon/blob/master/License"
+      },
+      "source": "https://icon-sets.iconify.design/ri/folder-reduce-line/",
+      "licenseFile": "component-icon-options-licenses/ri.txt",
+      "licenseSha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "note": ""
+    },
+    {
+      "code": "P-28",
+      "id": "iconoir:folder-minus",
+      "prefix": "iconoir",
+      "name": "folder-minus",
+      "group": "缓存目录移除",
+      "sha256": "4659a36ff594fea393805c3a56acbc2f061febde26cbd0c6eeee41899fb6e25d",
+      "collection": "Iconoir",
+      "author": {
+        "name": "Luca Burgio",
+        "url": "https://github.com/iconoir-icons/iconoir"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/iconoir-icons/iconoir/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/iconoir/folder-minus/",
+      "licenseFile": "component-icon-options-licenses/iconoir.txt",
+      "licenseSha256": "869b60da1ada5b896d1f285c3c24ca193d612e308d1710a77a58f2f572eb4fa2",
+      "note": ""
+    },
+    {
+      "code": "P-29",
+      "id": "hugeicons:folder-minus",
+      "prefix": "hugeicons",
+      "name": "folder-minus",
+      "group": "缓存目录移除",
+      "sha256": "2b2f05540d629a403c0b3a2269a21ed014004d5b719acfba113a5d64a2de263b",
+      "collection": "Huge Icons",
+      "author": {
+        "name": "Hugeicons",
+        "url": "https://icon-sets.iconify.design/icon-sets/hugeicons/"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT"
+      },
+      "source": "https://icon-sets.iconify.design/hugeicons/folder-minus/",
+      "licenseFile": "component-icon-options-licenses/hugeicons.txt",
+      "licenseSha256": "1658d8213209df7b9b86dfc05d724ede48d00dbc27abc15976ec7adec9601cde",
+      "note": ""
+    },
+    {
+      "code": "P-30",
+      "id": "hugeicons:folder-remove",
+      "prefix": "hugeicons",
+      "name": "folder-remove",
+      "group": "缓存目录移除",
+      "sha256": "b87f03602f68c47229f15b68a47b6dc8dab980fa6fa875a22c9f128f6f4da939",
+      "collection": "Huge Icons",
+      "author": {
+        "name": "Hugeicons",
+        "url": "https://icon-sets.iconify.design/icon-sets/hugeicons/"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT"
+      },
+      "source": "https://icon-sets.iconify.design/hugeicons/folder-remove/",
+      "licenseFile": "component-icon-options-licenses/hugeicons.txt",
+      "licenseSha256": "1658d8213209df7b9b86dfc05d724ede48d00dbc27abc15976ec7adec9601cde",
+      "note": ""
+    },
+    {
+      "code": "P-31",
+      "id": "icon-park-outline:folder-minus",
+      "prefix": "icon-park-outline",
+      "name": "folder-minus",
+      "group": "缓存目录移除",
+      "sha256": "fc54b4eaa28578795d347a08e24e92b5b4d81fe3aa7872e0aff1adfb7cfed6c7",
+      "collection": "IconPark Outline",
+      "author": {
+        "name": "ByteDance",
+        "url": "https://github.com/bytedance/IconPark"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/bytedance/IconPark/blob/master/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/icon-park-outline/folder-minus/",
+      "licenseFile": "component-icon-options-licenses/icon-park-outline.txt",
+      "licenseSha256": "81268f00802b1a9cffae4df43f78c3a0809845e03fef3da68f26ad2e4c49681e",
+      "note": ""
+    },
+    {
+      "code": "P-32",
+      "id": "mdi:folder-minus-outline",
+      "prefix": "mdi",
+      "name": "folder-minus-outline",
+      "group": "缓存目录移除",
+      "sha256": "48d9821202e278be90b0fb2d1d85fcb1f55728ace6b138870cfd6e32cdd8dcb2",
+      "collection": "Material Design Icons",
+      "author": {
+        "name": "Pictogrammers",
+        "url": "https://github.com/Templarian/MaterialDesign"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/Templarian/MaterialDesign/blob/master/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/mdi/folder-minus-outline/",
+      "licenseFile": "component-icon-options-licenses/mdi.txt",
+      "licenseSha256": "3bae6305bcaa6d10219b999f65c342034c2d40b1c0e8567fa08605e73ccba829",
+      "note": ""
+    },
+    {
+      "code": "P-33",
+      "id": "mdi:folder-remove-outline",
+      "prefix": "mdi",
+      "name": "folder-remove-outline",
+      "group": "缓存目录移除",
+      "sha256": "16eb0b693e0c0bb785be945af49109b7a33b615df5318ad8c9f6c7bc9ab6ef89",
+      "collection": "Material Design Icons",
+      "author": {
+        "name": "Pictogrammers",
+        "url": "https://github.com/Templarian/MaterialDesign"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/Templarian/MaterialDesign/blob/master/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/mdi/folder-remove-outline/",
+      "licenseFile": "component-icon-options-licenses/mdi.txt",
+      "licenseSha256": "3bae6305bcaa6d10219b999f65c342034c2d40b1c0e8567fa08605e73ccba829",
+      "note": ""
+    },
+    {
+      "code": "P-34",
+      "id": "lucide:file-minus",
+      "prefix": "lucide",
+      "name": "file-minus",
+      "group": "缓存文件移除",
+      "sha256": "2fe021ccda39397dbc9b8c7c755be9ef817bd7a83235f723adaa1bd0fee03c18",
+      "collection": "Lucide",
+      "author": {
+        "name": "Lucide Contributors",
+        "url": "https://github.com/lucide-icons/lucide"
+      },
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/lucide/file-minus/",
+      "licenseFile": "component-icon-options-licenses/lucide.txt",
+      "licenseSha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+      "note": ""
+    },
+    {
+      "code": "P-35",
+      "id": "lucide:file-minus-corner",
+      "prefix": "lucide",
+      "name": "file-minus-corner",
+      "group": "缓存文件移除",
+      "sha256": "bb06e29f4586384198788307e1e051b2a3c0097297ae5b5219047792307c03dc",
+      "collection": "Lucide",
+      "author": {
+        "name": "Lucide Contributors",
+        "url": "https://github.com/lucide-icons/lucide"
+      },
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/lucide/file-minus-corner/",
+      "licenseFile": "component-icon-options-licenses/lucide.txt",
+      "licenseSha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+      "note": ""
+    },
+    {
+      "code": "P-36",
+      "id": "lucide:file-x",
+      "prefix": "lucide",
+      "name": "file-x",
+      "group": "缓存文件移除",
+      "sha256": "2473923a176886998f1618147f51c57b48da57dc661e0d9f14845fc908190b04",
+      "collection": "Lucide",
+      "author": {
+        "name": "Lucide Contributors",
+        "url": "https://github.com/lucide-icons/lucide"
+      },
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/lucide/file-x/",
+      "licenseFile": "component-icon-options-licenses/lucide.txt",
+      "licenseSha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+      "note": ""
+    },
+    {
+      "code": "P-37",
+      "id": "tabler:file-minus",
+      "prefix": "tabler",
+      "name": "file-minus",
+      "group": "缓存文件移除",
+      "sha256": "e4e69204be0a65157042f809d6d5d3d02be28e9cbbe75363c5980d67f742638e",
+      "collection": "Tabler Icons",
+      "author": {
+        "name": "Paweł Kuna",
+        "url": "https://github.com/tabler/tabler-icons"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/tabler/file-minus/",
+      "licenseFile": "component-icon-options-licenses/tabler.txt",
+      "licenseSha256": "b740a1d46122672da62833e97f7e7c8a13fa85cbc7445b584b297cc00dde93db",
+      "note": ""
+    },
+    {
+      "code": "P-38",
+      "id": "tabler:file-x",
+      "prefix": "tabler",
+      "name": "file-x",
+      "group": "缓存文件移除",
+      "sha256": "74c70e1627ae0c53de7c8d87a6ed9173009c5da2d38afee25f00f7dc33c14b37",
+      "collection": "Tabler Icons",
+      "author": {
+        "name": "Paweł Kuna",
+        "url": "https://github.com/tabler/tabler-icons"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/tabler/file-x/",
+      "licenseFile": "component-icon-options-licenses/tabler.txt",
+      "licenseSha256": "b740a1d46122672da62833e97f7e7c8a13fa85cbc7445b584b297cc00dde93db",
+      "note": ""
+    },
+    {
+      "code": "P-39",
+      "id": "ph:file-minus",
+      "prefix": "ph",
+      "name": "file-minus",
+      "group": "缓存文件移除",
+      "sha256": "b79bff58073d0110604ed5846681b651b923cfe55005b650dc249269fda37b18",
+      "collection": "Phosphor",
+      "author": {
+        "name": "Phosphor Icons",
+        "url": "https://github.com/phosphor-icons/core"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/phosphor-icons/core/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/ph/file-minus/",
+      "licenseFile": "component-icon-options-licenses/ph.txt",
+      "licenseSha256": "b5b1f1da112d18ea2147decfd48ddc1bf2b5aeb6c265381579340e95b15a2bb2",
+      "note": ""
+    },
+    {
+      "code": "P-40",
+      "id": "ph:file-x",
+      "prefix": "ph",
+      "name": "file-x",
+      "group": "缓存文件移除",
+      "sha256": "5b6a57186b4566969e4c6790f3d25b3a01af5f5b7a176ba3ce427a30522255f7",
+      "collection": "Phosphor",
+      "author": {
+        "name": "Phosphor Icons",
+        "url": "https://github.com/phosphor-icons/core"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/phosphor-icons/core/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/ph/file-x/",
+      "licenseFile": "component-icon-options-licenses/ph.txt",
+      "licenseSha256": "b5b1f1da112d18ea2147decfd48ddc1bf2b5aeb6c265381579340e95b15a2bb2",
+      "note": ""
+    },
+    {
+      "code": "P-41",
+      "id": "ri:file-reduce-line",
+      "prefix": "ri",
+      "name": "file-reduce-line",
+      "group": "缓存文件移除",
+      "sha256": "eb384428062927247b3e07fb08e03681c2527b2b843efe4df7f0708a676eac02",
+      "collection": "Remix Icon",
+      "author": {
+        "name": "Remix Design",
+        "url": "https://github.com/cyberalien/RemixIcon"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/cyberalien/RemixIcon/blob/master/License"
+      },
+      "source": "https://icon-sets.iconify.design/ri/file-reduce-line/",
+      "licenseFile": "component-icon-options-licenses/ri.txt",
+      "licenseSha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "note": ""
+    },
+    {
+      "code": "P-42",
+      "id": "ri:file-close-line",
+      "prefix": "ri",
+      "name": "file-close-line",
+      "group": "缓存文件移除",
+      "sha256": "b029dc1d051a25dcb30aa2ccfaae11ad10ca52017d62c72110c7b5711c4bdf2b",
+      "collection": "Remix Icon",
+      "author": {
+        "name": "Remix Design",
+        "url": "https://github.com/cyberalien/RemixIcon"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/cyberalien/RemixIcon/blob/master/License"
+      },
+      "source": "https://icon-sets.iconify.design/ri/file-close-line/",
+      "licenseFile": "component-icon-options-licenses/ri.txt",
+      "licenseSha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "note": "可能被理解为关闭文件，请结合清理文案判断。"
+    },
+    {
+      "code": "P-43",
+      "id": "iconoir:erase",
+      "prefix": "iconoir",
+      "name": "erase",
+      "group": "擦除临时内容",
+      "sha256": "d1a40f26cb3664d3de0287dcf439e1ca9665a050b8c15d553dcaf93d5209900f",
+      "collection": "Iconoir",
+      "author": {
+        "name": "Luca Burgio",
+        "url": "https://github.com/iconoir-icons/iconoir"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/iconoir-icons/iconoir/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/iconoir/erase/",
+      "licenseFile": "component-icon-options-licenses/iconoir.txt",
+      "licenseSha256": "869b60da1ada5b896d1f285c3c24ca193d612e308d1710a77a58f2f572eb4fa2",
+      "note": "橡皮擦也有编辑语义，需要明确安装包对象。"
+    },
+    {
+      "code": "P-44",
+      "id": "hugeicons:eraser-01",
+      "prefix": "hugeicons",
+      "name": "eraser-01",
+      "group": "擦除临时内容",
+      "sha256": "028f5784483e50814190f4a7c7067ea58cede1c90a9a7cc952fb3c44f2a921f1",
+      "collection": "Huge Icons",
+      "author": {
+        "name": "Hugeicons",
+        "url": "https://icon-sets.iconify.design/icon-sets/hugeicons/"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT"
+      },
+      "source": "https://icon-sets.iconify.design/hugeicons/eraser-01/",
+      "licenseFile": "component-icon-options-licenses/hugeicons.txt",
+      "licenseSha256": "1658d8213209df7b9b86dfc05d724ede48d00dbc27abc15976ec7adec9601cde",
+      "note": "橡皮擦也有编辑语义，需要明确安装包对象。"
+    },
+    {
+      "code": "P-45",
+      "id": "carbon:erase",
+      "prefix": "carbon",
+      "name": "erase",
+      "group": "擦除临时内容",
+      "sha256": "62cd933bbff67525b81edc3c4a3d1f567295dd7e48048f2b74c0fdbea59459c8",
+      "collection": "Carbon",
+      "author": {
+        "name": "IBM",
+        "url": "https://github.com/carbon-design-system/carbon/tree/main/packages/icons"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0"
+      },
+      "source": "https://icon-sets.iconify.design/carbon/erase/",
+      "licenseFile": "component-icon-options-licenses/carbon.txt",
+      "licenseSha256": "037b3e9eaff51477b270e9082f54b99175e4dd893548654f00995045b68294b8",
+      "note": "橡皮擦也有编辑语义，需要明确安装包对象。"
+    },
+    {
+      "code": "P-46",
+      "id": "solar:eraser-linear",
+      "prefix": "solar",
+      "name": "eraser-linear",
+      "group": "擦除临时内容",
+      "sha256": "6369c853313bff3d0ccf6ac41801692869dd2b65841f297ca8236062764e8911",
+      "collection": "Solar",
+      "author": {
+        "name": "480 Design",
+        "url": "https://www.figma.com/community/file/1166831539721848736"
+      },
+      "license": {
+        "title": "CC BY 4.0",
+        "spdx": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/"
+      },
+      "source": "https://icon-sets.iconify.design/solar/eraser-linear/",
+      "licenseFile": "component-icon-options-licenses/solar.txt",
+      "licenseSha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+      "note": "橡皮擦也有编辑语义，需要明确安装包对象。"
+    },
+    {
+      "code": "P-47",
+      "id": "icon-park-outline:erase",
+      "prefix": "icon-park-outline",
+      "name": "erase",
+      "group": "擦除临时内容",
+      "sha256": "afbef26ce756effbb3455dfd59da90dab742d3ee4a5efd3d96d1da273c6a942a",
+      "collection": "IconPark Outline",
+      "author": {
+        "name": "ByteDance",
+        "url": "https://github.com/bytedance/IconPark"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/bytedance/IconPark/blob/master/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/icon-park-outline/erase/",
+      "licenseFile": "component-icon-options-licenses/icon-park-outline.txt",
+      "licenseSha256": "81268f00802b1a9cffae4df43f78c3a0809845e03fef3da68f26ad2e4c49681e",
+      "note": "橡皮擦也有编辑语义，需要明确安装包对象。"
+    },
+    {
+      "code": "P-48",
+      "id": "fluent:eraser-24-regular",
+      "prefix": "fluent",
+      "name": "eraser-24-regular",
+      "group": "擦除临时内容",
+      "sha256": "73366c7c3630fc1d3d701354a30e6880a0d2a3236ec2f86a37a4a58e33f2ca4a",
+      "collection": "Fluent UI System Icons",
+      "author": {
+        "name": "Microsoft Corporation",
+        "url": "https://github.com/microsoft/fluentui-system-icons"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/microsoft/fluentui-system-icons/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/fluent/eraser-24-regular/",
+      "licenseFile": "component-icon-options-licenses/fluent.txt",
+      "licenseSha256": "69bc45dc42b9acb96a69823adbc6ae538374e3c0bde169b855b32c48eaaef52f",
+      "note": "橡皮擦也有编辑语义，需要明确安装包对象。"
+    },
+    {
+      "code": "P-49",
+      "id": "fluent:eraser-tool-24-regular",
+      "prefix": "fluent",
+      "name": "eraser-tool-24-regular",
+      "group": "擦除临时内容",
+      "sha256": "9191f32c40e303a911a2eebe1d1052243c568c5fb75d5901b0f66cf7d89ee54c",
+      "collection": "Fluent UI System Icons",
+      "author": {
+        "name": "Microsoft Corporation",
+        "url": "https://github.com/microsoft/fluentui-system-icons"
+      },
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/microsoft/fluentui-system-icons/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/fluent/eraser-tool-24-regular/",
+      "licenseFile": "component-icon-options-licenses/fluent.txt",
+      "licenseSha256": "69bc45dc42b9acb96a69823adbc6ae538374e3c0bde169b855b32c48eaaef52f",
+      "note": "橡皮擦也有编辑语义，需要明确安装包对象。"
+    },
+    {
+      "code": "P-50",
+      "id": "codicon:eraser",
+      "prefix": "codicon",
+      "name": "eraser",
+      "group": "擦除临时内容",
+      "sha256": "68803540ef6250a8ba2bb14682960cfc79f017dfa176f9f3a2ae0b34f0015e19",
+      "collection": "Codicons",
+      "author": {
+        "name": "Microsoft Corporation",
+        "url": "https://github.com/microsoft/vscode-codicons"
+      },
+      "license": {
+        "title": "CC BY 4.0",
+        "spdx": "CC-BY-4.0",
+        "url": "https://github.com/microsoft/vscode-codicons/blob/main/LICENSE"
+      },
+      "source": "https://icon-sets.iconify.design/codicon/eraser/",
+      "licenseFile": "component-icon-options-licenses/codicon.txt",
+      "licenseSha256": "af5e030844efddbc7ab00dcfea8b019703753d4d9f5172d727c533a492aec665",
+      "note": "橡皮擦也有编辑语义，需要明确安装包对象。"
+    }
+  ]
+}

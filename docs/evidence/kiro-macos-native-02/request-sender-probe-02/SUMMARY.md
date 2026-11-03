@@ -1,0 +1,18 @@
+# V3 selection02: retained failure, no collector observation
+
+The [experiment](EXPERIMENT.md) ran once. [Main exit](main.exit)1, [main stderr](main.stderr)0B. Its [manifest](results/manifest.json) deliberately says `selection_not_observed_no_retry`; no projection file was created. Do not rerun this main or relabel it as sender evidence.
+
+- The two current public binaries matched frozen2.35.2 SHA and post stats stayed stable.
+- Own C collector [compile](results/compile.json): held PID85680/exit0/no timeout/0.083031083s, stdout/stderr0. Explicit installed SDK resolved to MacOSX13.3.sdk. No installer/developer-directory change.
+- Official instrumented invocation [result](results/official.json): held PID85683/exit1/no timeout/0.203547750s, [stdout](results/official.stdout)146B/[stderr](results/official.stderr)187B. Own empty HOME, fake executable overrides and all-network/real-HOME-read/mach-lookup denial remained in effect.
+- Stdout printed “Opening browser...”; stderr reported auth portal initialization failure and “All callback ports are in use”. **This is not proof of globally occupied ports**, since this experiment forbids network/bind. No unrelated ports/processes were inspected. Browser text is not proof a browser opened; actual UI observation was not performed, so no zero-UI-effect claim.
+
+This experiment intentionally has no cached real login, and the observed failure is authentication bootstrap. The actual KAS Command, auth-provider enum, NODE_OPTIONS inheritance, effective API, model availability and request parity are still unproved. Do not fake a CLI authstore, ask for a new device login, or restore M3 to make this green.
+
+[Driver](probe_v3.py) SHA`ab353e84a9e67a3f157543840cccccd11803c9fb98d38707a0762286fe2cbace`; collector source SHA`099725a827dde48b6a2e16440feec5ca706e9e259ecd97d48f6799fe5480e650`. [Preflight](results/preflight.json) contains only public/own inputs and controlled env, not credentials. Main fully read raw/result metadata, then a separate data-only check verified all8 saved artifact sizes/SHA,9 result files/modes, source hashes, actual negative exits and missing trace; no runtime/tests were rerun. Result-only files are0400.
+
+## Independent collector tests, not official execution
+
+Task t11556/r11562 tested the unchanged C source in own TEMP. [Full successful report](/private/tmp/argv-collector-independent-sdk.56kftxnx/REPORT.md) and [actual held harness result](/private/tmp/argv-collector-independent-sdk.56kftxnx/harness-process-result.json): 25 collector runs/223 assertions, compile0/harnessPID84018 exit0,0.8779745s/aggregateCPU0.285589. Role/privacy/length/CreateNew/symlink boundaries passed; this is not real HTTP/auth/API transparency coverage. The [first failed compile](/private/tmp/argv-collector-independent.W9xteNIG/REPORT.md) was missing explicit SDK (exit1/harness91/0cases), retained unchanged; the successful harness used a new TEMP. Main read full reports/harness/held result, checked26 distinct saved child process records and the original missing-fcntl.h stderr, without rerunning cases.
+
+Next use the user's existing login through the official CLI's normal opaque credential flow, with a separately designed zero-secret observation contract and no direct agent reads/copies of authstore/Keychain. Parent stdout must be filtered in memory before any persistence in a login-bearing run. Preserve real engine/agent configuration and prevent accidental login UI/model traffic. Do not keep retrying empty-HOME authentication or interpret this failure as the user's actual login status. Real model requests remain0; Axiom/provider unchanged.

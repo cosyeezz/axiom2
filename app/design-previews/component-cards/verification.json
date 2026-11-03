@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "scope": "Standalone design mock only; no product code or native operations",
+  "widths": [
+    320,
+    390,
+    760,
+    1024,
+    1120
+  ],
+  "checks": [
+    "no horizontal overflow",
+    "service engine details",
+    "update demo dialog",
+    "global mock refresh"
+  ],
+  "errors": []
+}

@@ -67,7 +67,7 @@ try {
   const model = { id: "local-pool-model", name: "Local pool fixture", provider: "kiro", api: "kiro-chat" as const, baseUrl: "https://q.us-east-1.amazonaws.com", input: ["text" as const], reasoning: false, contextWindow: 10000, maxTokens: 1000, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
   const origin = `https://${proxied ? "pool-fixture.invalid" : "127.0.0.1"}:${(target.address() as AddressInfo).port}`;
   const transport: typeof fetch = (input, options) => {
-    assert.ok(["runtime.us-east-1.kiro.dev", "q.us-east-1.amazonaws.com"].includes(new URL(String(input)).hostname));
+    assert.ok(["runtime.us-east-1.kiro.dev", "q.us-east-1.amazonaws.com", "management.us-east-1.kiro.dev"].includes(new URL(String(input)).hostname));
     return globalThis.fetch(origin, options);
   };
   async function chat() {

@@ -100,7 +100,6 @@ export function SettingsSidebar({ page }: { page: "overview" | "display" | "mode
         >
           模型服务
         </a>
-        <a href="/model-accounts.html" className="settings-nav" aria-current={page === "accounts" ? "page" : undefined}>多账号管理</a>
         <a href="/model-usage.html" className="settings-nav" aria-current={page === "usage" ? "page" : undefined}>模型用量与统计</a>
         <a
           href="/tools.html"

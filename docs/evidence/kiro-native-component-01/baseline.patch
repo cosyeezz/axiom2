@@ -1,0 +1,207 @@
+diff --git a/app/src/server/model-runtime.ts b/app/src/server/model-runtime.ts
+index 843214c..3d117e4 100644
+--- a/app/src/server/model-runtime.ts
++++ b/app/src/server/model-runtime.ts
+@@ -41,7 +41,8 @@ async function registerModelProvider(runtime: ModelRuntime, providerId: string)
+   if (!definition || runtime.getRegisteredNativeProvider(providerId)) return;
+   const provider = await definition.load();
+   if (runtime.getRegisteredNativeProvider(providerId)) return;
+-  if (providerId === "kiro" || providerId === "codebuddy-cn") recognizeProviderRequestTransport(provider);
++  if (providerId === "kiro") recognizeProviderRequestTransport(provider, (await import("./providers/kiro-native.js")).kiroNativeFetch);
++  else if (providerId === "codebuddy-cn") recognizeProviderRequestTransport(provider);
+   // pi registers synchronously but starts an unawaited refresh afterwards. Keep
+   // registration from mutating a worker's captured model files in the background.
+   const refresh = runtime.refresh;
+diff --git a/app/src/server/provider-request-observer.ts b/app/src/server/provider-request-observer.ts
+index 607f410..c776f40 100644
+--- a/app/src/server/provider-request-observer.ts
++++ b/app/src/server/provider-request-observer.ts
+@@ -13,11 +13,19 @@ const initialApis = new Map(httpApis.map(api => {
+   return [api, { stream: provider?.stream, streamSimple: provider?.streamSimple }] as const;
+ }));
+ const nativeResult = createAssistantMessageEventStream().result;
+-const nativeHttp = new WeakMap<Provider, Pick<Provider, "stream" | "streamSimple">>();
++const nativeHttp = new WeakMap<Provider, Pick<Provider, "stream" | "streamSimple"> & { transport?: typeof fetch }>();
+ 
+ /** Called only for the application's known built-in factories, not extensions. */
+-export function recognizeProviderRequestTransport(provider: Provider) {
+-  nativeHttp.set(provider, { stream: provider.stream, streamSimple: provider.streamSimple });
++export function recognizeProviderRequestTransport(provider: Provider, transport?: typeof fetch) {
++  nativeHttp.set(provider, { stream: provider.stream, streamSimple: provider.streamSimple, transport });
++}
++
++/** Observability must wrap the provider's sender, not silently replace it with generic Fetch. */
++export function providerRequestDefaultTransport(runtime: Pick<ModelRuntime, "getRegisteredProviderConfig" | "getRegisteredNativeProvider">,
++  model: Parameters<StreamFn>[0]): typeof fetch | undefined {
++  if (runtime.getRegisteredProviderConfig(model.provider)?.streamSimple) return undefined;
++  const native = runtime.getRegisteredNativeProvider(model.provider), known = native && nativeHttp.get(native);
++  return native && known && known.stream === native.stream && known.streamSimple === native.streamSimple ? known.transport : undefined;
+ }
+ 
+ export function providerRequestHttpTransport(runtime: Pick<ModelRuntime, "getRegisteredProviderConfig" | "getRegisteredNativeProvider">,
+@@ -37,7 +45,8 @@ export function providerRequestHttpTransport(runtime: Pick<ModelRuntime, "getReg
+ 
+ /** Observe completion promises, never consume/replay stream events or response bodies. */
+ export function observeProviderRequests<F extends StreamFn>(base: F, emit: (event: ProviderRequestEvent) => void,
+-  httpTransport: (model: Parameters<StreamFn>[0], options: Parameters<StreamFn>[2]) => boolean): F {
++  httpTransport: (model: Parameters<StreamFn>[0], options: Parameters<StreamFn>[2]) => boolean,
++  defaultTransport?: (model: Parameters<StreamFn>[0]) => typeof fetch | undefined): F {
+   const observed: StreamFn = (model, context, options) => {
+     // Pi routes this into runtime.streamSimple again with the physical model.
+     if (model.api === "pi-virtual") return base(model, context, options);
+@@ -65,7 +74,7 @@ export function observeProviderRequests<F extends StreamFn>(base: F, emit: (even
+       return replacement;
+     } };
+     if (physicalHttp) {
+-      const fetcher = options?.fetch ?? globalThis.fetch;
++      const fetcher = options?.fetch ?? defaultTransport?.(model) ?? globalThis.fetch;
+       next.fetch = async (...args: Parameters<typeof fetch>) => {
+         // Kiro enterprise profile discovery also uses options.fetch, before onPayload.
+         // Auth/catalog preparation is not inference and must keep the original transport.
+@@ -109,6 +118,7 @@ export function installProviderRequestObserver(runtime: ModelRuntime) {
+   };
+   const httpTransport = (model: Parameters<StreamFn>[0], options: Parameters<StreamFn>[2]) =>
+     providerRequestHttpTransport(runtime, model, options);
+-  runtime.stream = observeProviderRequests(runtime.stream.bind(runtime), emit, httpTransport);
+-  runtime.streamSimple = observeProviderRequests(runtime.streamSimple.bind(runtime), emit, httpTransport);
++  const defaultTransport = (model: Parameters<StreamFn>[0]) => providerRequestDefaultTransport(runtime, model);
++  runtime.stream = observeProviderRequests(runtime.stream.bind(runtime), emit, httpTransport, defaultTransport);
++  runtime.streamSimple = observeProviderRequests(runtime.streamSimple.bind(runtime), emit, httpTransport, defaultTransport);
+ }
+diff --git a/app/src/server/providers/kiro-chat.ts b/app/src/server/providers/kiro-chat.ts
+index 0b87f03..bfce4e0 100644
+--- a/app/src/server/providers/kiro-chat.ts
++++ b/app/src/server/providers/kiro-chat.ts
+@@ -5,7 +5,7 @@ import type { KiroCredential } from "./kiro-auth.js";
+ import { assertKiroChatModel, KiroChatError, kiroChatRequest, kiroObject, kiroText } from "./kiro-chat-protocol.js";
+ import { classifyKiroFailure, KiroServiceFailure, kiroFailureMessage, kiroLocalFailure, kiroPartialFailure, readKiroErrorBody } from "./kiro-failure.js";
+ import { readKiroEvents } from "./kiro-eventstream.js";
+-import { KiroResponsesError, kiroResponsesRequest, readKiroResponses, usesKiroResponses } from "./kiro-responses.js";
++import { KiroResponsesError, kiroResponsesRequest, readKiroResponses, usesKiroResponses, KIRO_CONTINUATION_METADATA } from "./kiro-responses.js";
+ import { KiroThinkingError, kiroThinkingRequest } from "./kiro-thinking.js";
+ import { KiroThinkingStream } from "./kiro-thinking-stream.js";
+ import { KiroToolInput } from "./kiro-tool-input.js";
+@@ -124,7 +124,7 @@ export function kiroChat(oauth: OAuthAuth, transport?: typeof fetch) {
+         if (Object.values(historyNotice).some(Boolean)) (message.diagnostics ??= []).push({ type: "kiro-reasoning-history-omitted", timestamp: Date.now(), details: historyNotice });
+         if (interruptionNotice.omittedToolCalls) (message.diagnostics ??= []).push({ type: "kiro-interrupted-tools-omitted", timestamp: Date.now(), details: { ...interruptionNotice, executionState: "unknown", userBoundaryProvenance: "unverified", policy: "verify-before-repeating-side-effects" } });
+         const responses = usesKiroResponses(model.id);
+-        const nativePayload = responses ? kiroResponsesRequest(payload) : payload;
++        const nativePayload = responses ? kiroResponsesRequest(payload, options.metadata?.[KIRO_CONTINUATION_METADATA]) : payload;
+         const replacement = await waitForKiro(options.onPayload?.(nativePayload, model), bounded), request = replacement === undefined ? nativePayload : kiroObject(replacement);
+         const prepared = prepareKiroNativeRequest(model.id, account, request, options.headers);
+         stage = "transport";
+diff --git a/app/src/server/providers/kiro-native-http.ts b/app/src/server/providers/kiro-native-http.ts
+index f5f0537..cecd055 100644
+--- a/app/src/server/providers/kiro-native-http.ts
++++ b/app/src/server/providers/kiro-native-http.ts
+@@ -37,7 +37,8 @@ export function kiroNativeHttp(url: string, init: { headers: Headers; body: stri
+   const headers = Object.fromEntries(init.headers);
+   headers["content-length"] = String(Buffer.byteLength(init.body));
+   return new Promise((resolve, reject) => {
+-    const request = (target.protocol === "https:" ? https : http).request(target, { method: "POST", headers, agent, signal }, response => {
++    // The captured CLI sends Connection: close. Do not inherit Node 22's global keep-alive pool.
++    const request = (target.protocol === "https:" ? https : http).request(target, { method: "POST", headers, agent: agent ?? false, signal }, response => {
+       const status = response.statusCode ?? 0;
+       if (status < 200 || status > 599) { response.destroy(); agent?.destroy(); reject(new KiroChatError("Kiro HTTP 响应状态无效。")); return; }
+       const responseHeaders = new Headers();
+diff --git a/app/src/server/providers/kiro-native.ts b/app/src/server/providers/kiro-native.ts
+index feb3db9..3fd02a9 100644
+--- a/app/src/server/providers/kiro-native.ts
++++ b/app/src/server/providers/kiro-native.ts
+@@ -1,7 +1,7 @@
+ import { randomUUID } from "node:crypto";
+ import { kiroNativeHttp } from "./kiro-native-http.js";
+ import { KiroChatError, kiroObject, kiroText, kiroNativeChatRequest, kiroNativeEndpoint, type KiroJson, type KiroNativeContext, type KiroNativeProfile } from "./kiro-native-protocol.js";
+-import { kiroResponsesRequest, usesKiroResponses } from "./kiro-responses.js";
++import { kiroResponsesRequest, usesKiroResponses, KIRO_CONTINUATION_METADATA, validateKiroContinuationId } from "./kiro-responses.js";
+ 
+ export { kiroNativeChatRequest, KiroChatError, type KiroNativeContext, type KiroNativeMessage } from "./kiro-native-protocol.js";
+ export { readKiroResponses, readKiroSse } from "./kiro-responses.js";
+@@ -18,10 +18,11 @@ export function kiroCliUserAgent(platform: NodeJS.Platform = process.platform) {
+ 
+ /** Credentials belong to the caller. No Pi auth ticket, credential store, registry or agent is required. */
+ export type KiroNativeAccount = KiroNativeProfile & { access: string; expires: number; authMethod?: string };
+-export function createKiroNativeRequest(modelId: string, context: KiroNativeContext, account: KiroNativeProfile, sessionId?: string) {
++export type KiroNativeIdentity = { continuationId?: string };
++export function createKiroNativeRequest(modelId: string, context: KiroNativeContext, account: KiroNativeProfile, sessionId?: string, identity: KiroNativeIdentity = {}) {
+   const request = kiroNativeChatRequest(modelId, context, account, sessionId);
+   const responses = usesKiroResponses(modelId);
+-  return { ...request, payload: responses ? kiroResponsesRequest(request.payload) : request.payload, responses };
++  return { ...request, payload: responses ? kiroResponsesRequest(request.payload, identity.continuationId) : request.payload, responses };
+ }
+ 
+ /** Fixed native destination and protected wire identity, shared by standalone callers and the Pi adapter. */
+@@ -34,6 +35,7 @@ export function prepareKiroNativeRequest(modelId: string, account: KiroNativeAcc
+   const identity = responses ? kiroObject(request) : kiroObject(kiroObject(kiroObject(request.conversationState).currentMessage).userInputMessage);
+   if (request.profileArn !== account.profileArn || (responses ? identity.model : identity.modelId) !== modelId || identity.origin !== "KIRO_CLI" || responses && identity.stream !== true)
+     throw new KiroChatError("Kiro 请求钩子不能替换账号 profile、所选模型 ID、流模式或 CLI origin。");
++  if (responses && request.metadata !== undefined) validateKiroContinuationId(kiroObject(request.metadata)[KIRO_CONTINUATION_METADATA]);
+   const body = JSON.stringify(request);
+   if (Buffer.byteLength(body, "utf8") > 10 * 1024 * 1024) throw new KiroChatError("Kiro 聊天请求超过本地 10 MiB 限制；请压缩上下文。");
+   const headers = new Headers();
+@@ -47,7 +49,7 @@ export function prepareKiroNativeRequest(modelId: string, account: KiroNativeAcc
+     headers.set("User-Agent", kiroCliUserAgent());
+     headers.set("x-amzn-kiro-origin", "KIRO_CLI");
+     if (account.profileArn) headers.set("x-amzn-kiro-profile", account.profileArn);
+-    // No transport retry yet. An observed header name does not prove the CLI retry policy.
++    // Still single-attempt: do not advertise the official adaptive budget before implementing it.
+     headers.set("x-kiro-attempt", "1;max=1");
+   } else {
+     // Preserve the older eventstream path until its client identity has a version-bound baseline.
+@@ -77,11 +79,18 @@ export function waitForKiro<T>(work: T | PromiseLike<T>, signal: AbortSignal, la
+   });
+ }
+ 
++/** Fetch-shaped adapter for SDK instrumentation; this does not use Fetch for Responses. */
++export const kiroNativeFetch: typeof fetch = (input, init) => {
++  const url = input instanceof Request ? input.url : String(input);
++  if (new URL(url).pathname !== "/v1/responses") return globalThis.fetch(input, init);
++  if (init?.method !== "POST" || typeof init.body !== "string" || init.redirect !== "error")
++    throw new KiroChatError("Kiro 原生传输需要已校验的 POST 请求；不回退到通用 Fetch。");
++  return kiroNativeHttp(url, { headers: new Headers(init.headers), body: init.body }, init.signal ?? AbortSignal.timeout(600_000));
++};
++
+ /** One native HTTP request. No implicit retry, fallback provider, Pi lifecycle or global proxy mutation. */
+ export function sendKiroNativeRequest(prepared: ReturnType<typeof prepareKiroNativeRequest>, signal: AbortSignal, transport?: typeof fetch) {
+   signal.throwIfAborted();
+-  const work = transport ? transport(prepared.url, { ...prepared.init, signal })
+-    : new URL(prepared.url).pathname === "/v1/responses" ? kiroNativeHttp(prepared.url, prepared.init, signal)
+-    : globalThis.fetch(prepared.url, { ...prepared.init, signal });
++  const work = (transport ?? kiroNativeFetch)(prepared.url, { ...prepared.init, signal });
+   return waitForKiro(work, signal, cancelKiroBody);
+ }
+diff --git a/app/src/server/providers/kiro-responses.ts b/app/src/server/providers/kiro-responses.ts
+index 6db2a28..c4c7c88 100644
+--- a/app/src/server/providers/kiro-responses.ts
++++ b/app/src/server/providers/kiro-responses.ts
+@@ -5,9 +5,19 @@ import { classifyKiroFailure, KiroServiceFailure } from "./kiro-failure.js";
+ 
+ // Version-bound observed routing, not a heuristic for all Kiro models.
+ export const usesKiroResponses = (modelId: string) => modelId === "deepseek-3.2";
++export const KIRO_CONTINUATION_METADATA = "kiro:agent_continuation_id";
++
++/** KAS0.66.70 creates a v4 UUID at graph creation, then carries it through its calls. */
++export function validateKiroContinuationId(value: unknown): string | undefined {
++  if (value === undefined) return undefined;
++  if (typeof value !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value))
++    throw new KiroChatError("Kiro 续接标识必须是调用方逻辑轮的 UUID v4；未发送无效标识。");
++  return value;
++}
+ 
+ /** Reuse the native history safety checks/aliases; never replace the caller's tools or policy. */
+-export function kiroResponsesRequest(payload: ReturnType<typeof kiroNativeChatRequest>["payload"]) {
++export function kiroResponsesRequest(payload: ReturnType<typeof kiroNativeChatRequest>["payload"], continuationId?: unknown) {
++  const continuation = validateKiroContinuationId(continuationId);
+   const state = payload.conversationState;
+   const input: KiroJson[] = [];
+   for (const item of [...state.history ?? [], state.currentMessage]) {
+@@ -37,7 +47,8 @@ export function kiroResponsesRequest(payload: ReturnType<typeof kiroNativeChatRe
+     return { type: "function", name: tool.name, description: tool.description, parameters: kiroObject(tool.inputSchema).json };
+   });
+   return { model: current.modelId, input, tools, stream: true, origin: "KIRO_CLI", ...("profileArn" in payload ? { profileArn: payload.profileArn } : {}),
+-    metadata: { "kiro:agent_mode": "vibe", "kiro:conversation_id": state.conversationId, "kiro:root_conversation_id": state.conversationId } };
++    metadata: { "kiro:agent_mode": "vibe", "kiro:conversation_id": state.conversationId, "kiro:root_conversation_id": state.conversationId,
++      ...(continuation === undefined ? {} : { [KIRO_CONTINUATION_METADATA]: continuation }) } };
+ }
+ 
+ export class KiroResponsesError extends KiroChatError {

@@ -1,0 +1,7 @@
+(version 1)
+(allow default)
+(deny network*)
+(deny file-write* (subpath "/Volumes/D_Work/axiom2"))
+(deny file-read* (subpath "/Users/dane"))
+(allow file-read* (subpath "/Users/dane/.local/share/pi-node/node-v22.23.2-darwin-arm64"))
+(deny process-exec (literal "/usr/bin/security"))

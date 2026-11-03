@@ -164,9 +164,12 @@ export class PooledMemoryRunner implements MemoryRunner {
       if(signal.aborted)abort();else send({type:'start',input:start});
     });
   }
+  checkProviders(providers:string[],confirmed:boolean) {
+    if(!confirmed&&[...this.jobs].some(job=>providers.includes(job.provider)))throw new AppError('ACTIVE_RUNS_CONFIRMATION_REQUIRED','该供应商仍有记忆查询、整理或标题生成执行，需要确认停止');
+  }
   async stopProviders(providers:string[],confirmed:boolean) {
+    this.checkProviders(providers,confirmed);
     const affected=[...this.jobs].filter(job=>providers.includes(job.provider));
-    if(affected.length&&!confirmed)throw new AppError('ACTIVE_RUNS_CONFIRMATION_REQUIRED','该供应商仍有记忆查询、整理或标题生成执行，需要确认停止');
     for(const job of affected)job.controller.abort();
     await Promise.allSettled(affected.flatMap(job=>job.promise?[job.promise]:[]));
     await this.pool.invalidate(providers);

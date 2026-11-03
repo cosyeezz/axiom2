@@ -1,0 +1,2467 @@
+{
+  "scope": "Current upstream license snapshots for 52 selected libraries; not immutable-version or per-icon legal clearance",
+  "collections": {
+    "akar-icons": {
+      "prefix": "akar-icons",
+      "name": "Akar Icons",
+      "author": {
+        "name": "Arturo Wibawa",
+        "url": "https://github.com/artcoholic/akar-icons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/artcoholic/akar-icons/blob/master/LICENSE"
+      },
+      "originalURL": "https://github.com/artcoholic/akar-icons/blob/master/LICENSE",
+      "candidateIDs": [
+        "akar-icons:download"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/akar-icons/download/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/artcoholic/akar-icons/master/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/artcoholic/akar-icons/master/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "akar-icons.txt",
+      "sha256": "87500dbc60dd758dc91c72927a647ed4fdb162effc6dbc2073a2c9f51ba695c0",
+      "bytes": 1070,
+      "downloadURL": "https://raw.githubusercontent.com/artcoholic/akar-icons/master/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "andrsrxn": {
+      "prefix": "andrsrxn",
+      "name": "andrsrxn/icons",
+      "author": {
+        "name": "Andrés Raxón",
+        "url": "https://github.com/andrsrxn/icons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/andrsrxn/icons/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/andrsrxn/icons/blob/main/LICENSE",
+      "candidateIDs": [
+        "andrsrxn:folder-refresh"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/andrsrxn/folder-refresh/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/andrsrxn/icons/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/andrsrxn/icons/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "andrsrxn.txt",
+      "sha256": "7ff1b49c114263378588536273b397cb93d4fa189e24140887fada43ed7be1e2",
+      "bytes": 1082,
+      "downloadURL": "https://raw.githubusercontent.com/andrsrxn/icons/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "basil": {
+      "prefix": "basil",
+      "name": "Basil",
+      "author": {
+        "name": "Craftwork",
+        "url": "https://www.figma.com/community/file/931906394678748246"
+      },
+      "declaredLicense": {
+        "title": "CC BY 4.0",
+        "spdx": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/"
+      },
+      "originalURL": "https://creativecommons.org/licenses/by/4.0/",
+      "candidateIDs": [
+        "basil:trash-outline"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/basil/trash-outline/"
+      ],
+      "attempts": [
+        {
+          "url": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+          "finalURL": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "basil.txt",
+      "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+      "bytes": 18657,
+      "downloadURL": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+      "observedLicense": "CC-BY-4.0",
+      "scopeNote": "Official CC legalcode text alone does not prove this author applied it to each candidate. Author URL and per-icon Iconify source retained; attribution and any modifications must be tracked."
+    },
+    "bi": {
+      "prefix": "bi",
+      "name": "Bootstrap Icons",
+      "author": {
+        "name": "The Bootstrap Authors",
+        "url": "https://github.com/twbs/icons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/twbs/icons/blob/main/LICENSE.md"
+      },
+      "originalURL": "https://github.com/twbs/icons/blob/main/LICENSE.md",
+      "candidateIDs": [
+        "bi:download",
+        "bi:arrow-up",
+        "bi:trash"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/bi/download/",
+        "https://icon-sets.iconify.design/bi/arrow-up/",
+        "https://icon-sets.iconify.design/bi/trash/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/twbs/icons/main/LICENSE.md",
+          "httpStatus": 404,
+          "error": "HTTP Error 404: Not Found"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/twbs/icons/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/twbs/icons/main/LICENSE",
+          "httpStatus": 200,
+          "discoveredVia": "official GitHub repository contents API"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "bi.txt",
+      "sha256": "0fb3e11bd57e896c5a512afd64864d28a37de45d19835016c87ca1ad19ead969",
+      "bytes": 1093,
+      "downloadURL": "https://raw.githubusercontent.com/twbs/icons/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "bytesize": {
+      "prefix": "bytesize",
+      "name": "Bytesize Icons",
+      "author": {
+        "name": "Dan Klammer",
+        "url": "https://github.com/danklammer/bytesize-icons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/danklammer/bytesize-icons/blob/master/LICENSE.md"
+      },
+      "originalURL": "https://github.com/danklammer/bytesize-icons/blob/master/LICENSE.md",
+      "candidateIDs": [
+        "bytesize:trash"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/bytesize/trash/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/danklammer/bytesize-icons/master/LICENSE.md",
+          "finalURL": "https://raw.githubusercontent.com/danklammer/bytesize-icons/master/LICENSE.md",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "bytesize.txt",
+      "sha256": "29b7125ec7139a4b56d454eeddbeed7afc312a8fb97f8eaa2edfbb7f823fb481",
+      "bytes": 1077,
+      "downloadURL": "https://raw.githubusercontent.com/danklammer/bytesize-icons/master/LICENSE.md",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "carbon": {
+      "prefix": "carbon",
+      "name": "Carbon",
+      "author": {
+        "name": "IBM",
+        "url": "https://github.com/carbon-design-system/carbon/tree/main/packages/icons"
+      },
+      "declaredLicense": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0"
+      },
+      "originalURL": null,
+      "candidateIDs": [
+        "carbon:package",
+        "carbon:dependency",
+        "carbon:container-runtime",
+        "carbon:container-runtime-monitor",
+        "carbon:network-1",
+        "carbon:network-2",
+        "carbon:network-3",
+        "carbon:network-4",
+        "carbon:parent-node",
+        "carbon:child-node",
+        "carbon:edge-node",
+        "carbon:fork-node",
+        "carbon:join-node",
+        "carbon:flow-connection",
+        "carbon:workflow-automation",
+        "carbon:tool-kit",
+        "carbon:tool-box",
+        "carbon:update-now",
+        "carbon:update-complete",
+        "carbon:scan",
+        "carbon:inspection",
+        "carbon:download",
+        "carbon:deployment-unit-installation",
+        "carbon:upgrade",
+        "carbon:update-now",
+        "carbon:arrow-up",
+        "carbon:intent-request-upgrade",
+        "carbon:build-tool",
+        "carbon:build-image",
+        "carbon:build-run",
+        "carbon:reset",
+        "carbon:restart",
+        "carbon:intent-request-uninstall"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/carbon/package/",
+        "https://icon-sets.iconify.design/carbon/dependency/",
+        "https://icon-sets.iconify.design/carbon/container-runtime/",
+        "https://icon-sets.iconify.design/carbon/container-runtime-monitor/",
+        "https://icon-sets.iconify.design/carbon/network-1/",
+        "https://icon-sets.iconify.design/carbon/network-2/",
+        "https://icon-sets.iconify.design/carbon/network-3/",
+        "https://icon-sets.iconify.design/carbon/network-4/",
+        "https://icon-sets.iconify.design/carbon/parent-node/",
+        "https://icon-sets.iconify.design/carbon/child-node/",
+        "https://icon-sets.iconify.design/carbon/edge-node/",
+        "https://icon-sets.iconify.design/carbon/fork-node/",
+        "https://icon-sets.iconify.design/carbon/join-node/",
+        "https://icon-sets.iconify.design/carbon/flow-connection/",
+        "https://icon-sets.iconify.design/carbon/workflow-automation/",
+        "https://icon-sets.iconify.design/carbon/tool-kit/",
+        "https://icon-sets.iconify.design/carbon/tool-box/",
+        "https://icon-sets.iconify.design/carbon/update-now/",
+        "https://icon-sets.iconify.design/carbon/update-complete/",
+        "https://icon-sets.iconify.design/carbon/scan/",
+        "https://icon-sets.iconify.design/carbon/inspection/",
+        "https://icon-sets.iconify.design/carbon/download/",
+        "https://icon-sets.iconify.design/carbon/deployment-unit-installation/",
+        "https://icon-sets.iconify.design/carbon/upgrade/",
+        "https://icon-sets.iconify.design/carbon/update-now/",
+        "https://icon-sets.iconify.design/carbon/arrow-up/",
+        "https://icon-sets.iconify.design/carbon/intent-request-upgrade/",
+        "https://icon-sets.iconify.design/carbon/build-tool/",
+        "https://icon-sets.iconify.design/carbon/build-image/",
+        "https://icon-sets.iconify.design/carbon/build-run/",
+        "https://icon-sets.iconify.design/carbon/reset/",
+        "https://icon-sets.iconify.design/carbon/restart/",
+        "https://icon-sets.iconify.design/carbon/intent-request-uninstall/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/carbon-design-system/carbon/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/carbon-design-system/carbon/main/LICENSE",
+          "httpStatus": 200,
+          "discoveredVia": "official GitHub repository contents API"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "carbon.txt",
+      "sha256": "037b3e9eaff51477b270e9082f54b99175e4dd893548654f00995045b68294b8",
+      "bytes": 11339,
+      "downloadURL": "https://raw.githubusercontent.com/carbon-design-system/carbon/main/LICENSE",
+      "observedLicense": "Apache-2.0",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification.",
+      "reviewNotes": [
+        "Missing metadata URL resolved to official carbon-design-system/carbon main/LICENSE (Apache-2.0); package/version binding not audited."
+      ]
+    },
+    "ci": {
+      "prefix": "ci",
+      "name": "coolicons",
+      "author": {
+        "name": "Kryston Schwarze",
+        "url": "https://github.com/krystonschwarze/coolicons"
+      },
+      "declaredLicense": {
+        "title": "CC BY 4.0",
+        "spdx": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/"
+      },
+      "originalURL": "https://creativecommons.org/licenses/by/4.0/",
+      "candidateIDs": [
+        "ci:main-component",
+        "ci:download-package"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/ci/main-component/",
+        "https://icon-sets.iconify.design/ci/download-package/"
+      ],
+      "attempts": [
+        {
+          "url": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+          "finalURL": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "ci.txt",
+      "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+      "bytes": 18657,
+      "downloadURL": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+      "observedLicense": "CC-BY-4.0",
+      "scopeNote": "Official CC legalcode text alone does not prove this author applied it to each candidate. Author URL and per-icon Iconify source retained; attribution and any modifications must be tracked.",
+      "reviewNotes": [
+        "Metadata says CC-BY-4.0. Current author repository master/LICENSE says MIT (2026 Kryston Schwarze), saved as evidence/ci-license.txt. Version scope unresolved; primary ci.txt preserves declared CC legalcode."
+      ],
+      "additionalEvidence": [
+        {
+          "url": "https://raw.githubusercontent.com/krystonschwarze/coolicons/master/LICENSE",
+          "file": "evidence/ci-license.txt",
+          "httpStatus": 200,
+          "observedLicense": "MIT"
+        }
+      ]
+    },
+    "clarity": {
+      "prefix": "clarity",
+      "name": "Clarity",
+      "author": {
+        "name": "VMware",
+        "url": "https://github.com/vmware/clarity"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/vmware/clarity-assets/blob/master/LICENSE"
+      },
+      "originalURL": "https://github.com/vmware/clarity-assets/blob/master/LICENSE",
+      "candidateIDs": [
+        "clarity:install-line",
+        "clarity:update-line",
+        "clarity:refresh-line",
+        "clarity:uninstall-line",
+        "clarity:trash-line"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/clarity/install-line/",
+        "https://icon-sets.iconify.design/clarity/update-line/",
+        "https://icon-sets.iconify.design/clarity/refresh-line/",
+        "https://icon-sets.iconify.design/clarity/uninstall-line/",
+        "https://icon-sets.iconify.design/clarity/trash-line/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/vmware/clarity-assets/master/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/vmware/clarity-assets/master/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "clarity.txt",
+      "sha256": "144757b53192e700f7fd7d7de1ef2d2e97f968556d4fbd3e7ca9bfce90a4482e",
+      "bytes": 1240,
+      "downloadURL": "https://raw.githubusercontent.com/vmware/clarity-assets/master/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "codicon": {
+      "prefix": "codicon",
+      "name": "Codicons",
+      "author": {
+        "name": "Microsoft Corporation",
+        "url": "https://github.com/microsoft/vscode-codicons"
+      },
+      "declaredLicense": {
+        "title": "CC BY 4.0",
+        "spdx": "CC-BY-4.0",
+        "url": "https://github.com/microsoft/vscode-codicons/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/microsoft/vscode-codicons/blob/main/LICENSE",
+      "candidateIDs": [
+        "codicon:build",
+        "codicon:refresh",
+        "codicon:trash"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/codicon/build/",
+        "https://icon-sets.iconify.design/codicon/refresh/",
+        "https://icon-sets.iconify.design/codicon/trash/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/microsoft/vscode-codicons/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/microsoft/vscode-codicons/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "codicon.txt",
+      "sha256": "af5e030844efddbc7ab00dcfea8b019703753d4d9f5172d727c533a492aec665",
+      "bytes": 19242,
+      "downloadURL": "https://raw.githubusercontent.com/microsoft/vscode-codicons/main/LICENSE",
+      "observedLicense": "CC-BY-4.0",
+      "scopeNote": "Official CC legalcode text alone does not prove this author applied it to each candidate. Author URL and per-icon Iconify source retained; attribution and any modifications must be tracked."
+    },
+    "energy-icons": {
+      "prefix": "energy-icons",
+      "name": "Energy Icons",
+      "author": {
+        "name": "Sam Passmore",
+        "url": "https://github.com/Sam-r-passmore/energy-icons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/Sam-r-passmore/energy-icons/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/Sam-r-passmore/energy-icons/blob/main/LICENSE",
+      "candidateIDs": [
+        "energy-icons:package-plus-20"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/energy-icons/package-plus-20/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/Sam-r-passmore/energy-icons/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/Sam-r-passmore/energy-icons/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "energy-icons.txt",
+      "sha256": "325c7fc2750275698703862ca308934a30ff6e49c6197168f9995478959a922f",
+      "bytes": 1078,
+      "downloadURL": "https://raw.githubusercontent.com/Sam-r-passmore/energy-icons/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "eos-icons": {
+      "prefix": "eos-icons",
+      "name": "EOS Icons",
+      "author": {
+        "name": "SUSE UX/UI team",
+        "url": "https://gitlab.com/SUSE-UIUX/eos-icons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://gitlab.com/SUSE-UIUX/eos-icons/-/blob/master/LICENSE"
+      },
+      "originalURL": "https://gitlab.com/SUSE-UIUX/eos-icons/-/blob/master/LICENSE",
+      "candidateIDs": [
+        "eos-icons:package-upgrade",
+        "eos-icons:package-upgrade-outlined"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/eos-icons/package-upgrade/",
+        "https://icon-sets.iconify.design/eos-icons/package-upgrade-outlined/"
+      ],
+      "attempts": [
+        {
+          "url": "https://gitlab.com/SUSE-UIUX/eos-icons/-/raw/master/LICENSE",
+          "finalURL": "https://gitlab.com/SUSE-UIUX/eos-icons/-/raw/master/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "eos-icons.txt",
+      "sha256": "8a193941d284cd81e7264fda32127c4d0e3027d374da3a278edec054aaba3e75",
+      "bytes": 1093,
+      "downloadURL": "https://gitlab.com/SUSE-UIUX/eos-icons/-/raw/master/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "fluent": {
+      "prefix": "fluent",
+      "name": "Fluent UI System Icons",
+      "author": {
+        "name": "Microsoft Corporation",
+        "url": "https://github.com/microsoft/fluentui-system-icons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/microsoft/fluentui-system-icons/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/microsoft/fluentui-system-icons/blob/main/LICENSE",
+      "candidateIDs": [
+        "fluent:puzzle-cube-24-regular",
+        "fluent:puzzle-cube-24-filled",
+        "fluent:plug-puzzle-24-regular",
+        "fluent:scan-24-regular",
+        "fluent:cloud-sync-complete-24-regular",
+        "fluent:arrow-download-24-filled",
+        "fluent:arrow-download-24-regular",
+        "fluent:phone-update-24-regular",
+        "fluent:phone-update-24-filled",
+        "fluent:arrow-up-24-regular",
+        "fluent:uninstall-app-24-regular",
+        "fluent:uninstall-app-24-filled"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/fluent/puzzle-cube-24-regular/",
+        "https://icon-sets.iconify.design/fluent/puzzle-cube-24-filled/",
+        "https://icon-sets.iconify.design/fluent/plug-puzzle-24-regular/",
+        "https://icon-sets.iconify.design/fluent/scan-24-regular/",
+        "https://icon-sets.iconify.design/fluent/cloud-sync-complete-24-regular/",
+        "https://icon-sets.iconify.design/fluent/arrow-download-24-filled/",
+        "https://icon-sets.iconify.design/fluent/arrow-download-24-regular/",
+        "https://icon-sets.iconify.design/fluent/phone-update-24-regular/",
+        "https://icon-sets.iconify.design/fluent/phone-update-24-filled/",
+        "https://icon-sets.iconify.design/fluent/arrow-up-24-regular/",
+        "https://icon-sets.iconify.design/fluent/uninstall-app-24-regular/",
+        "https://icon-sets.iconify.design/fluent/uninstall-app-24-filled/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "fluent.txt",
+      "sha256": "69bc45dc42b9acb96a69823adbc6ae538374e3c0bde169b855b32c48eaaef52f",
+      "bytes": 1078,
+      "downloadURL": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "fluent-mdl2": {
+      "prefix": "fluent-mdl2",
+      "name": "Fluent UI MDL2",
+      "author": {
+        "name": "Microsoft Corporation",
+        "url": "https://github.com/microsoft/fluentui/tree/master/packages/react-icons-mdl2"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/microsoft/fluentui/blob/master/packages/react-icons-mdl2/LICENSE"
+      },
+      "originalURL": "https://github.com/microsoft/fluentui/blob/master/packages/react-icons-mdl2/LICENSE",
+      "candidateIDs": [
+        "fluent-mdl2:install-to-drive",
+        "fluent-mdl2:build",
+        "fluent-mdl2:repair"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/fluent-mdl2/install-to-drive/",
+        "https://icon-sets.iconify.design/fluent-mdl2/build/",
+        "https://icon-sets.iconify.design/fluent-mdl2/repair/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/microsoft/fluentui/master/packages/react-icons-mdl2/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/microsoft/fluentui/master/packages/react-icons-mdl2/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "fluent-mdl2.txt",
+      "sha256": "4d0c29b5ff7917695e6ed0c1f358624faf4340da1232bb1d684ccc12b5afeffd",
+      "bytes": 1125,
+      "downloadURL": "https://raw.githubusercontent.com/microsoft/fluentui/master/packages/react-icons-mdl2/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "grommet-icons": {
+      "prefix": "grommet-icons",
+      "name": "Grommet Icons",
+      "author": {
+        "name": "Grommet",
+        "url": "https://github.com/grommet/grommet-icons"
+      },
+      "declaredLicense": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://www.apache.org/licenses/LICENSE-2.0"
+      },
+      "originalURL": "https://www.apache.org/licenses/LICENSE-2.0",
+      "candidateIDs": [
+        "grommet-icons:install",
+        "grommet-icons:upgrade",
+        "grommet-icons:update",
+        "grommet-icons:refresh"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/grommet-icons/install/",
+        "https://icon-sets.iconify.design/grommet-icons/upgrade/",
+        "https://icon-sets.iconify.design/grommet-icons/update/",
+        "https://icon-sets.iconify.design/grommet-icons/refresh/"
+      ],
+      "attempts": [
+        {
+          "url": "https://www.apache.org/licenses/LICENSE-2.0",
+          "finalURL": "https://www.apache.org/licenses/LICENSE-2.0",
+          "httpStatus": 200,
+          "contentType": "text/plain"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "grommet-icons.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "bytes": 11358,
+      "downloadURL": "https://www.apache.org/licenses/LICENSE-2.0",
+      "observedLicense": "Apache-2.0",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "heroicons": {
+      "prefix": "heroicons",
+      "name": "HeroIcons",
+      "author": {
+        "name": "Refactoring UI Inc",
+        "url": "https://github.com/tailwindlabs/heroicons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/tailwindlabs/heroicons/blob/master/LICENSE"
+      },
+      "originalURL": "https://github.com/tailwindlabs/heroicons/blob/master/LICENSE",
+      "candidateIDs": [
+        "heroicons:trash",
+        "heroicons:trash-solid"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/heroicons/trash/",
+        "https://icon-sets.iconify.design/heroicons/trash-solid/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/tailwindlabs/heroicons/master/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/tailwindlabs/heroicons/master/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "heroicons.txt",
+      "sha256": "60e0b68c0f35c078eef3a5d29419d0b03ff84ec1df9c3f9d6e39a519a5ae7985",
+      "bytes": 1071,
+      "downloadURL": "https://raw.githubusercontent.com/tailwindlabs/heroicons/master/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "hugeicons": {
+      "prefix": "hugeicons",
+      "name": "Huge Icons",
+      "author": {
+        "name": "Hugeicons",
+        "url": "https://icon-sets.iconify.design/icon-sets/hugeicons/"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT"
+      },
+      "originalURL": null,
+      "candidateIDs": [
+        "hugeicons:component",
+        "hugeicons:package",
+        "hugeicons:blocks",
+        "hugeicons:puzzle",
+        "hugeicons:network",
+        "hugeicons:flow-connection",
+        "hugeicons:workflow-square-01",
+        "hugeicons:workflow-circle-02",
+        "hugeicons:search-check",
+        "hugeicons:package-search",
+        "hugeicons:package-search-01",
+        "hugeicons:reload",
+        "hugeicons:package-plus",
+        "hugeicons:package-add",
+        "hugeicons:installing-updates-01",
+        "hugeicons:installing-updates-02",
+        "hugeicons:system-update-01",
+        "hugeicons:system-update-02",
+        "hugeicons:repair",
+        "hugeicons:archive-restore",
+        "hugeicons:refresh",
+        "hugeicons:software-uninstall",
+        "hugeicons:package-remove",
+        "hugeicons:package-minus",
+        "hugeicons:trash"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/hugeicons/component/",
+        "https://icon-sets.iconify.design/hugeicons/package/",
+        "https://icon-sets.iconify.design/hugeicons/blocks/",
+        "https://icon-sets.iconify.design/hugeicons/puzzle/",
+        "https://icon-sets.iconify.design/hugeicons/network/",
+        "https://icon-sets.iconify.design/hugeicons/flow-connection/",
+        "https://icon-sets.iconify.design/hugeicons/workflow-square-01/",
+        "https://icon-sets.iconify.design/hugeicons/workflow-circle-02/",
+        "https://icon-sets.iconify.design/hugeicons/search-check/",
+        "https://icon-sets.iconify.design/hugeicons/package-search/",
+        "https://icon-sets.iconify.design/hugeicons/package-search-01/",
+        "https://icon-sets.iconify.design/hugeicons/reload/",
+        "https://icon-sets.iconify.design/hugeicons/package-plus/",
+        "https://icon-sets.iconify.design/hugeicons/package-add/",
+        "https://icon-sets.iconify.design/hugeicons/installing-updates-01/",
+        "https://icon-sets.iconify.design/hugeicons/installing-updates-02/",
+        "https://icon-sets.iconify.design/hugeicons/system-update-01/",
+        "https://icon-sets.iconify.design/hugeicons/system-update-02/",
+        "https://icon-sets.iconify.design/hugeicons/repair/",
+        "https://icon-sets.iconify.design/hugeicons/archive-restore/",
+        "https://icon-sets.iconify.design/hugeicons/refresh/",
+        "https://icon-sets.iconify.design/hugeicons/software-uninstall/",
+        "https://icon-sets.iconify.design/hugeicons/package-remove/",
+        "https://icon-sets.iconify.design/hugeicons/package-minus/",
+        "https://icon-sets.iconify.design/hugeicons/trash/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/hugeicons/hugeicons-react/main/LICENSE.md",
+          "finalURL": "https://raw.githubusercontent.com/hugeicons/hugeicons-react/main/LICENSE.md",
+          "httpStatus": 200,
+          "discoveredVia": "official GitHub repository contents API"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "hugeicons.txt",
+      "sha256": "1658d8213209df7b9b86dfc05d724ede48d00dbc27abc15976ec7adec9601cde",
+      "bytes": 1066,
+      "downloadURL": "https://cdn.jsdelivr.net/npm/@hugeicons/core-free-icons@4.3.5/LICENSE.md",
+      "observedLicense": "MIT",
+      "scopeNote": "Official free package 4.3.5 MIT text; 25 retained Iconify candidates match official free exports by dense geometric sampling, not a mathematical identity proof.",
+      "reviewNotes": [
+        "Legacy-package evidence superseded by official @hugeicons/core-free-icons@4.3.5 LICENSE.md, Copyright (c) 2025 Hugeicons. All 25 retained candidates have corresponding official free exports; 25/25 original SVG hashes preserved and dense sampled geometry matches within 0.023 units on the 24-unit viewport. Supplemental report and source evidence retained under artifacts/component-icon-options/verification/license-research/REVIEW-HUGEICONS-MDI.md."
+      ],
+      "additionalEvidence": [
+        {
+          "url": "https://registry.npmjs.org/@hugeicons/core-free-icons/latest",
+          "file": "evidence/huge-free-package.txt",
+          "httpStatus": 200,
+          "observedLicense": "MIT metadata only"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/hugeicons/hugeicons-react/main/README.md",
+          "file": "evidence/huge-readme.txt",
+          "httpStatus": 200
+        }
+      ]
+    },
+    "humbleicons": {
+      "prefix": "humbleicons",
+      "name": "Humbleicons",
+      "author": {
+        "name": "Jiří Zralý",
+        "url": "https://github.com/zraly/humbleicons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/zraly/humbleicons/blob/master/license"
+      },
+      "originalURL": "https://github.com/zraly/humbleicons/blob/master/license",
+      "candidateIDs": [
+        "humbleicons:trash"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/humbleicons/trash/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/zraly/humbleicons/master/license",
+          "finalURL": "https://raw.githubusercontent.com/zraly/humbleicons/master/license",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "humbleicons.txt",
+      "sha256": "70d00f3871c9335b19fcc9fb9d22e4bbe6db27109b42c37beb88d90f7c438fb6",
+      "bytes": 1070,
+      "downloadURL": "https://raw.githubusercontent.com/zraly/humbleicons/master/license",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "ic": {
+      "prefix": "ic",
+      "name": "Google Material Icons",
+      "author": {
+        "name": "Material Design Authors",
+        "url": "https://github.com/material-icons/material-icons"
+      },
+      "declaredLicense": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/material-icons/material-icons/blob/master/LICENSE"
+      },
+      "originalURL": "https://github.com/material-icons/material-icons/blob/master/LICENSE",
+      "candidateIDs": [
+        "ic:outline-install-mobile",
+        "ic:outline-system-update-alt"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/ic/outline-install-mobile/",
+        "https://icon-sets.iconify.design/ic/outline-system-update-alt/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/material-icons/material-icons/master/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/material-icons/material-icons/master/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "ic.txt",
+      "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+      "bytes": 11357,
+      "downloadURL": "https://raw.githubusercontent.com/material-icons/material-icons/master/LICENSE",
+      "observedLicense": "Apache-2.0",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "icon-park-outline": {
+      "prefix": "icon-park-outline",
+      "name": "IconPark Outline",
+      "author": {
+        "name": "ByteDance",
+        "url": "https://github.com/bytedance/IconPark"
+      },
+      "declaredLicense": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/bytedance/IconPark/blob/master/LICENSE"
+      },
+      "originalURL": "https://github.com/bytedance/IconPark/blob/master/LICENSE",
+      "candidateIDs": [
+        "icon-park-outline:node-round",
+        "icon-park-outline:node-square",
+        "icon-park-outline:connection-box",
+        "icon-park-outline:update-rotation",
+        "icon-park-outline:inspection",
+        "icon-park-outline:install",
+        "icon-park-outline:repair"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/icon-park-outline/node-round/",
+        "https://icon-sets.iconify.design/icon-park-outline/node-square/",
+        "https://icon-sets.iconify.design/icon-park-outline/connection-box/",
+        "https://icon-sets.iconify.design/icon-park-outline/update-rotation/",
+        "https://icon-sets.iconify.design/icon-park-outline/inspection/",
+        "https://icon-sets.iconify.design/icon-park-outline/install/",
+        "https://icon-sets.iconify.design/icon-park-outline/repair/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/bytedance/IconPark/master/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/bytedance/IconPark/master/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "icon-park-outline.txt",
+      "sha256": "81268f00802b1a9cffae4df43f78c3a0809845e03fef3da68f26ad2e4c49681e",
+      "bytes": 11352,
+      "downloadURL": "https://raw.githubusercontent.com/bytedance/IconPark/master/LICENSE",
+      "observedLicense": "Apache-2.0",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "icon-park-solid": {
+      "prefix": "icon-park-solid",
+      "name": "IconPark Solid",
+      "author": {
+        "name": "ByteDance",
+        "url": "https://github.com/bytedance/IconPark"
+      },
+      "declaredLicense": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/bytedance/IconPark/blob/master/LICENSE"
+      },
+      "originalURL": "https://github.com/bytedance/IconPark/blob/master/LICENSE",
+      "candidateIDs": [
+        "icon-park-solid:install"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/icon-park-solid/install/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/bytedance/IconPark/master/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/bytedance/IconPark/master/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "icon-park-solid.txt",
+      "sha256": "81268f00802b1a9cffae4df43f78c3a0809845e03fef3da68f26ad2e4c49681e",
+      "bytes": 11352,
+      "downloadURL": "https://raw.githubusercontent.com/bytedance/IconPark/master/LICENSE",
+      "observedLicense": "Apache-2.0",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "icon-park-twotone": {
+      "prefix": "icon-park-twotone",
+      "name": "IconPark TwoTone",
+      "author": {
+        "name": "ByteDance",
+        "url": "https://github.com/bytedance/IconPark"
+      },
+      "declaredLicense": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/bytedance/IconPark/blob/master/LICENSE"
+      },
+      "originalURL": "https://github.com/bytedance/IconPark/blob/master/LICENSE",
+      "candidateIDs": [
+        "icon-park-twotone:puzzle",
+        "icon-park-twotone:connection",
+        "icon-park-twotone:connection-point",
+        "icon-park-twotone:tool",
+        "icon-park-twotone:update-rotation",
+        "icon-park-twotone:reload"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/icon-park-twotone/puzzle/",
+        "https://icon-sets.iconify.design/icon-park-twotone/connection/",
+        "https://icon-sets.iconify.design/icon-park-twotone/connection-point/",
+        "https://icon-sets.iconify.design/icon-park-twotone/tool/",
+        "https://icon-sets.iconify.design/icon-park-twotone/update-rotation/",
+        "https://icon-sets.iconify.design/icon-park-twotone/reload/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/bytedance/IconPark/master/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/bytedance/IconPark/master/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "icon-park-twotone.txt",
+      "sha256": "81268f00802b1a9cffae4df43f78c3a0809845e03fef3da68f26ad2e4c49681e",
+      "bytes": 11352,
+      "downloadURL": "https://raw.githubusercontent.com/bytedance/IconPark/master/LICENSE",
+      "observedLicense": "Apache-2.0",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "iconamoon": {
+      "prefix": "iconamoon",
+      "name": "IconaMoon",
+      "author": {
+        "name": "Dariush Habibpour",
+        "url": "https://github.com/dariushhpg1/IconaMoon"
+      },
+      "declaredLicense": {
+        "title": "CC BY 4.0",
+        "spdx": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/"
+      },
+      "originalURL": "https://creativecommons.org/licenses/by/4.0/",
+      "candidateIDs": [
+        "iconamoon:component-duotone",
+        "iconamoon:trash"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/iconamoon/component-duotone/",
+        "https://icon-sets.iconify.design/iconamoon/trash/"
+      ],
+      "attempts": [
+        {
+          "url": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+          "finalURL": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "iconamoon.txt",
+      "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+      "bytes": 18657,
+      "downloadURL": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+      "observedLicense": "CC-BY-4.0",
+      "scopeNote": "Official CC legalcode text alone does not prove this author applied it to each candidate. Author URL and per-icon Iconify source retained; attribution and any modifications must be tracked."
+    },
+    "iconmind": {
+      "prefix": "iconmind",
+      "name": "IconMind",
+      "author": {
+        "name": "IconMind",
+        "url": "https://github.com/Iconmind/iconmind"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/Iconmind/iconmind/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/Iconmind/iconmind/blob/main/LICENSE",
+      "candidateIDs": [
+        "iconmind:dependency-outline-regular",
+        "iconmind:dependency-map-duotone-regular",
+        "iconmind:cluster-upgrade-outline-regular",
+        "iconmind:rolling-update-outline-regular",
+        "iconmind:rebuild-trigger-outline-regular",
+        "iconmind:rebuild-trigger-duotone-regular",
+        "iconmind:container-restart-outline-regular"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/iconmind/dependency-outline-regular/",
+        "https://icon-sets.iconify.design/iconmind/dependency-map-duotone-regular/",
+        "https://icon-sets.iconify.design/iconmind/cluster-upgrade-outline-regular/",
+        "https://icon-sets.iconify.design/iconmind/rolling-update-outline-regular/",
+        "https://icon-sets.iconify.design/iconmind/rebuild-trigger-outline-regular/",
+        "https://icon-sets.iconify.design/iconmind/rebuild-trigger-duotone-regular/",
+        "https://icon-sets.iconify.design/iconmind/container-restart-outline-regular/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/Iconmind/iconmind/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/Iconmind/iconmind/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "iconmind.txt",
+      "sha256": "e945abde7f72e3033dfbc4e60fc76c7d2db031d49f3ffb23bd1ea64d015ec1f8",
+      "bytes": 1078,
+      "downloadURL": "https://raw.githubusercontent.com/Iconmind/iconmind/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "iconoir": {
+      "prefix": "iconoir",
+      "name": "Iconoir",
+      "author": {
+        "name": "Luca Burgio",
+        "url": "https://github.com/iconoir-icons/iconoir"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/iconoir-icons/iconoir/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/iconoir-icons/iconoir/blob/main/LICENSE",
+      "candidateIDs": [
+        "iconoir:component",
+        "iconoir:package",
+        "iconoir:puzzle",
+        "iconoir:network",
+        "iconoir:server-connection",
+        "iconoir:refresh",
+        "iconoir:reload-window",
+        "iconoir:download",
+        "iconoir:arrow-up",
+        "iconoir:system-restart",
+        "iconoir:refresh",
+        "iconoir:trash"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/iconoir/component/",
+        "https://icon-sets.iconify.design/iconoir/package/",
+        "https://icon-sets.iconify.design/iconoir/puzzle/",
+        "https://icon-sets.iconify.design/iconoir/network/",
+        "https://icon-sets.iconify.design/iconoir/server-connection/",
+        "https://icon-sets.iconify.design/iconoir/refresh/",
+        "https://icon-sets.iconify.design/iconoir/reload-window/",
+        "https://icon-sets.iconify.design/iconoir/download/",
+        "https://icon-sets.iconify.design/iconoir/arrow-up/",
+        "https://icon-sets.iconify.design/iconoir/system-restart/",
+        "https://icon-sets.iconify.design/iconoir/refresh/",
+        "https://icon-sets.iconify.design/iconoir/trash/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/iconoir-icons/iconoir/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/iconoir-icons/iconoir/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "iconoir.txt",
+      "sha256": "869b60da1ada5b896d1f285c3c24ca193d612e308d1710a77a58f2f572eb4fa2",
+      "bytes": 1068,
+      "downloadURL": "https://raw.githubusercontent.com/iconoir-icons/iconoir/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "ion": {
+      "prefix": "ion",
+      "name": "IonIcons",
+      "author": {
+        "name": "Ben Sperry",
+        "url": "https://github.com/ionic-team/ionicons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/ionic-team/ionicons/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/ionic-team/ionicons/blob/main/LICENSE",
+      "candidateIDs": [
+        "ion:build-outline",
+        "ion:trash-outline"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/ion/build-outline/",
+        "https://icon-sets.iconify.design/ion/trash-outline/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/ionic-team/ionicons/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/ionic-team/ionicons/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "ion.txt",
+      "sha256": "c89dabc60b2e4e1a04b33bd7010b5a56bb4725ffe8c00d793a5ae009fbbfebd8",
+      "bytes": 1099,
+      "downloadURL": "https://raw.githubusercontent.com/ionic-team/ionicons/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "ix": {
+      "prefix": "ix",
+      "name": "Siemens Industrial Experience Icons",
+      "author": {
+        "name": "Siemens AG",
+        "url": "https://github.com/siemens/ix-icons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/siemens/ix-icons/blob/main/LICENSE.md"
+      },
+      "originalURL": "https://github.com/siemens/ix-icons/blob/main/LICENSE.md",
+      "candidateIDs": [
+        "ix:diagram-module",
+        "ix:diagram-module-library",
+        "ix:runtime-settings",
+        "ix:runtime-play",
+        "ix:app-update",
+        "ix:app-update",
+        "ix:refresh-settings",
+        "ix:hard-reset"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/ix/diagram-module/",
+        "https://icon-sets.iconify.design/ix/diagram-module-library/",
+        "https://icon-sets.iconify.design/ix/runtime-settings/",
+        "https://icon-sets.iconify.design/ix/runtime-play/",
+        "https://icon-sets.iconify.design/ix/app-update/",
+        "https://icon-sets.iconify.design/ix/app-update/",
+        "https://icon-sets.iconify.design/ix/refresh-settings/",
+        "https://icon-sets.iconify.design/ix/hard-reset/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/siemens/ix-icons/main/LICENSE.md",
+          "finalURL": "https://raw.githubusercontent.com/siemens/ix-icons/main/LICENSE.md",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "ix.txt",
+      "sha256": "42cb46c894aa9267307aa4985f40f44ba669e54d9b6b487960ecd24e1989213b",
+      "bytes": 1067,
+      "downloadURL": "https://raw.githubusercontent.com/siemens/ix-icons/main/LICENSE.md",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "keyline-icons": {
+      "prefix": "keyline-icons",
+      "name": "Keyline Icons",
+      "author": {
+        "name": "Keyline Icons",
+        "url": "https://github.com/keyline-icons/keyline-icons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/keyline-icons/keyline-icons/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/keyline-icons/keyline-icons/blob/main/LICENSE",
+      "candidateIDs": [
+        "keyline-icons:package-arrow-down",
+        "keyline-icons:package-arrow-down-fill",
+        "keyline-icons:package-plus",
+        "keyline-icons:package-arrow-up",
+        "keyline-icons:package-arrow-up-fill",
+        "keyline-icons:package-minus",
+        "keyline-icons:package-minus-fill"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/keyline-icons/package-arrow-down/",
+        "https://icon-sets.iconify.design/keyline-icons/package-arrow-down-fill/",
+        "https://icon-sets.iconify.design/keyline-icons/package-plus/",
+        "https://icon-sets.iconify.design/keyline-icons/package-arrow-up/",
+        "https://icon-sets.iconify.design/keyline-icons/package-arrow-up-fill/",
+        "https://icon-sets.iconify.design/keyline-icons/package-minus/",
+        "https://icon-sets.iconify.design/keyline-icons/package-minus-fill/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/keyline-icons/keyline-icons/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/keyline-icons/keyline-icons/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "keyline-icons.txt",
+      "sha256": "c9eaf07fee7f7eed72daec177408132b0a48eca8db0c831e1f7bf28e3b1ccefc",
+      "bytes": 1070,
+      "downloadURL": "https://raw.githubusercontent.com/keyline-icons/keyline-icons/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "lets-icons": {
+      "prefix": "lets-icons",
+      "name": "Lets Icons",
+      "author": {
+        "name": "Leonid Tsvetkov",
+        "url": "https://www.figma.com/community/file/886554014393250663"
+      },
+      "declaredLicense": {
+        "title": "CC BY 4.0",
+        "spdx": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/"
+      },
+      "originalURL": "https://creativecommons.org/licenses/by/4.0/",
+      "candidateIDs": [
+        "lets-icons:box-refresh-right",
+        "lets-icons:box-refresh-alt-right"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/lets-icons/box-refresh-right/",
+        "https://icon-sets.iconify.design/lets-icons/box-refresh-alt-right/"
+      ],
+      "attempts": [
+        {
+          "url": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+          "finalURL": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "lets-icons.txt",
+      "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+      "bytes": 18657,
+      "downloadURL": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+      "observedLicense": "CC-BY-4.0",
+      "scopeNote": "Official CC legalcode text alone does not prove this author applied it to each candidate. Author URL and per-icon Iconify source retained; attribution and any modifications must be tracked."
+    },
+    "lucide": {
+      "prefix": "lucide",
+      "name": "Lucide",
+      "author": {
+        "name": "Lucide Contributors",
+        "url": "https://github.com/lucide-icons/lucide"
+      },
+      "declaredLicense": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/lucide-icons/lucide/blob/main/LICENSE",
+      "candidateIDs": [
+        "lucide:component",
+        "lucide:package",
+        "lucide:package-2",
+        "lucide:blocks",
+        "lucide:puzzle",
+        "lucide:network",
+        "lucide:workflow",
+        "lucide:container",
+        "lucide:search-check",
+        "lucide:package-search",
+        "lucide:scan",
+        "lucide:scan-line",
+        "lucide:file-search",
+        "lucide:cloud-sync",
+        "lucide:package-plus",
+        "lucide:download",
+        "lucide:arrow-up",
+        "lucide:archive-restore",
+        "lucide:refresh-cw",
+        "lucide:package-minus",
+        "lucide:trash"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/lucide/component/",
+        "https://icon-sets.iconify.design/lucide/package/",
+        "https://icon-sets.iconify.design/lucide/package-2/",
+        "https://icon-sets.iconify.design/lucide/blocks/",
+        "https://icon-sets.iconify.design/lucide/puzzle/",
+        "https://icon-sets.iconify.design/lucide/network/",
+        "https://icon-sets.iconify.design/lucide/workflow/",
+        "https://icon-sets.iconify.design/lucide/container/",
+        "https://icon-sets.iconify.design/lucide/search-check/",
+        "https://icon-sets.iconify.design/lucide/package-search/",
+        "https://icon-sets.iconify.design/lucide/scan/",
+        "https://icon-sets.iconify.design/lucide/scan-line/",
+        "https://icon-sets.iconify.design/lucide/file-search/",
+        "https://icon-sets.iconify.design/lucide/cloud-sync/",
+        "https://icon-sets.iconify.design/lucide/package-plus/",
+        "https://icon-sets.iconify.design/lucide/download/",
+        "https://icon-sets.iconify.design/lucide/arrow-up/",
+        "https://icon-sets.iconify.design/lucide/archive-restore/",
+        "https://icon-sets.iconify.design/lucide/refresh-cw/",
+        "https://icon-sets.iconify.design/lucide/package-minus/",
+        "https://icon-sets.iconify.design/lucide/trash/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/lucide-icons/lucide/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "lucide.txt",
+      "sha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+      "bytes": 3208,
+      "downloadURL": "https://raw.githubusercontent.com/lucide-icons/lucide/main/LICENSE",
+      "observedLicense": "ISC plus MIT for Feather-derived icons",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification.",
+      "reviewNotes": [
+        "Upstream license includes both ISC and MIT for Feather-derived icons."
+      ]
+    },
+    "lucide-extended": {
+      "prefix": "lucide-extended",
+      "name": "Lucide Extended",
+      "author": {
+        "name": "Applifted",
+        "url": "https://github.com/applifted/lucide-extended"
+      },
+      "declaredLicense": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/applifted/lucide-extended/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/applifted/lucide-extended/blob/main/LICENSE",
+      "candidateIDs": [
+        "lucide-extended:component-duotone"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/lucide-extended/component-duotone/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/applifted/lucide-extended/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/applifted/lucide-extended/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "lucide-extended.txt",
+      "sha256": "b4657b9d24f1d345dd3074ca85e2e228894d846354a010242d23c237a0feb063",
+      "bytes": 3237,
+      "downloadURL": "https://raw.githubusercontent.com/applifted/lucide-extended/main/LICENSE",
+      "observedLicense": "ISC plus MIT for Feather-derived icons",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification.",
+      "reviewNotes": [
+        "Upstream license includes both ISC and MIT for Feather-derived icons."
+      ]
+    },
+    "mage": {
+      "prefix": "mage",
+      "name": "Mage Icons",
+      "author": {
+        "name": "MageIcons",
+        "url": "https://github.com/Mage-Icons/mage-icons"
+      },
+      "declaredLicense": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/Mage-Icons/mage-icons/blob/main/License.txt"
+      },
+      "originalURL": "https://github.com/Mage-Icons/mage-icons/blob/main/License.txt",
+      "candidateIDs": [
+        "mage:trash"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/mage/trash/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/Mage-Icons/mage-icons/main/License.txt",
+          "finalURL": "https://raw.githubusercontent.com/Mage-Icons/mage-icons/main/License.txt",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "mage.txt",
+      "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+      "bytes": 11357,
+      "downloadURL": "https://raw.githubusercontent.com/Mage-Icons/mage-icons/main/License.txt",
+      "observedLicense": "Apache-2.0",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "majesticons": {
+      "prefix": "majesticons",
+      "name": "Majesticons",
+      "author": {
+        "name": "Gerrit Halfmann",
+        "url": "https://github.com/halfmage/majesticons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/halfmage/majesticons/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/halfmage/majesticons/blob/main/LICENSE",
+      "candidateIDs": [
+        "majesticons:puzzle-line"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/majesticons/puzzle-line/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/halfmage/majesticons/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/halfmage/majesticons/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "majesticons.txt",
+      "sha256": "3384c6c2fd1aaaa1f3be9bfd69a63ba858106d54ea7399f06685fd1e5264eb21",
+      "bytes": 1072,
+      "downloadURL": "https://raw.githubusercontent.com/halfmage/majesticons/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "material-symbols": {
+      "prefix": "material-symbols",
+      "name": "Material Symbols",
+      "author": {
+        "name": "Google",
+        "url": "https://github.com/google/material-design-icons"
+      },
+      "declaredLicense": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/google/material-design-icons/blob/master/LICENSE"
+      },
+      "originalURL": "https://github.com/google/material-design-icons/blob/master/LICENSE",
+      "candidateIDs": [
+        "material-symbols:package-2-outline",
+        "material-symbols:network-node",
+        "material-symbols:search-check-rounded",
+        "material-symbols:search-check-2-outline-rounded",
+        "material-symbols:update-rounded",
+        "material-symbols:system-update-alt-rounded",
+        "material-symbols:apk-install-outline",
+        "material-symbols:apk-install",
+        "material-symbols:install-desktop",
+        "material-symbols:download",
+        "material-symbols:upgrade",
+        "material-symbols:update",
+        "material-symbols:system-update-outline",
+        "material-symbols:system-update-alt",
+        "material-symbols:reset-wrench",
+        "material-symbols:build-outline",
+        "material-symbols:delete-outline"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/material-symbols/package-2-outline/",
+        "https://icon-sets.iconify.design/material-symbols/network-node/",
+        "https://icon-sets.iconify.design/material-symbols/search-check-rounded/",
+        "https://icon-sets.iconify.design/material-symbols/search-check-2-outline-rounded/",
+        "https://icon-sets.iconify.design/material-symbols/update-rounded/",
+        "https://icon-sets.iconify.design/material-symbols/system-update-alt-rounded/",
+        "https://icon-sets.iconify.design/material-symbols/apk-install-outline/",
+        "https://icon-sets.iconify.design/material-symbols/apk-install/",
+        "https://icon-sets.iconify.design/material-symbols/install-desktop/",
+        "https://icon-sets.iconify.design/material-symbols/download/",
+        "https://icon-sets.iconify.design/material-symbols/upgrade/",
+        "https://icon-sets.iconify.design/material-symbols/update/",
+        "https://icon-sets.iconify.design/material-symbols/system-update-outline/",
+        "https://icon-sets.iconify.design/material-symbols/system-update-alt/",
+        "https://icon-sets.iconify.design/material-symbols/reset-wrench/",
+        "https://icon-sets.iconify.design/material-symbols/build-outline/",
+        "https://icon-sets.iconify.design/material-symbols/delete-outline/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/google/material-design-icons/master/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/google/material-design-icons/master/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "material-symbols.txt",
+      "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+      "bytes": 11357,
+      "downloadURL": "https://raw.githubusercontent.com/google/material-design-icons/master/LICENSE",
+      "observedLicense": "Apache-2.0",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "mdi": {
+      "prefix": "mdi",
+      "name": "Material Design Icons",
+      "author": {
+        "name": "Pictogrammers",
+        "url": "https://github.com/Templarian/MaterialDesign"
+      },
+      "declaredLicense": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/Templarian/MaterialDesign/blob/master/LICENSE"
+      },
+      "originalURL": "https://github.com/Templarian/MaterialDesign/blob/master/LICENSE",
+      "candidateIDs": [
+        "mdi:puzzle-outline",
+        "mdi:puzzle-plus-outline",
+        "mdi:puzzle-check-outline",
+        "mdi:dependency",
+        "mdi:connection",
+        "mdi:workflow-outline",
+        "mdi:update",
+        "mdi:source-branch-refresh",
+        "mdi:cog-refresh-outline",
+        "mdi:file-refresh-outline",
+        "mdi:folder-refresh-outline",
+        "mdi:archive-refresh-outline",
+        "mdi:package-down",
+        "mdi:package-variant-plus",
+        "mdi:package-variant-closed-plus",
+        "mdi:package-up",
+        "mdi:update",
+        "mdi:box-refresh",
+        "mdi:box-refresh-outline",
+        "mdi:box-sync",
+        "mdi:box-sync-outline",
+        "mdi:settings-refresh",
+        "mdi:settings-refresh-outline",
+        "mdi:build-outline",
+        "mdi:folder-refresh",
+        "mdi:package-variant-remove",
+        "mdi:package-variant-closed-remove",
+        "mdi:package-variant-minus",
+        "mdi:package-variant-closed-minus",
+        "mdi:trash-outline"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/mdi/puzzle-outline/",
+        "https://icon-sets.iconify.design/mdi/puzzle-plus-outline/",
+        "https://icon-sets.iconify.design/mdi/puzzle-check-outline/",
+        "https://icon-sets.iconify.design/mdi/dependency/",
+        "https://icon-sets.iconify.design/mdi/connection/",
+        "https://icon-sets.iconify.design/mdi/workflow-outline/",
+        "https://icon-sets.iconify.design/mdi/update/",
+        "https://icon-sets.iconify.design/mdi/source-branch-refresh/",
+        "https://icon-sets.iconify.design/mdi/cog-refresh-outline/",
+        "https://icon-sets.iconify.design/mdi/file-refresh-outline/",
+        "https://icon-sets.iconify.design/mdi/folder-refresh-outline/",
+        "https://icon-sets.iconify.design/mdi/archive-refresh-outline/",
+        "https://icon-sets.iconify.design/mdi/package-down/",
+        "https://icon-sets.iconify.design/mdi/package-variant-plus/",
+        "https://icon-sets.iconify.design/mdi/package-variant-closed-plus/",
+        "https://icon-sets.iconify.design/mdi/package-up/",
+        "https://icon-sets.iconify.design/mdi/update/",
+        "https://icon-sets.iconify.design/mdi/box-refresh/",
+        "https://icon-sets.iconify.design/mdi/box-refresh-outline/",
+        "https://icon-sets.iconify.design/mdi/box-sync/",
+        "https://icon-sets.iconify.design/mdi/box-sync-outline/",
+        "https://icon-sets.iconify.design/mdi/settings-refresh/",
+        "https://icon-sets.iconify.design/mdi/settings-refresh-outline/",
+        "https://icon-sets.iconify.design/mdi/build-outline/",
+        "https://icon-sets.iconify.design/mdi/folder-refresh/",
+        "https://icon-sets.iconify.design/mdi/package-variant-remove/",
+        "https://icon-sets.iconify.design/mdi/package-variant-closed-remove/",
+        "https://icon-sets.iconify.design/mdi/package-variant-minus/",
+        "https://icon-sets.iconify.design/mdi/package-variant-closed-minus/",
+        "https://icon-sets.iconify.design/mdi/trash-outline/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/Templarian/MaterialDesign/master/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/Templarian/MaterialDesign/master/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "mdi.txt",
+      "sha256": "3bae6305bcaa6d10219b999f65c342034c2d40b1c0e8567fa08605e73ccba829",
+      "bytes": 992,
+      "downloadURL": "https://raw.githubusercontent.com/Templarian/MaterialDesign/master/LICENSE",
+      "observedLicense": "Pictogrammers Free License; Apache-2.0 plus third-party exceptions; MIT for code",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification.",
+      "reviewNotes": [
+        "License expressly permits third-party licenses for some icons; collection-level Apache metadata is not sufficient for each icon."
+      ]
+    },
+    "mingcute": {
+      "prefix": "mingcute",
+      "name": "MingCute Icon",
+      "author": {
+        "name": "MingCute Design",
+        "url": "https://github.com/Richard9394/MingCute"
+      },
+      "declaredLicense": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/Richard9394/MingCute/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/Richard9394/MingCute/blob/main/LICENSE",
+      "candidateIDs": [
+        "mingcute:package-fill",
+        "mingcute:tool-fill",
+        "mingcute:scan-line",
+        "mingcute:scan-fill",
+        "mingcute:refresh-2-line",
+        "mingcute:download-line",
+        "mingcute:arrow-up-line",
+        "mingcute:refresh-1-line"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/mingcute/package-fill/",
+        "https://icon-sets.iconify.design/mingcute/tool-fill/",
+        "https://icon-sets.iconify.design/mingcute/scan-line/",
+        "https://icon-sets.iconify.design/mingcute/scan-fill/",
+        "https://icon-sets.iconify.design/mingcute/refresh-2-line/",
+        "https://icon-sets.iconify.design/mingcute/download-line/",
+        "https://icon-sets.iconify.design/mingcute/arrow-up-line/",
+        "https://icon-sets.iconify.design/mingcute/refresh-1-line/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/Richard9394/MingCute/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/Richard9394/MingCute/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "mingcute.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "bytes": 11358,
+      "downloadURL": "https://raw.githubusercontent.com/Richard9394/MingCute/main/LICENSE",
+      "observedLicense": "Apache-2.0",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "mynaui": {
+      "prefix": "mynaui",
+      "name": "Myna UI Icons",
+      "author": {
+        "name": "Praveen Juge",
+        "url": "https://github.com/praveenjuge/mynaui-icons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/praveenjuge/mynaui-icons/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/praveenjuge/mynaui-icons/blob/main/LICENSE",
+      "candidateIDs": [
+        "mynaui:component",
+        "mynaui:component-solid",
+        "mynaui:package",
+        "mynaui:puzzle",
+        "mynaui:tool",
+        "mynaui:search-check",
+        "mynaui:search-check-solid",
+        "mynaui:refresh",
+        "mynaui:download",
+        "mynaui:refresh",
+        "mynaui:trash"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/mynaui/component/",
+        "https://icon-sets.iconify.design/mynaui/component-solid/",
+        "https://icon-sets.iconify.design/mynaui/package/",
+        "https://icon-sets.iconify.design/mynaui/puzzle/",
+        "https://icon-sets.iconify.design/mynaui/tool/",
+        "https://icon-sets.iconify.design/mynaui/search-check/",
+        "https://icon-sets.iconify.design/mynaui/search-check-solid/",
+        "https://icon-sets.iconify.design/mynaui/refresh/",
+        "https://icon-sets.iconify.design/mynaui/download/",
+        "https://icon-sets.iconify.design/mynaui/refresh/",
+        "https://icon-sets.iconify.design/mynaui/trash/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/praveenjuge/mynaui-icons/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/praveenjuge/mynaui-icons/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "mynaui.txt",
+      "sha256": "eebf4868e5d0ea0dda86648bb1cd0caa67a3fca0c49fa15cf469b9896e6b0ff9",
+      "bytes": 1064,
+      "downloadURL": "https://raw.githubusercontent.com/praveenjuge/mynaui-icons/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "octicon": {
+      "prefix": "octicon",
+      "name": "Octicons",
+      "author": {
+        "name": "GitHub",
+        "url": "https://github.com/primer/octicons/"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/primer/octicons/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/primer/octicons/blob/main/LICENSE",
+      "candidateIDs": [
+        "octicon:download-24",
+        "octicon:trash-24"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/octicon/download-24/",
+        "https://icon-sets.iconify.design/octicon/trash-24/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/primer/octicons/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/primer/octicons/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "octicon.txt",
+      "sha256": "da259c8bd0de62713ccdcf88910aebca810644f98c2c912bad814fc79ea778df",
+      "bytes": 1068,
+      "downloadURL": "https://raw.githubusercontent.com/primer/octicons/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "pajamas": {
+      "prefix": "pajamas",
+      "name": "Gitlab SVGs",
+      "author": {
+        "name": "GitLab B.V.",
+        "url": "https://gitlab.com/gitlab-org/gitlab-svgs/-/tree/main"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://gitlab.com/gitlab-org/gitlab-svgs/-/blob/main/LICENSE"
+      },
+      "originalURL": "https://gitlab.com/gitlab-org/gitlab-svgs/-/blob/main/LICENSE",
+      "candidateIDs": [
+        "pajamas:upgrade"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/pajamas/upgrade/"
+      ],
+      "attempts": [
+        {
+          "url": "https://gitlab.com/gitlab-org/gitlab-svgs/-/raw/main/LICENSE",
+          "finalURL": "https://gitlab.com/gitlab-org/gitlab-svgs/-/raw/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "pajamas.txt",
+      "sha256": "c7687909a7c5393c8fdf041242489d16056619b861d70f1549e6a687f0506900",
+      "bytes": 1281,
+      "downloadURL": "https://gitlab.com/gitlab-org/gitlab-svgs/-/raw/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "ph": {
+      "prefix": "ph",
+      "name": "Phosphor",
+      "author": {
+        "name": "Phosphor Icons",
+        "url": "https://github.com/phosphor-icons/core"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/phosphor-icons/core/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/phosphor-icons/core/blob/main/LICENSE",
+      "candidateIDs": [
+        "ph:package-duotone",
+        "ph:network-duotone",
+        "ph:scan-duotone",
+        "ph:download-simple-duotone",
+        "ph:download",
+        "ph:download-duotone",
+        "ph:arrow-up",
+        "ph:trash",
+        "ph:trash-duotone"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/ph/package-duotone/",
+        "https://icon-sets.iconify.design/ph/network-duotone/",
+        "https://icon-sets.iconify.design/ph/scan-duotone/",
+        "https://icon-sets.iconify.design/ph/download-simple-duotone/",
+        "https://icon-sets.iconify.design/ph/download/",
+        "https://icon-sets.iconify.design/ph/download-duotone/",
+        "https://icon-sets.iconify.design/ph/arrow-up/",
+        "https://icon-sets.iconify.design/ph/trash/",
+        "https://icon-sets.iconify.design/ph/trash-duotone/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/phosphor-icons/core/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/phosphor-icons/core/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "ph.txt",
+      "sha256": "b5b1f1da112d18ea2147decfd48ddc1bf2b5aeb6c265381579340e95b15a2bb2",
+      "bytes": 1071,
+      "downloadURL": "https://raw.githubusercontent.com/phosphor-icons/core/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "prime": {
+      "prefix": "prime",
+      "name": "Prime Icons",
+      "author": {
+        "name": "PrimeTek",
+        "url": "https://github.com/primefaces/primeicons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/primefaces/primeicons/blob/master/LICENSE"
+      },
+      "originalURL": "https://github.com/primefaces/primeicons/blob/master/LICENSE",
+      "candidateIDs": [
+        "prime:trash"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/prime/trash/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/primefaces/primeicons/master/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/primefaces/primeicons/master/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "prime.txt",
+      "sha256": "140e5886a54d897d852dbf7eeffd2c464467eddfcb04374241f90c61658493bd",
+      "bytes": 1070,
+      "downloadURL": "https://raw.githubusercontent.com/primefaces/primeicons/master/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "proicons": {
+      "prefix": "proicons",
+      "name": "ProIcons",
+      "author": {
+        "name": "ProCode",
+        "url": "https://github.com/ProCode-Software/proicons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/ProCode-Software/proicons/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/ProCode-Software/proicons/blob/main/LICENSE",
+      "candidateIDs": [
+        "proicons:component",
+        "proicons:app-remove"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/proicons/component/",
+        "https://icon-sets.iconify.design/proicons/app-remove/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/ProCode-Software/proicons/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/ProCode-Software/proicons/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "proicons.txt",
+      "sha256": "1668412af87d0d966a578e84560f392a1a3a60a01d47bc08c022b8f074e0efb6",
+      "bytes": 1064,
+      "downloadURL": "https://raw.githubusercontent.com/ProCode-Software/proicons/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "qlementine-icons": {
+      "prefix": "qlementine-icons",
+      "name": "Qlementine Icons",
+      "author": {
+        "name": "Olivier Cléro",
+        "url": "https://github.com/oclero/qlementine-icons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/oclero/qlementine-icons/blob/master/LICENSE"
+      },
+      "originalURL": "https://github.com/oclero/qlementine-icons/blob/master/LICENSE",
+      "candidateIDs": [
+        "qlementine-icons:update-24",
+        "qlementine-icons:build-16"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/qlementine-icons/update-24/",
+        "https://icon-sets.iconify.design/qlementine-icons/build-16/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/oclero/qlementine-icons/master/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/oclero/qlementine-icons/master/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "qlementine-icons.txt",
+      "sha256": "5e225fc59e789559014e5feebe5e1a7333d774942fc9026c20186e6c4134fc5b",
+      "bytes": 1071,
+      "downloadURL": "https://raw.githubusercontent.com/oclero/qlementine-icons/master/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "radix-icons": {
+      "prefix": "radix-icons",
+      "name": "Radix Icons",
+      "author": {
+        "name": "WorkOS",
+        "url": "https://github.com/radix-ui/icons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/radix-ui/icons/blob/master/LICENSE"
+      },
+      "originalURL": "https://github.com/radix-ui/icons/blob/master/LICENSE",
+      "candidateIDs": [
+        "radix-icons:component-1",
+        "radix-icons:component-2",
+        "radix-icons:component-instance",
+        "radix-icons:update",
+        "radix-icons:trash"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/radix-icons/component-1/",
+        "https://icon-sets.iconify.design/radix-icons/component-2/",
+        "https://icon-sets.iconify.design/radix-icons/component-instance/",
+        "https://icon-sets.iconify.design/radix-icons/update/",
+        "https://icon-sets.iconify.design/radix-icons/trash/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/radix-ui/icons/master/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/radix-ui/icons/master/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "radix-icons.txt",
+      "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+      "bytes": 1063,
+      "downloadURL": "https://raw.githubusercontent.com/radix-ui/icons/master/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "reicon": {
+      "prefix": "reicon",
+      "name": "Reicon",
+      "author": {
+        "name": "REICON",
+        "url": "https://github.com/dqev/reicon"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/dqev/reicon/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/dqev/reicon/blob/main/LICENSE",
+      "candidateIDs": [
+        "reicon:server-update",
+        "reicon:server-update-filled"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/reicon/server-update/",
+        "https://icon-sets.iconify.design/reicon/server-update-filled/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/dqev/reicon/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/dqev/reicon/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "reicon.txt",
+      "sha256": "c3fb62a9a75902941407987c98982b7793c707729fd7763a7044b7eb02cbfee1",
+      "bytes": 1062,
+      "downloadURL": "https://raw.githubusercontent.com/dqev/reicon/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "ri": {
+      "prefix": "ri",
+      "name": "Remix Icon",
+      "author": {
+        "name": "Remix Design",
+        "url": "https://github.com/cyberalien/RemixIcon"
+      },
+      "declaredLicense": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/cyberalien/RemixIcon/blob/master/License"
+      },
+      "originalURL": "https://github.com/cyberalien/RemixIcon/blob/master/License",
+      "candidateIDs": [
+        "ri:puzzle-line",
+        "ri:puzzle-fill",
+        "ri:network-line",
+        "ri:network-fill",
+        "ri:node-tree",
+        "ri:scan-2-line",
+        "ri:refresh-line",
+        "ri:install-line",
+        "ri:install-fill",
+        "ri:download-line",
+        "ri:arrow-up-line",
+        "ri:refresh-line",
+        "ri:restart-line",
+        "ri:uninstall-line",
+        "ri:uninstall-fill"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/ri/puzzle-line/",
+        "https://icon-sets.iconify.design/ri/puzzle-fill/",
+        "https://icon-sets.iconify.design/ri/network-line/",
+        "https://icon-sets.iconify.design/ri/network-fill/",
+        "https://icon-sets.iconify.design/ri/node-tree/",
+        "https://icon-sets.iconify.design/ri/scan-2-line/",
+        "https://icon-sets.iconify.design/ri/refresh-line/",
+        "https://icon-sets.iconify.design/ri/install-line/",
+        "https://icon-sets.iconify.design/ri/install-fill/",
+        "https://icon-sets.iconify.design/ri/download-line/",
+        "https://icon-sets.iconify.design/ri/arrow-up-line/",
+        "https://icon-sets.iconify.design/ri/refresh-line/",
+        "https://icon-sets.iconify.design/ri/restart-line/",
+        "https://icon-sets.iconify.design/ri/uninstall-line/",
+        "https://icon-sets.iconify.design/ri/uninstall-fill/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/cyberalien/RemixIcon/master/License",
+          "finalURL": "https://raw.githubusercontent.com/cyberalien/RemixIcon/master/License",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "ri.txt",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "bytes": 11357,
+      "downloadURL": "https://raw.githubusercontent.com/cyberalien/RemixIcon/master/License",
+      "observedLicense": "Apache-2.0",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "solar": {
+      "prefix": "solar",
+      "name": "Solar",
+      "author": {
+        "name": "480 Design",
+        "url": "https://www.figma.com/community/file/1166831539721848736"
+      },
+      "declaredLicense": {
+        "title": "CC BY 4.0",
+        "spdx": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/"
+      },
+      "originalURL": "https://creativecommons.org/licenses/by/4.0/",
+      "candidateIDs": [
+        "solar:blocks-line-duotone",
+        "solar:blocks-bold",
+        "solar:blocks-bold-duotone",
+        "solar:container-bold-duotone",
+        "solar:file-search-bold-duotone",
+        "solar:refresh-line-duotone",
+        "solar:refresh-bold",
+        "solar:box-minimalistic-linear",
+        "solar:download-linear",
+        "solar:download-bold",
+        "solar:refresh-circle-linear",
+        "solar:refresh-circle-bold",
+        "solar:smartphone-update-linear",
+        "solar:smartphone-update-bold",
+        "solar:arrow-up-linear",
+        "solar:refresh-linear",
+        "solar:refresh-bold",
+        "solar:trash-bin-trash-bold",
+        "solar:trash-bin-minimalistic-linear",
+        "solar:trash-bin-trash-linear"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/solar/blocks-line-duotone/",
+        "https://icon-sets.iconify.design/solar/blocks-bold/",
+        "https://icon-sets.iconify.design/solar/blocks-bold-duotone/",
+        "https://icon-sets.iconify.design/solar/container-bold-duotone/",
+        "https://icon-sets.iconify.design/solar/file-search-bold-duotone/",
+        "https://icon-sets.iconify.design/solar/refresh-line-duotone/",
+        "https://icon-sets.iconify.design/solar/refresh-bold/",
+        "https://icon-sets.iconify.design/solar/box-minimalistic-linear/",
+        "https://icon-sets.iconify.design/solar/download-linear/",
+        "https://icon-sets.iconify.design/solar/download-bold/",
+        "https://icon-sets.iconify.design/solar/refresh-circle-linear/",
+        "https://icon-sets.iconify.design/solar/refresh-circle-bold/",
+        "https://icon-sets.iconify.design/solar/smartphone-update-linear/",
+        "https://icon-sets.iconify.design/solar/smartphone-update-bold/",
+        "https://icon-sets.iconify.design/solar/arrow-up-linear/",
+        "https://icon-sets.iconify.design/solar/refresh-linear/",
+        "https://icon-sets.iconify.design/solar/refresh-bold/",
+        "https://icon-sets.iconify.design/solar/trash-bin-trash-bold/",
+        "https://icon-sets.iconify.design/solar/trash-bin-minimalistic-linear/",
+        "https://icon-sets.iconify.design/solar/trash-bin-trash-linear/"
+      ],
+      "attempts": [
+        {
+          "url": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+          "finalURL": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "solar.txt",
+      "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+      "bytes": 18657,
+      "downloadURL": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+      "observedLicense": "CC-BY-4.0",
+      "scopeNote": "Official CC legalcode text alone does not prove this author applied it to each candidate. Author URL and per-icon Iconify source retained; attribution and any modifications must be tracked."
+    },
+    "stash": {
+      "prefix": "stash",
+      "name": "Stash Icons",
+      "author": {
+        "name": "Pingback LLC",
+        "url": "https://github.com/stash-ui/icons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/stash-ui/icons/blob/master/LICENSE"
+      },
+      "originalURL": "https://github.com/stash-ui/icons/blob/master/LICENSE",
+      "candidateIDs": [
+        "stash:folder-refresh"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/stash/folder-refresh/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/stash-ui/icons/master/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/stash-ui/icons/master/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "stash.txt",
+      "sha256": "dddadfc912b6702d2f97e4c75b821c88ee0c77d3a2fa0a031f79d7bfaee5f0a4",
+      "bytes": 1069,
+      "downloadURL": "https://raw.githubusercontent.com/stash-ui/icons/master/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "system-uicons": {
+      "prefix": "system-uicons",
+      "name": "System UIcons",
+      "author": {
+        "name": "Corey Ginnivan",
+        "url": "https://github.com/CoreyGinnivan/system-uicons"
+      },
+      "declaredLicense": {
+        "title": "Unlicense",
+        "spdx": "Unlicense",
+        "url": "https://github.com/CoreyGinnivan/system-uicons/blob/master/LICENSE"
+      },
+      "originalURL": "https://github.com/CoreyGinnivan/system-uicons/blob/master/LICENSE",
+      "candidateIDs": [
+        "system-uicons:component-add",
+        "system-uicons:refresh",
+        "system-uicons:trash"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/system-uicons/component-add/",
+        "https://icon-sets.iconify.design/system-uicons/refresh/",
+        "https://icon-sets.iconify.design/system-uicons/trash/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/CoreyGinnivan/system-uicons/master/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/CoreyGinnivan/system-uicons/master/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "system-uicons.txt",
+      "sha256": "6b0382b16279f26ff69014300541967a356a666eb0b91b422f6862f6b7dad17e",
+      "bytes": 1211,
+      "downloadURL": "https://raw.githubusercontent.com/CoreyGinnivan/system-uicons/master/LICENSE",
+      "observedLicense": "Unlicense",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "tabler": {
+      "prefix": "tabler",
+      "name": "Tabler Icons",
+      "author": {
+        "name": "Paweł Kuna",
+        "url": "https://github.com/tabler/tabler-icons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+      },
+      "originalURL": "https://github.com/tabler/tabler-icons/blob/master/LICENSE",
+      "candidateIDs": [
+        "tabler:package",
+        "tabler:blocks",
+        "tabler:puzzle",
+        "tabler:puzzle-2",
+        "tabler:hierarchy-2",
+        "tabler:network",
+        "tabler:connection",
+        "tabler:tool",
+        "tabler:scan",
+        "tabler:settings-search",
+        "tabler:folder-search",
+        "tabler:refresh-dot",
+        "tabler:package-import",
+        "tabler:download",
+        "tabler:arrow-big-up",
+        "tabler:arrow-big-up-lines",
+        "tabler:refresh-alert",
+        "tabler:arrow-up",
+        "tabler:archive-restore",
+        "tabler:refresh",
+        "tabler:square-rounded-minus",
+        "tabler:trash",
+        "tabler:trash-filled"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/tabler/package/",
+        "https://icon-sets.iconify.design/tabler/blocks/",
+        "https://icon-sets.iconify.design/tabler/puzzle/",
+        "https://icon-sets.iconify.design/tabler/puzzle-2/",
+        "https://icon-sets.iconify.design/tabler/hierarchy-2/",
+        "https://icon-sets.iconify.design/tabler/network/",
+        "https://icon-sets.iconify.design/tabler/connection/",
+        "https://icon-sets.iconify.design/tabler/tool/",
+        "https://icon-sets.iconify.design/tabler/scan/",
+        "https://icon-sets.iconify.design/tabler/settings-search/",
+        "https://icon-sets.iconify.design/tabler/folder-search/",
+        "https://icon-sets.iconify.design/tabler/refresh-dot/",
+        "https://icon-sets.iconify.design/tabler/package-import/",
+        "https://icon-sets.iconify.design/tabler/download/",
+        "https://icon-sets.iconify.design/tabler/arrow-big-up/",
+        "https://icon-sets.iconify.design/tabler/arrow-big-up-lines/",
+        "https://icon-sets.iconify.design/tabler/refresh-alert/",
+        "https://icon-sets.iconify.design/tabler/arrow-up/",
+        "https://icon-sets.iconify.design/tabler/archive-restore/",
+        "https://icon-sets.iconify.design/tabler/refresh/",
+        "https://icon-sets.iconify.design/tabler/square-rounded-minus/",
+        "https://icon-sets.iconify.design/tabler/trash/",
+        "https://icon-sets.iconify.design/tabler/trash-filled/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/tabler/tabler-icons/master/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/tabler/tabler-icons/master/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "tabler.txt",
+      "sha256": "b740a1d46122672da62833e97f7e7c8a13fa85cbc7445b584b297cc00dde93db",
+      "bytes": 1073,
+      "downloadURL": "https://raw.githubusercontent.com/tabler/tabler-icons/master/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "tdesign": {
+      "prefix": "tdesign",
+      "name": "TDesign Icons",
+      "author": {
+        "name": "TDesign",
+        "url": "https://github.com/Tencent/tdesign-icons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/Tencent/tdesign-icons/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/Tencent/tdesign-icons/blob/main/LICENSE",
+      "candidateIDs": [
+        "tdesign:module",
+        "tdesign:module-filled",
+        "tdesign:component-grid",
+        "tdesign:refresh",
+        "tdesign:install",
+        "tdesign:install-filled",
+        "tdesign:install-desktop",
+        "tdesign:install-desktop-filled",
+        "tdesign:install-mobile",
+        "tdesign:download",
+        "tdesign:arrow-up",
+        "tdesign:refresh",
+        "tdesign:uninstall",
+        "tdesign:uninstall-filled"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/tdesign/module/",
+        "https://icon-sets.iconify.design/tdesign/module-filled/",
+        "https://icon-sets.iconify.design/tdesign/component-grid/",
+        "https://icon-sets.iconify.design/tdesign/refresh/",
+        "https://icon-sets.iconify.design/tdesign/install/",
+        "https://icon-sets.iconify.design/tdesign/install-filled/",
+        "https://icon-sets.iconify.design/tdesign/install-desktop/",
+        "https://icon-sets.iconify.design/tdesign/install-desktop-filled/",
+        "https://icon-sets.iconify.design/tdesign/install-mobile/",
+        "https://icon-sets.iconify.design/tdesign/download/",
+        "https://icon-sets.iconify.design/tdesign/arrow-up/",
+        "https://icon-sets.iconify.design/tdesign/refresh/",
+        "https://icon-sets.iconify.design/tdesign/uninstall/",
+        "https://icon-sets.iconify.design/tdesign/uninstall-filled/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/Tencent/tdesign-icons/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/Tencent/tdesign-icons/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "tdesign.txt",
+      "sha256": "b3dbcb89dcf4a11abf1b70d043795a3da0c458af16fefd2ff315d9ff5875312f",
+      "bytes": 1072,
+      "downloadURL": "https://raw.githubusercontent.com/Tencent/tdesign-icons/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "teenyicons": {
+      "prefix": "teenyicons",
+      "name": "Teenyicons",
+      "author": {
+        "name": "smhmd",
+        "url": "https://github.com/teenyicons/teenyicons"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/teenyicons/teenyicons/blob/master/LICENSE"
+      },
+      "originalURL": "https://github.com/teenyicons/teenyicons/blob/master/LICENSE",
+      "candidateIDs": [
+        "teenyicons:download-outline",
+        "teenyicons:arrow-up-outline",
+        "teenyicons:bin-outline"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/teenyicons/download-outline/",
+        "https://icon-sets.iconify.design/teenyicons/arrow-up-outline/",
+        "https://icon-sets.iconify.design/teenyicons/bin-outline/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/teenyicons/teenyicons/master/LICENSE",
+          "httpStatus": 404,
+          "error": "HTTP Error 404: Not Found"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/smhmd/teenyicons/master/LICENSE",
+          "httpStatus": 200,
+          "discoveredVia": "GitHub repository search found original author repository smhmd/teenyicons"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "teenyicons.txt",
+      "bytes": 1072,
+      "sha256": "4c88ea0fa4b0cc7b6dbdadcddb3dfaa460329c08c84ac86842ebb3865f9379c1",
+      "downloadURL": "https://raw.githubusercontent.com/smhmd/teenyicons/master/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    },
+    "vadivam": {
+      "prefix": "vadivam",
+      "name": "Vadivam",
+      "author": {
+        "name": "Praveen Juge",
+        "url": "https://github.com/praveenjuge/vadivam"
+      },
+      "declaredLicense": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/praveenjuge/vadivam/blob/main/LICENSE"
+      },
+      "originalURL": "https://github.com/praveenjuge/vadivam/blob/main/LICENSE",
+      "candidateIDs": [
+        "vadivam:package-minus"
+      ],
+      "iconSources": [
+        "https://icon-sets.iconify.design/vadivam/package-minus/"
+      ],
+      "attempts": [
+        {
+          "url": "https://raw.githubusercontent.com/praveenjuge/vadivam/main/LICENSE",
+          "finalURL": "https://raw.githubusercontent.com/praveenjuge/vadivam/main/LICENSE",
+          "httpStatus": 200,
+          "contentType": "text/plain; charset=utf-8"
+        }
+      ],
+      "status": "downloaded-reviewed",
+      "file": "vadivam.txt",
+      "sha256": "eebf4868e5d0ea0dda86648bb1cd0caa67a3fca0c49fa15cf469b9896e6b0ff9",
+      "bytes": 1064,
+      "downloadURL": "https://raw.githubusercontent.com/praveenjuge/vadivam/main/LICENSE",
+      "observedLicense": "MIT",
+      "scopeNote": "Current upstream license text, not a pinned-version or per-icon source-chain verification."
+    }
+  }
+}

@@ -29,7 +29,7 @@ test("tool labels describe actions in Chinese while icons retain tool categories
     ["list_mcp_resources", "resources", "列出 MCP 资源"],
     ["list_mcp_resource_templates", "templates", "列出 MCP 资源模板"],
     ["read_mcp_resource", "resource-read", "读取 MCP 资源"],
-    ["web_search", "search", "搜索网页"], ["source_check", "search", "核查来源"],
+    ["axiom_search", "search", "搜索网页"], ["web_search", "search", "搜索网页"], ["source_check", "search", "核查来源"],
     ["fetch_content", "web", "读取网页"], ["get_search_content", "web", "读取搜索结果"],
     ["delegate", "delegate", "委派子任务"], ["append", "append", "补充子任务"],
     ["cancel_task", "cancel", "停止子任务"], ["read_result", "result", "读取子任务结果"],
@@ -70,7 +70,7 @@ test("search and web summaries retain queries, URLs and search scope", () => {
   assert.deepEqual(toolSummary(call("grep", { path: "src", pattern: "toolSummary" })), {
     label: "搜索文本", icon: "search", target: "toolSummary", detail: "src",
   });
-  assert.equal(toolSummary(call("web_search", { queries: ["first", null, {}, "second"] })).target, "first · second");
+  assert.equal(toolSummary(call("axiom_search", { queries: ["first", null, {}, "second"] })).target, "first · second");
   assert.equal(toolSummary(call("fetch_content", { urls: ["https://example.com", "https://example.org"] })).target, "https://example.com · https://example.org");
   assert.equal(toolSummary(call("read", { path: "", file_path: "fallback.ts" })).target, "fallback.ts");
   assert.equal(toolSummary(call("delegate", { tasks: [null, { title: "测试", task: "完整测试要求" }] })).target, "子任务 · 测试");

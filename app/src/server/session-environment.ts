@@ -14,6 +14,8 @@ import { openCliResources } from "./integrations/opencli-resources.js";
 import { reaResources } from "./integrations/rea-resources.js";
 import { taskTools } from "./task-tools.js";
 import { memoryQueryTool } from "./memory-tool.js";
+import { webReadTool } from "./web-read-tool.js";
+import { webSearchTool } from "./web-search-tool.js";
 import { resourceWarnings } from "./reload-resources.js";
 import { topicSnapshot } from "./memory-topics.js";
 import { sessionRetrySettings } from "./session-retry-policy.js";
@@ -66,13 +68,13 @@ export async function previewEnvironment(input: EnvironmentResourceInput & { mem
   const definitions: Pick<ToolDefinition, "name" | "description" | "parameters" | "promptSnippet" | "promptGuidelines">[] = [
     createReadToolDefinition(input.cwd), createBashToolDefinition(input.cwd), createPowerShellToolDefinition(input.cwd),
     createEditToolDefinition(input.cwd), createWriteToolDefinition(input.cwd), createGrepToolDefinition(input.cwd),
-    createFindToolDefinition(input.cwd), createLsToolDefinition(input.cwd), ...taskTools(unavailable), memoryQueryTool(unavailable),
+    createFindToolDefinition(input.cwd), createLsToolDefinition(input.cwd), ...taskTools(unavailable), memoryQueryTool(unavailable), webReadTool(unavailable), webSearchTool(unavailable),
   ];
   const configured = settings.getDefaultTools();
   const defaults = configured ?? (process.platform === "win32"
     ? ["read", "edit", "write", "powershell"]
     : ["read", "bash", "edit", "write"]);
-  const hostNames = [...taskTools(unavailable).map(tool => tool.name), "memory_query"];
+  const hostNames = [...taskTools(unavailable).map(tool => tool.name), "memory_query", "web_read", "axiom_search"];
   const names = [...new Set([...defaults, ...hostNames])].filter(name => definitions.some(tool => tool.name === name));
   const tools = definitions.filter(tool => names.includes(tool.name));
   const toolSnippets = Object.fromEntries(definitions.filter(tool => tool.promptSnippet?.trim()).map(tool =>

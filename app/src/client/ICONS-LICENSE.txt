@@ -25,6 +25,10 @@ THE SOFTWARE.
 Session memory execution states: Lucide clock and check-check (ISC), Tabler loader-4 and hand-stop (MIT), Phosphor pause and warning-light (MIT), original geometry in memory/MemoryStateIcon.tsx. Loader rotation, pause opacity and one-shot completion stroke use intrinsic SVG animation without additional geometry. The Lucide/Tabler notices below and assets/PHOSPHOR-LICENSE.txt apply.
 Sources: https://icon-sets.iconify.design/lucide/clock/ https://icon-sets.iconify.design/lucide/check-check/ https://icon-sets.iconify.design/tabler/loader-4/ https://icon-sets.iconify.design/tabler/hand-stop/ https://icon-sets.iconify.design/ph/pause/ https://icon-sets.iconify.design/ph/warning-light/
 
+Model account subscription validity: Lucide calendar, original geometry in icons.svg (ISC notice below).
+Source: https://lucide.dev/icons/calendar
+SVG source: https://github.com/lucide-icons/lucide/blob/main/icons/calendar.svg
+
 Conversation fork: Lucide git-branch, original geometry in icons.svg (ISC notice below).
 Source: https://lucide.dev/icons/git-branch
 SVG source: https://github.com/lucide-icons/lucide/blob/main/icons/git-branch.svg
@@ -171,3 +175,7 @@ Lucide layout-list · https://lucide.dev/icons/layout-list
 ISC License · Copyright (c) 2026 Lucide Icons and Contributors
 Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
 THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+Model account card provider marks (app/src/client/models/brand-marks.ts), original 24×24 paths, used only to identify the matching platform; no endorsement implied. Trademarks belong to their owners.
+Simple Icons (CC0 1.0): openai, anthropic, googlegemini, githubcopilot. Sources: https://api.iconify.design/simple-icons/{openai,anthropic,googlegemini,githubcopilot}.svg
+DeepSeek: Remix Icon deepseek-fill, https://api.iconify.design/ri/deepseek-fill.svg. Icons by Remix Icon (https://remixicon.com), Remix Icon License v1.0: https://github.com/Remix-Design/RemixIcon/blob/master/License

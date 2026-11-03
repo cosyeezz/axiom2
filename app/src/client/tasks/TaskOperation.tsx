@@ -46,7 +46,6 @@ export const TaskOperation = memo(function TaskOperation({ scope, call, message,
       {groupOpen && open && <>
         {error && <p className="task-call-error">{window.inputError?.text || error}</p>}
         {window.inputError?.next != null && <button type="button" className="task-open-link" disabled={window.loading || !window.current} onClick={() => void window.moreError()}>加载更多错误详情</button>}
-        {window.loading && <p role="status">正在同步任务状态…</p>}
         {(window.error || navigationError) && <p role="alert">{navigationError || window.error} <button type="button" className="task-open-link" onClick={() => { setNavigationError(""); void window.retry(); }}>重试</button></p>}
         <TaskCallDetails scope={scope} call={call} result={result} message={message} />
         {task && <button type="button" className="task-open-link" aria-haspopup="dialog" onClick={async () => {

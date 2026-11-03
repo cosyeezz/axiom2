@@ -9,13 +9,20 @@ import { ProviderUsageCache, publicUsage, type UsageCacheEntry } from "./provide
 import { hasQuotaRecord } from "../shared/session-account-usage.js";
 import { modelProxyRevision } from "./integrations/model-proxy-env.js";
 import { queryOpenAIUsage } from "./providers/openai-usage.js";
+import { queryKiroUsage } from "./providers/kiro-quota.js";
+import { queryQoderUsage } from "./providers/qoder-quota.js";
+import { queryCodeBuddyUsage } from "./providers/codebuddy-usage.js";
 
 type UsageAdapter = {
   query: (providerId: string, credential: OAuthCredential, signal: AbortSignal) => Promise<ProviderUsage>;
 };
 const openAIAdapter: UsageAdapter = { query: queryOpenAIUsage };
 // Add providers here, not to the page or the generic renderer. Unsupported providers make no request.
-const adapters: ReadonlyMap<string, UsageAdapter> = new Map([["openai", openAIAdapter], ["openai-codex", openAIAdapter]]);
+const adapters: ReadonlyMap<string, UsageAdapter> = new Map([["openai", openAIAdapter], ["openai-codex", openAIAdapter],
+  ["kiro", { query: (providerId, credential, signal) => queryKiroUsage(providerId, credential, signal) }],
+  ["qoder", { query: (providerId, credential, signal) => queryQoderUsage(providerId, credential, signal) }],
+  ["qoder-cn", { query: (providerId, credential, signal) => queryQoderUsage(providerId, credential, signal) }],
+  ["codebuddy-cn", { query: (providerId, credential, signal) => queryCodeBuddyUsage(providerId, credential, signal) }]]);
 export const supportsProviderUsage = (providerId: string) => adapters.has(providerId);
 const unavailable = (providerId: string, message: string): ProviderUsage => ({ providerId, status: "unavailable", metrics: [], message });
 

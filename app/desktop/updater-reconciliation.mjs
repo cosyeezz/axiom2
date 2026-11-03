@@ -64,13 +64,30 @@ export async function createUpdaterReconciler(root) {
     witnesses.length = 0;
     const value = JSON.parse(row.body), task = value.task;
     if (!uuid(task?.id) || !uuid(task?.attemptId) || typeof row.token !== 'string' || !Number.isSafeInteger(row.pid) || row.pid <= 0) fail('原任务身份不完整，无法自动核实。');
+    // A Darwin client download has no descendant writer. Probe before reading
+    // its manifest: a live parent must not add an intent after our empty snapshot.
+    // This exception never applies to an install/service task or a reused PID.
+    let downloadParentAbsent = false;
+    if (process.platform === 'darwin' && value.kind === 'client' && task.resource === 'client' && task.action === 'download') {
+      try { process.kill(row.pid, 0); }
+      catch (error) { if (error.code === 'ESRCH') downloadParentAbsent = true; }
+    }
     const taskDirectory = join(directory, 'tasks', task.id), gatePath = updaterOwnerPath(canonical);
-    updaterTaskSnapshot(canonical, task);
+    const snapshot = updaterTaskSnapshot(canonical, task);
     const manifest = witness(join(taskDirectory, 'supervision.json'));
     if (manifest.format !== 1 || !uuid(manifest.gateId) || manifest.token !== row.token || manifest.taskId !== task.id || manifest.attemptId !== task.attemptId || manifest.root !== canonical || manifest.hostPid !== row.pid || !Array.isArray(manifest.commands) || manifest.commands.length > 256 || !Array.isArray(manifest.services) || manifest.services.length > 256) fail('恢复清单与原任务身份不匹配。');
     const gate = file(gatePath); owner(gate, manifest.gateId, row.pid);
     const removals = [], ids = new Set();
     let parentExited = false;
+    if (downloadParentAbsent && snapshot.resource === 'client' && snapshot.action === 'download'
+      && gate.value.state === 'intent' && gate.value.identity === undefined
+      && manifest.commands.length === 0 && manifest.services.length === 0
+      && manifest.piLock === undefined && manifest.parentWitness === undefined
+      && value.servicePending !== true && value.reconciliation?.servicePending !== true) {
+      // All external writer intents are durable before spawn. With none present,
+      // ESRCH proves the only possible writer (this specific parent) is gone.
+      parentExited = true;
+    }
     if (process.platform === 'linux') parentExited = owned.canRecoverProcessOwner(gatePath);
     if (process.platform === 'win32' && manifest.parentWitness !== undefined) {
       if (manifest.parentWitness?.ready !== true || !uuid(manifest.parentWitness.nonce)) fail('父进程观察凭据不完整，已保留归属记录。');

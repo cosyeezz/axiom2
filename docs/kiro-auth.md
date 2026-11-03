@@ -1,5 +1,7 @@
 # Kiro 原生账号、目录与聊天
 
+> 本页保留早期认证及AWS聊天阶段的范围说明；后续Responses路径与实测以[实现记录](kiro-responses-implementation.md)为准。通用接入方法现见[CLI原生Provider技能](../.agents/skills/cli-native-provider/SKILL.md)，旧版本证据仅迁移归档，不据此扩展原结论。
+
 Axiom 新增独立的 `kiro` 提供商。它不依赖运行 Kiro CLI、kiro.rs 代理或读取其他应用的凭据文件。
 
 **当前实现登录、令牌保存、刷新、本地退出、当前账号实时模型目录，以及原生文本/图片聊天、工具调用与可配置思考等级。** 登录后「拉取模型列表」→加入模型草稿→保存，再在会话中选择该模型。原生协议为 `kiro-chat`，不是 OpenAI 兼容接口；账号令牌不会交给通用或自定义接口。目录存在不代表账号具备推理权限。后续已按用户授权，通过 Axiom 隔离子会话实测 `kiro/claude-sonnet-4.5` 的 high/off 文本请求成功，见[实调记录](evidence/kiro-live/README.md)；不能外推为所有模型、等级、图片或工具均已线上验收。源码更新需正常构建、重启后台才生效，本次未部署或重启服务。
@@ -49,7 +51,7 @@ Builder ID 也是 AWS OIDC 协议，但它是**个人身份**，不能把 `idc` 
 
 注册 JSON 现有字段按旧 Windows 分析快照的原生 writer（`140e8ede0`）顺序排列：`clientName → clientType → entitledApplicationArn → grantTypes → issuerUrl → redirectUris → scopes`，仅写流程实际使用的字段。两种 OIDC 身份的未来设备/PKCE 注册均使用中性 `clientName: "OAuth Client"`，不新增 `entitledApplicationArn`；设备流程省略 `redirectUris`，PKCE 保留精确 loopback 地址。scope/grant/issuer、权限和刷新语义不因此改变；名称变更不回溯修改旧 OAuth 注册，也不证明 CLI 实际注册值、最终 wire 或服务端不可区分。两种身份 × 两种流程的完整 body、键缺席和顺序由[离线认证测试](../app/tests/kiro-auth.test.ts)固定。
 
-版本限定：旧 Windows 快照 SHA256 为 `0ff1d24eea11aa2e244524d635e1cfc8f9820522f4c5bc192fb99590d909320a`；现存一手证据只直接确认 chat/ACP v2 组件自报 **2.12.0**，不能把它当独立复核的 launcher 版本。旧地址不属于后来 Windows 2.35.1 或待建立的 Mac 原生基线，见[版本与证据边界](../.agents/skills/kiro-native-parity-evidence/references/windows-evidence.md)。
+版本限定：旧 Windows 快照 SHA256 为 `0ff1d24eea11aa2e244524d635e1cfc8f9820522f4c5bc192fb99590d909320a`；现存一手证据只直接确认 chat/ACP v2 组件自报 **2.12.0**，不能把它当独立复核的 launcher 版本。旧地址不属于后来 Windows 2.35.1 或待建立的 Mac 原生基线，见[版本与证据边界](evidence/cli-native-provider-skill-01/legacy/kiro-native-parity-evidence/references/windows-evidence.md)。
 
 `clientSecretExpiresAt` 是 Unix 秒级绝对时间，转换为毫秒保存；到期后要求重新注册登录，不将旧 refresh token 绑定到新客户端。`expiresIn` 为秒；刷新未返回新的 refresh token 时保留旧值。
 
@@ -65,7 +67,7 @@ Portal URL 参数、刷新请求字段及响应解析已有此前审查的 CLI 2
 
 ### Windows External 静态补证（非新增登录支持）
 
-旧 Windows 快照的一条 External 刷新消费路径静态核定了表单/缓存键及 `expires_in` 的 None/Some/error 分流：**只有成功解析为 None 才选择3600秒，Some使用其整数值，非法数字字符串或解析错误不是默认分支**。正常合法日期范围内生成UTC文本并保留可变小数精度。该有限结论不等于 Axiom 当前 OIDC/social 可在 expiry 缺失时补3600，不适用于所有身份或实际服务器寿命，也不是 Mac 新版本复验。可携带说明见[历史证据摘要](../.agents/skills/kiro-native-parity-evidence/references/windows-evidence.md)；原本机报告名为 `EXTERNAL-REFRESH-FIELDS-STATUS.md`，不随工程复制原始数据。
+旧 Windows 快照的一条 External 刷新消费路径静态核定了表单/缓存键及 `expires_in` 的 None/Some/error 分流：**只有成功解析为 None 才选择3600秒，Some使用其整数值，非法数字字符串或解析错误不是默认分支**。正常合法日期范围内生成UTC文本并保留可变小数精度。该有限结论不等于 Axiom 当前 OIDC/social 可在 expiry 缺失时补3600，不适用于所有身份或实际服务器寿命，也不是 Mac 新版本复验。可携带说明见[历史证据摘要](evidence/cli-native-provider-skill-01/legacy/kiro-native-parity-evidence/references/windows-evidence.md)；原本机报告名为 `EXTERNAL-REFRESH-FIELDS-STATUS.md`，不随工程复制原始数据。
 
 这是只读静态与合成验证，不是新增真实登录/请求、成功落盘或完整schema/方法wire恢复。Axiom仍未新增独立External/API_KEY接入，未据此修改上述AWS OIDC或Portal刷新实现、凭据派生门禁、权限或身份；该分析报告为本机产物，不随工程发布。
 

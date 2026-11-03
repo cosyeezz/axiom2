@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { test, beforeEach, afterEach } from "node:test";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,21 @@ import { closeModelNetworks } from "../src/server/model-network.js";
 import { ensureModelProvider } from "../src/server/model-runtime.js";
 import { kiroProvider } from "../src/server/providers/kiro.js";
 import { kiroFrame, kiroResponse } from "./fixtures/kiro-eventstream.js";
+import { ModelAccountService } from "../src/server/model-accounts.js";
+import { selectedAuthPath, selectedCatalogPath } from "../src/server/model-account-storage.js";
+
+// These fixtures exercise local configuration, not the invoking agent's account snapshot.
+const bindingKeys = ["AXIOM_EXECUTION_PROFILE", "AXIOM_MODEL_ACCOUNT_BINDINGS", "AXIOM_MODEL_MANAGED_ACCOUNTS", "AXIOM_MODEL_PROVIDER"];
+let bindings: Map<string, string | undefined>;
+beforeEach(() => {
+  bindings = new Map(bindingKeys.map(key => [key, process.env[key]]));
+  for (const key of bindingKeys) delete process.env[key];
+});
+afterEach(() => {
+  for (const [key, value] of bindings) {
+    if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  }
+});
 
 test("Kiro live discovery rejects failed or skipped refresh instead of reporting cached success", async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-kiro-refresh-evidence-"));
@@ -91,7 +106,10 @@ test("Kiro login and live catalog survive worker/reopen without changing other O
       await delay(10);
     }
     assert.equal(logins.get(owner, flow.id).state.status, "completed", logins.get(owner, flow.id).state.message);
-    const stored = JSON.parse(readFileSync(join(service.dir, "auth.json"), "utf8"));
+    const rootAuth = join(service.dir, "auth.json");
+    const accountAuth = selectedAuthPath("kiro", rootAuth);
+    assert.notEqual(accountAuth, rootAuth, "login persists into its selected account slot");
+    const stored = JSON.parse(readFileSync(accountAuth, "utf8"));
     assert.equal(stored.kiro.authMethod, "builder-id"); assert.equal(stored.kiro.clientSecret, "FIXTURE-CLIENT-SECRET");
     const requests = readFileSync(join(root, "requests.jsonl"), "utf8").trim().split("\n").map(line => JSON.parse(line));
     assert.ok(requests.every(r => r.worker === "1")); assert.equal(requests.length, 3);
@@ -101,9 +119,10 @@ test("Kiro login and live catalog survive worker/reopen without changing other O
     assert.equal(persistedConfig.api, undefined, "auth-only metadata is never persisted as a fake inference protocol");
     assert.equal(persistedConfig.baseUrl, undefined);
     assert.equal((persistedConfig.models ?? []).length, 0);
-    // Unrelated entries survive Kiro's later logout, not just initial registration.
-    stored["unrelated-fixture"] = { type: "api_key", key: "OTHER-SECRET" };
-    writeFileSync(join(service.dir, "auth.json"), JSON.stringify(stored));
+    // Unrelated entries survive Kiro's later account removal, not just initial registration.
+    const unrelatedAuth = JSON.parse(readFileSync(rootAuth, "utf8"));
+    unrelatedAuth["unrelated-fixture"] = { type: "api_key", key: "OTHER-SECRET" };
+    writeFileSync(rootAuth, JSON.stringify(unrelatedAuth));
     const unrelatedConfig = JSON.parse(await service.raw());
     unrelatedConfig.providers["unrelated-fixture"] = { api: "openai-completions", baseUrl: "https://unrelated.invalid/v1", models: [] };
     writeFileSync(join(service.dir, "models.json"), JSON.stringify(unrelatedConfig));
@@ -121,7 +140,8 @@ test("Kiro login and live catalog survive worker/reopen without changing other O
     assert.deepEqual(restored.getModels("kiro").map(model => model.id), ["fixture-kiro-model"]);
     const allRequests = readFileSync(join(root, "requests.jsonl"), "utf8").trim().split("\n").map(line => JSON.parse(line));
     assert.equal(allRequests.length, 4); assert.ok(allRequests.every(request => request.worker === "1"));
-    const cache = readFileSync(join(service.dir, "models-store.json"), "utf8");
+    const catalogPath = selectedCatalogPath("kiro", rootAuth, join(service.dir, "models-store.json"));
+    const cache = readFileSync(catalogPath, "utf8");
     assert.ok(!cache.includes("FIXTURE-REFRESH")); assert.ok(!cache.includes("FIXTURE-ACCESS")); assert.ok(!cache.includes("FIXTURE-CLIENT-SECRET"));
     await assert.rejects(reopened.catalog("kiro", settings.revision + "-stale"), /配置已改变|重新读取|过期/);
     const imported = catalog.models[0]!;
@@ -135,7 +155,7 @@ test("Kiro login and live catalog survive worker/reopen without changing other O
     writeFileSync(snapshotPath, JSON.stringify({ providers: { kiro: { modelOverrides: { [imported.id]: { name: "Snapshot catalog model" } } } } }));
     const snapshot = await reopened.runtime(snapshotPath), snapshotModel = snapshot.getModel("kiro", imported.id)!;
     assert.equal(snapshotModel.name, "Snapshot catalog model");
-    assert.equal(readFileSync(join(service.dir, "models-store.json"), "utf8"), cache, "offline reads and saves never rewrite the catalog cache");
+    assert.equal(readFileSync(catalogPath, "utf8"), cache, "offline reads and saves never rewrite the catalog cache");
     const maliciousPath = join(root, "custom-inference.json");
     writeFileSync(maliciousPath, JSON.stringify({ providers: { kiro: { api: "openai-completions", baseUrl: "https://untrusted.invalid/v1", models: [{ id: "custom-bypass", contextWindow: 1000, maxTokens: 100 }] } } }));
     const malicious = await reopened.runtime(maliciousPath), maliciousModel = malicious.getModel("kiro", "custom-bypass")!;
@@ -167,8 +187,11 @@ test("Kiro login and live catalog survive worker/reopen without changing other O
     const instance = kiroProvider();
     const denied = await instance.streamSimple({} as any, { messages: [] } as unknown as Parameters<typeof instance.streamSimple>[1]).result();
     assert.equal(denied.stopReason, "error"); assert.match(denied.errorMessage!, /kiro-chat/);
-    await (await reopened.runtime()).logout("kiro");
-    const remaining = JSON.parse(readFileSync(join(service.dir, "auth.json"), "utf8"));
+    const accounts = new ModelAccountService(reopened), accountView = await accounts.list();
+    const selected = accountView.accounts.find(account => account.providerId === "kiro" && account.active)!;
+    await accounts.remove(selected.id, accountView.revision);
+    assert.equal(existsSync(accountAuth), false, "account lifecycle deletes its slot and cache");
+    const remaining = JSON.parse(readFileSync(rootAuth, "utf8"));
     assert.equal(remaining.kiro, undefined); assert.equal(remaining["unrelated-fixture"].key, "OTHER-SECRET");
   } finally {
     await logins.close(); await closeModelNetworks(root);

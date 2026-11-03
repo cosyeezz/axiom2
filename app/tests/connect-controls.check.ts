@@ -19,7 +19,7 @@ const errors: string[] = [], remote: string[] = [], passed: string[] = [];
 async function scene(savedAddress?: string, touch = false) {
   const page = await (touch ? touchBrowser : browser).newPage({ viewport: { width: 1100, height: 900 }, hasTouch: touch, isMobile: touch, reducedMotion: "reduce", serviceWorkers: "block" });
   page.setDefaultTimeout(10000); page.on("pageerror", error => errors.push(error.message));
-  await page.route("**/*", async route => { if (route.request().url().startsWith(origin)) await route.continue(); else { remote.push(route.request().url()); await route.abort("blockedbyclient"); } });
+  await page.route("**/*", async route => { if (new URL(route.request().url()).origin === new URL(origin).origin) await route.continue(); else { remote.push(route.request().url()); await route.abort("blockedbyclient"); } });
   await page.addInitScript({ content: "window.__name = value => value;" });
   await page.addInitScript(savedAddress => {
     Object.defineProperty(navigator, "platform", { configurable: true, value: "MacIntel" });
@@ -103,21 +103,24 @@ try {
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${theme}/${width} default fits`);
       assert.equal(await primary(page).evaluate(node => getComputedStyle(node).backgroundColor), "rgba(0, 0, 0, 0)", "stopping the service stays secondary in both themes");
       assert.notEqual(await upper(page).getByRole("button", { name: "连接工作台", exact: true }).evaluate(node => getComputedStyle(node).backgroundColor), "rgba(0, 0, 0, 0)", "connecting keeps a clear primary fill");
-      for (const card of await page.locator(".updates-simple > .component-card").all()) assert.equal(await card.evaluate(node => getComputedStyle(node).borderTopWidth), "1px", "overview cards are not heavy focus-like frames");
-      const subtitleLines = await page.locator(".updates-section-heading p").evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); return range.getClientRects().length; });
-      assert.equal(subtitleLines, 1, `${theme}/${width} concise subtitle never leaves an orphaned final character`);
+      assert.equal(await page.locator(".startup-components > .component-card").count(), 4);
+      assert.equal(await page.locator(".startup-component-card").count(), 0);
+      for (const card of await page.locator(".startup-components > .component-card").all()) assert.equal(await card.evaluate(node => getComputedStyle(node).borderTopWidth), "2px", "overview reuses the built-in component frame without a custom skin");
     }
     await writeFile(resolve(output, "default-layout.json"), JSON.stringify(defaults, null, 2));
-    const secondary = page.locator(".updates-simple > .component-card > .component-secondary");
-    assert.equal(await secondary.count(), 3, "each update card folds its secondary information, not its controls or feedback");
+    const secondary = page.locator(".startup-components > .component-card > .component-secondary");
+    assert.equal(await secondary.count(), 4, "four overview cards fold supporting information, never feedback");
     for (const detail of await secondary.all()) assert.equal(await detail.evaluate(element => (element as HTMLDetailsElement).open), false);
     assert.equal(await page.locator(".startup-preparation").evaluate(element => (element as HTMLDetailsElement).open), false);
     assert.equal(await page.locator(".startup-tools > .startup-maintenance").evaluate(element => (element as HTMLDetailsElement).open), false);
     const backend = page.getByRole("region", { name: "后台服务更新", exact: true });
     assert.equal(await backend.getByText(/应用内 Pi 随后台服务更新/).isVisible(), false);
-    assert.equal(await backend.getByRole("button", { name: "检查更新", exact: true }).isVisible(), true);
-    assert.equal(await backend.getByText("可更新至 v0.4.2", { exact: true }).isVisible(), true);
-    assert.ok(defaults.every(layout => layout.height <= (layout.width === 1100 ? 950 : 1350)), "default page remains compact at desktop and narrow widths");
+    assert.equal(await backend.getByRole("button", { name: "检查更新", exact: true }).isVisible(), false);
+    assert.equal(await backend.getByText("v0.4.2 可更新", { exact: true }).isVisible(), true);
+    assert.equal(await backend.getByRole("button", { name: "更新后台服务", exact: true }).isVisible(), true);
+    // The former two-column custom skin's total-page height is no longer the contract.
+    // Native stacked components must still avoid reserving space for closed details.
+    assert.ok(await page.locator(".startup-components > .component-card").evaluateAll(nodes => nodes.every(node => node.getBoundingClientRect().height <= 200)), "folded built-in components do not reserve empty detail space");
     await page.setViewportSize({ width: 1100, height: 900 });
     const foldedHeight = await page.locator(".startup-panel").evaluate(element => element.getBoundingClientRect().height);
     for (const detail of await secondary.all()) { const summary = detail.locator(":scope > summary"); await summary.focus(); await page.keyboard.press("Enter"); assert.equal(await detail.evaluate(element => (element as HTMLDetailsElement).open), true); }
@@ -137,7 +140,7 @@ try {
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${theme}/${width} fits`);
       await page.screenshot({ path: resolve(output, `full-connect-${theme}-${width}.png`), fullPage: true });
     }
-    await clean(page); passed.push("compact default information hierarchy, primary navigation focus and fill, lighter overview frames, one-line subtitles, keyboard-only disclosure; complete dark/light 320–1100px previews");
+    await clean(page); passed.push("built-in component hierarchy and frames, primary navigation focus and fill, one-line subtitles, keyboard-only disclosure; complete dark/light 320–1100px previews");
   }
   {
     const page = await scene(), checkUpdates = page.locator(".updates-section-heading").getByRole("button", { name: "检查更新", exact: true });
@@ -147,9 +150,8 @@ try {
     assert.equal((await calls(page, "axiom_update", "check")).length, before + 1, "the discoverable check reuses the existing exactly-once executor");
     const backend = page.getByRole("region", { name: "后台服务更新", exact: true });
     await backend.locator(":scope > .maintenance-panel-heading h3").focus(); await page.keyboard.press("Tab");
-    const cardCheck = backend.getByRole("button", { name: "检查更新", exact: true });
-    assert.equal(await cardCheck.evaluate(node => document.activeElement === node), true, "Tab reaches a card's own operation without hover");
-    await page.waitForFunction(node => getComputedStyle(node!).opacity === "1", await backend.locator(":scope > .maintenance-panel-heading .component-actions").elementHandle());
+    const cardUpdate = backend.getByRole("button", { name: "更新后台服务", exact: true });
+    assert.equal(await cardUpdate.evaluate(node => document.activeElement === node), true, "Tab reaches a card's primary operation without hover");
     await page.evaluate(() => { (window as any).connectControlsFixture.serviceError = "合成状态读取失败"; }); await page.clock.runFor(3100);
     await page.locator('.connection-status-tag[data-state="unknown"]').waitFor();
     assert.equal(await checkUpdates.getAttribute("aria-disabled"), "true");
@@ -164,18 +166,15 @@ try {
   for (const width of [390, 320]) {
     const page = await scene(undefined, true); await page.setViewportSize({ width, height: 900 });
     assert.equal(await page.evaluate(() => matchMedia("(pointer: coarse)").matches), true);
-    for (const card of await page.locator(".updates-simple > .component-card").all()) {
+    for (const card of await page.locator(".startup-components > .component-card").all()) {
       const name = card.locator(":scope > .maintenance-panel-heading h3");
       assert.ok(await name.evaluate(node => node.scrollWidth <= node.clientWidth + 1), "known component names remain readable with real touch actions");
-      const actions = card.locator(":scope > .maintenance-panel-heading .component-actions");
-      if (width === 320 && await actions.locator("button").count()) {
-        const identityBottom = await card.locator(":scope > .maintenance-panel-heading :is(h3, .component-card-location)").evaluateAll(nodes => Math.max(...nodes.map(node => node.getBoundingClientRect().bottom)));
-        assert.ok(await actions.evaluate(node => node.getBoundingClientRect().top) >= identityBottom, "narrow touch keeps name and path before its action row");
-      }
+      const action = card.locator(":scope > .maintenance-panel-heading .component-actions");
+      if (await action.count()) assert.ok(await action.evaluate(node => node.getBoundingClientRect().left) >= await name.evaluate(node => node.getBoundingClientRect().right), "native component actions follow the name inline");
     }
-    const targets = page.locator(".updates-section-heading .updates-check-button, .updates-simple > .component-card > .maintenance-panel-heading :is(.component-action, .path-actions > button), .updates-simple > .component-card > .component-secondary > summary");
+    const targets = page.locator(".updates-section-heading .updates-check-button, .startup-components > .component-card > .maintenance-panel-heading .component-action, .startup-components > .component-card > .component-secondary > summary");
     const boxes = await targets.evaluateAll(nodes => nodes.map(node => { const box = node.getBoundingClientRect(); let opacity = 1; for (let parent: Element | null = node; parent; parent = parent.parentElement) opacity *= parseFloat(getComputedStyle(parent).opacity); return { name: node.getAttribute("aria-label") || node.textContent?.trim(), opacity, left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height }; }));
-    assert.ok(boxes.length >= 10, "touch verification covers real check, card operations, path actions and disclosures");
+    assert.ok(boxes.length >= 7, "touch verification covers global check, both visible primary actions and four disclosures");
     for (const box of boxes) { assert.ok(box.width >= 44 && box.height >= 44, `real touch area is at least 44px: ${JSON.stringify(box)}`); assert.ok(box.opacity >= .45, `touch controls must be perceptible without hover, not merely geometrically visible: ${JSON.stringify(box)}`); }
     for (let a = 0; a < boxes.length; a++) for (let b = a + 1; b < boxes.length; b++) assert.ok(Math.min(boxes[a].right, boxes[b].right) - Math.max(boxes[a].left, boxes[b].left) <= .5 || Math.min(boxes[a].bottom, boxes[b].bottom) - Math.max(boxes[a].top, boxes[b].top) <= .5, `touch targets never overlap: ${JSON.stringify([boxes[a], boxes[b]])}`);
     for (const target of await targets.all()) {

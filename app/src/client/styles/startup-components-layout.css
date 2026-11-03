@@ -1,0 +1,14 @@
+/* Page arrangement only. ComponentCard owns all component appearance and controls. */
+.connect-page.connect-refined .startup-panel { grid-template-columns: minmax(0, 1fr); }
+.connect-refined .startup-update-section { background: transparent; border: 0; box-shadow: none; padding: 2px 0 0; }
+.connect-refined .startup-components-overview .updates-section-heading { margin-bottom: 12px; }
+.connect-refined .startup-tools { background: transparent; border: 0; box-shadow: none; }
+.connect-refined .startup-tools-heading { padding: 0 0 6px; }
+.connect-refined .startup-tools-heading h2 { min-height: 24px; }
+.connect-refined .startup-tools > details { border-top: 1px solid var(--control-line); }
+.connect-refined .startup-tools > details > summary { min-height: 48px; padding: 8px 4px; }
+.connect-refined .startup-tool-copy small { display: none; }
+@media (max-width: 700px) {
+  .connect-refined .startup-tools > details > :not(summary) { margin-inline: 0; }
+  .connect-refined .startup-tools > details > .setup-simple { padding-inline: 0; }
+}

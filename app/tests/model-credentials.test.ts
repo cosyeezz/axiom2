@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { ModelService } from "../src/server/model-service.js";
+import { fixtureAccount } from "./model-network-fixture.js";
 
 async function fixture(run: (service: ModelService) => Promise<void>, local = false) {
   const root = mkdtempSync(join(tmpdir(), "axiom-key-migration-"));
@@ -84,7 +85,7 @@ test("failed credential persistence or a concurrent models edit never removes th
   }, true);
 });
 
-test("missing canonical credentials remain editable, block discovery, and can be repaired by saving", async () => {
+test("missing credentials remain editable, block discovery, and are repaired by adding an account", async () => {
   await fixture(async service => {
     config(service, { fixture: definition() });
     const draft = await service.read();
@@ -92,11 +93,12 @@ test("missing canonical credentials remain editable, block discovery, and can be
     assert.match(draft.providers[0].auth?.error ?? "", /API 密钥/);
     await assert.rejects(service.catalog("fixture", draft.revision), { code: "MODEL_AUTH_MISSING" });
     draft.providers[0].key = "REPAIRED";
-    await service.save(draft);
+    await assert.rejects(service.save(draft), { code: "ACCOUNT_AUTH_REQUIRED" });
+    const account = await fixtureAccount(service, "fixture", { type: "api_key", key: "REPAIRED" });
     const repaired = await service.read();
     assert.equal(repaired.providers[0].auth?.configured, true);
     assert.equal(repaired.providers[0].auth?.error, undefined);
-    assert.equal(auth(service).fixture.key, "REPAIRED");
+    assert.equal(JSON.parse(readFileSync(account.authPath, "utf8")).fixture.key, "REPAIRED");
     assert.equal(JSON.parse(await service.raw()).providers.fixture.apiKey, undefined);
   });
 });
@@ -135,8 +137,10 @@ test("whitespace-only legacy keys return a repairable configuration without chan
     assert.match(draft.providers[0].auth?.error ?? "", /API 密钥/);
     await assert.rejects(service.catalog("fixture", draft.revision), { code: "MODEL_AUTH_MISSING" });
     draft.providers[0].key = "FIXED-BLANK";
-    await service.save(draft);
-    assert.equal(auth(service).fixture.key, "FIXED-BLANK");
+    await assert.rejects(service.save(draft), { code: "ACCOUNT_AUTH_REQUIRED" });
+    const account = await fixtureAccount(service, "fixture", { type: "api_key", key: "FIXED-BLANK" });
+    await service.save(await service.read());
+    assert.equal(JSON.parse(readFileSync(account.authPath, "utf8")).fixture.key, "FIXED-BLANK");
     assert.equal(JSON.parse(await service.raw()).providers.fixture.apiKey, undefined);
   });
 });

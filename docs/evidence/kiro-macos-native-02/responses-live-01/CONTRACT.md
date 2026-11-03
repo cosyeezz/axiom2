@@ -1,0 +1,9 @@
+# Responses deployed live acceptance 01
+
+User authorized continuing deployment and actual validation. Development backend 4317 restarted verified PID74722; installed 4319 untouched.
+
+Hypothesis: the deployed independent Kiro provider accepts deepseek-3.2 Responses text and a normal Axiom read-tool/result continuation, beyond synthetic tests. Normal WebSocket app commands use same session/agent pipeline; UI New conversation currently subscribes invalid session identifiers, so an owned fresh session was created through the documented-in-source app API, no bypass of model/auth/context/tools.
+
+Session 9c2edbac-c445-48a6-9745-72e912b207a4 in workspace b64c057e-96ee-435a-a078-a501e8f0d128. No model request sent before this contract. Select exactly kiro/deepseek-3.2/off and confirm before prompt. First prompt text marker only, once. If successful, one follow-up asking read of a harmless synthetic local fixture and reply with its marker (normal tool set retained, no trust overrides). At most two user prompts, expected <=3 main model requests plus app's own auxiliary requests; no explicit retries. Stop after failure or 120 seconds per prompt and inspect safe diagnostics before any new case. Cap observation to metadata/counters/predicates; raw model context/headers/tokens/errors stay RAM, normal app storage unchanged. Do not restore Failed/Abandoned official experiments.
+
+Success requires matching model, validated Responses completion, text predicate, and tool call+execution+result continuation. HTTP200 or same answer alone does not prove wire/server equivalence, full native TLS/auth scopes or all model/feature support. Keep builtin proxy and optout=true. No proxy reconfiguration is necessary for functional acceptance; source-bound terminal diagnostics establish parser path, not independent wire capture.

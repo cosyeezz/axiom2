@@ -1,0 +1,5 @@
+# Responses live tool diagnosis 02
+
+Replaces failed responses-live-01 tool case (run d930d1ae, failed stream stage, cause unknown); that run is not retried. New hypothesis: observing the real SSE through mitmproxy shows whether the server stops before response.completed or the local validator rejects a valid tool terminal. User authorized: restart (done, PID82515 with protocolCode diagnostics) and temporary Kiro proxy external http://127.0.0.1:8080/ (saved, verified in models.json).
+
+One fresh session, kiro/deepseek-3.2/off, one user prompt asking a single read of new fixture /tmp/axiom-kiro-responses-live-02.txt. Up to 2 main requests (tool turn + continuation), no explicit retry, stop at 150s. Observation: mitmweb flows diff vs baseline 20; in-browser whitelist projection of SSE event types, ids equality predicates, status, output item types and counts; no raw body/headers/tokens persisted. Transcript projection: tool calls/results/stopReason/diagnostic codes. Afterwards restore {mode:builtin, profileId:71e33e85-237e-43f2-83ae-a0dc887525e8} and verify.

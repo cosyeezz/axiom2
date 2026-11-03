@@ -32,6 +32,48 @@ test("native construction owns endpoint, auth, UA and protected headers", () => 
   assert.match(prepared.init.body, /Keep full policy/); assert.match(prepared.init.body, /original text/);
 });
 
+test("unobserved Claude IDs retain GAR without a broad or prefix-based route migration", () => {
+  for (const id of ["claude-sonnet-4.5", "claude-opus-5.50", "claude-sonnet-5.50", "claude-sonnet-5.5-preview"]) {
+    const auth = { ...account(), authMethod: "identity-center" };
+    const built = createKiroNativeRequest(id, context, auth);
+    assert.equal(built.responses, false);
+    const prepared = prepareKiroNativeRequest(id, auth, built.payload, { "x-amz-target": "AmazonCodeWhispererStreamingService.GenerateAssistantResponse", TokenType: "API_KEY" });
+    assert.equal(prepared.url, "https://runtime.eu-central-1.kiro.dev/");
+    assert.equal(prepared.init.headers.get("x-amz-target"), "KiroRuntimeService.GenerateAssistantResponse");
+    assert.equal(prepared.init.headers.get("content-type"), "application/x-amz-json-1.0");
+    assert.equal(prepared.init.headers.get("accept"), "application/vnd.amazon.eventstream");
+    assert.equal(prepared.init.headers.get("x-amzn-codewhisperer-optout"), "true");
+    assert.equal(prepared.init.headers.get("tokentype"), "SSO_OIDC");
+    const payload = JSON.parse(prepared.init.body);
+    assert.equal(payload.profileArn, auth.profileArn);
+    assert.equal(payload.conversationState.currentMessage.userInputMessage.modelId, id);
+  }
+});
+
+test("observed Sonnet Responses owns enterprise region, profile and TokenType", () => {
+  const auth = { ...account(), authMethod: "identity-center" }, id = "claude-sonnet-5.5";
+  const built = createKiroNativeRequest(id, context, auth);
+  assert.equal(built.responses, true);
+  const prepared = prepareKiroNativeRequest(id, auth, built.payload, { TokenType: "API_KEY" });
+  assert.equal(prepared.url, "https://runtime.eu-central-1.kiro.dev/v1/responses");
+  assert.equal(prepared.init.headers.get("tokentype"), "SSO_OIDC");
+  assert.equal(prepared.init.headers.get("x-amz-target"), null);
+  assert.equal(prepared.init.headers.get("x-amzn-kiro-profile"), auth.profileArn);
+  assert.equal(JSON.parse(prepared.init.body).model, id);
+  assert.throws(() => prepareKiroNativeRequest(id, auth, { ...built.payload, model: "auto" }));
+});
+
+test("both routes reject spoofed enterprise TokenType for non-enterprise authentication", () => {
+  for (const id of ["claude-sonnet-5.5", "claude-opus-5.5", "deepseek-3.2"]) {
+    for (const authMethod of [undefined, "builder-id", "social", "unknown"]) {
+      const auth = { ...account(), authMethod };
+      const built = createKiroNativeRequest(id, context, auth);
+      const prepared = prepareKiroNativeRequest(id, auth, built.payload, { ToKeNtYpE: "SSO_OIDC" });
+      assert.equal(prepared.init.headers.get("tokentype"), null);
+    }
+  }
+});
+
 test("native guard rejects expired credentials, bad profile and replaced wire identity before transport", () => {
   const auth = account(), { payload } = createKiroNativeRequest(model, context, auth);
   for (const bad of [{ ...auth, expires: 0 }, { ...auth, access: "bad\r\nsecret" }, { ...auth, profileArn: "https://attacker.invalid" }, { ...auth, authMethod: "identity-center", profileArn: undefined }]) {

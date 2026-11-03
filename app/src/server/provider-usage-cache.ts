@@ -8,6 +8,8 @@ const object = (value: unknown): Record<string, unknown> | undefined => value &&
 const text = (value: unknown, limit = 160): value is string => typeof value === "string" && value.length <= limit;
 const number = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
 const date = (value: unknown): value is number => number(value) && value > 0 && value <= 8.64e15;
+/** Display labels such as "KIRO PRO+"; letters/digits/space and a few punctuation marks only, no control or markup characters. */
+const planText = (value: string) => /^[\p{L}\p{N}][\p{L}\p{N} _.+()&/'-]*$/u.test(value);
 const canonical = (path: string) => { try { return realpathSync(path); } catch { return resolve(path); } };
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 
@@ -32,6 +34,10 @@ export function publicUsage(input: unknown, providerId: string): ProviderUsage |
     } else if (metric.kind === "tokens") {
       if (!text(metric.model) || !metric.model || metric.used !== null && !number(metric.used) || metric.remaining !== null && !number(metric.remaining) || metric.part !== undefined && !costParts.includes(metric.part as CostPart)) return;
       metrics.push({ ...common, kind: "tokens", model: metric.model, used: metric.used as number | null, remaining: metric.remaining as number | null, ...(metric.part !== undefined ? { part: metric.part as CostPart } : {}) });
+    } else if (metric.kind === "quota") {
+      if (metric.used !== null && !number(metric.used) || metric.limit !== null && !number(metric.limit) || metric.unit !== undefined && !(text(metric.unit, 64) && planText(metric.unit))) return;
+      metrics.push({ ...common, kind: "quota", used: metric.used as number | null, limit: metric.limit as number | null, ...(metric.unit !== undefined ? { unit: metric.unit as string } : {}),
+        ...(date(metric.resetsAt) ? { resetsAt: metric.resetsAt } : {}), ...(date(metric.expiresAt) ? { expiresAt: metric.expiresAt } : {}) });
     } else if (metric.kind === "balance") {
       if (metric.balance !== null && !(text(metric.balance, 512) && /^[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(metric.balance))) return;
       metrics.push({ ...common, kind: "balance", balance: metric.balance as string | null, ...(typeof metric.unlimited === "boolean" ? { unlimited: metric.unlimited } : {}), ...(typeof metric.hasCredits === "boolean" ? { hasCredits: metric.hasCredits } : {}) });
@@ -49,7 +55,7 @@ export function publicUsage(input: unknown, providerId: string): ProviderUsage |
   const account = object(value.account);
   if (account) {
     const email = text(account.email, 254) && /^[^\s@<>\x00-\x1f\x7f]+@[^\s@<>\x00-\x1f\x7f]+\.[^\s@<>\x00-\x1f\x7f]+$/.test(account.email) ? account.email : undefined;
-    const plan = text(account.plan, 64) && /^[a-zA-Z0-9_-]+$/.test(account.plan) ? account.plan : undefined;
+    const plan = text(account.plan, 64) && planText(account.plan) ? account.plan : undefined;
     const accountId = text(account.accountId, 160) && /^[a-zA-Z0-9._:-]+$/.test(account.accountId) ? account.accountId : undefined;
     const subscriptionExpiresAt = date(account.subscriptionExpiresAt) ? account.subscriptionExpiresAt : undefined;
     if (email || plan || accountId || subscriptionExpiresAt) result.account = { ...(email ? { email } : {}), ...(plan ? { plan } : {}),

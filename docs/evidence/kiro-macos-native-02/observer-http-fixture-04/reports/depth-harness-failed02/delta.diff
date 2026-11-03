@@ -1,0 +1,39 @@
+--- /Volumes/D_Work/axiom2/docs/evidence/kiro-macos-native-02/observer-http-fixture-02/terminal_consumer.py
++++ /Volumes/D_Work/axiom2/docs/evidence/kiro-macos-native-02/observer-http-fixture-04/terminal_consumer.py
+@@ -10,6 +10,7 @@
+ MAX_EVENTS = 128
+ MAX_BODY = 256 * 1024
+ MAX_LOG = 1024 * 1024
++MAX_JSON_DEPTH = 16
+ SCOPE = 'only-self-owned-http-fixture'
+ 
+ 
+@@ -20,6 +21,28 @@
+ 
+ def strict_json(raw, cap):
+     require(type(raw) is bytes and 0 < len(raw) <= cap, 'JSON input cap/type')
++    # Explicit version-independent bound before the recursive JSON parser.
++    # Count only structural ASCII outside quoted/escaped JSON strings.
++    depth = 0
++    quoted = False
++    escaped = False
++    for byte in raw:
++        if quoted:
++            if escaped:
++                escaped = False
++            elif byte == 92:
++                escaped = True
++            elif byte == 34:
++                quoted = False
++        elif byte == 34:
++            quoted = True
++        elif byte in (91, 123):
++            depth += 1
++            require(depth <= MAX_JSON_DEPTH, 'JSON depth cap')
++        elif byte in (93, 125):
++            depth -= 1
++            require(depth >= 0, 'unbalanced JSON container')
++    require(depth == 0 and not quoted, 'incomplete JSON container/string')
+ 
+     def pairs(items):
+         result = {}

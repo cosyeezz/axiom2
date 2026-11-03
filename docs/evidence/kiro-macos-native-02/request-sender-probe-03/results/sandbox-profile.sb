@@ -1,0 +1,8 @@
+(version 1)
+(allow default)
+(deny network*)
+(deny mach-lookup)
+(deny file-write*)
+(allow file-write* (subpath "/private/tmp/kiro-select03-parent.0wclNvYL/tmp/kiro-request-select03-4xaeoh6j") (subpath "/Users/dane/Library/Application Support/kiro-cli"))
+(deny process-exec)
+(allow process-exec (literal "/Applications/Kiro CLI.app/Contents/MacOS/kiro-cli") (literal "/Applications/Kiro CLI.app/Contents/MacOS/kiro-cli-chat") (literal "/private/tmp/kiro-select03-parent.0wclNvYL/tmp/kiro-request-select03-4xaeoh6j/fake-kas"))

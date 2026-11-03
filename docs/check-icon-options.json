@@ -1,0 +1,652 @@
+{
+  "generatedAt": "2026-10-29T04:05:18.534Z",
+  "source": "Iconify public API",
+  "items": [
+    {
+      "code": "S-01",
+      "id": "lucide:scan",
+      "prefix": "lucide",
+      "name": "scan",
+      "sha256": "ac3d5b091fd188ed9435fb3226223913d2ae4e26af81a8ed4adef096c436ebc9",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-02",
+      "id": "lucide:scan-search",
+      "prefix": "lucide",
+      "name": "scan-search",
+      "sha256": "2c37fb83d36535641298f679dc2fcfaa57f596f8b1b982713214ab3d3f4d3f40",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-03",
+      "id": "lucide:scan-eye",
+      "prefix": "lucide",
+      "name": "scan-eye",
+      "sha256": "c75de53e2102cf50526cad3c3122c6e8d5e93b376d2c97fa9b856a180679cc2c",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-04",
+      "id": "lucide:scan-line",
+      "prefix": "lucide",
+      "name": "scan-line",
+      "sha256": "c6149c35ce8f14501c853c052e9cbb0726d64781a83c19de27a3fadc0344bf9d",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-05",
+      "id": "lucide:search-check",
+      "prefix": "lucide",
+      "name": "search-check",
+      "sha256": "1c24b87fa4a067edd5c193d3220ccc7ac7cc4899109ae973ba36b02d212e0f53",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-06",
+      "id": "lucide:stethoscope",
+      "prefix": "lucide",
+      "name": "stethoscope",
+      "sha256": "527dfd2da20edde3247a9695c85218cc7ad92c3cac43b7342bcf6442e996c715",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-07",
+      "id": "lucide:activity",
+      "prefix": "lucide",
+      "name": "activity",
+      "sha256": "6c28dd24bfef5ab055b921377441977931c9a355ad6b102425990acc6b8e7313",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-08",
+      "id": "lucide:heart-pulse",
+      "prefix": "lucide",
+      "name": "heart-pulse",
+      "sha256": "130c609d73a09dc43152d231efc490b7dd348b0d960af37a056e2689e24a220e",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-09",
+      "id": "lucide:radar",
+      "prefix": "lucide",
+      "name": "radar",
+      "sha256": "e75e6c9da7d5cf4e83bef44165fdc34204d76498492b1b4c9c9cefcb1d9693f0",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-10",
+      "id": "lucide:clipboard-check",
+      "prefix": "lucide",
+      "name": "clipboard-check",
+      "sha256": "fdf21636185de213fb1dfd85d9c1e4d0bff814780341e125b98e670fec3324ec",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-11",
+      "id": "lucide:list-checks",
+      "prefix": "lucide",
+      "name": "list-checks",
+      "sha256": "a6f43ac5a662cd0caf4bcd3492fb2272eebc893eeb844e4517a17a1205e39a6c",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-12",
+      "id": "lucide:badge-check",
+      "prefix": "lucide",
+      "name": "badge-check",
+      "sha256": "86850ce598ff45d7b79e05b7d4eb6691aac7ce9e2b320f014e6d8eb84f51f9d6",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-13",
+      "id": "lucide:shield-check",
+      "prefix": "lucide",
+      "name": "shield-check",
+      "sha256": "75ba332c24c20eb9eabedb334fae0457f434d96f4b9100f62c78fc3da64f91ae",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-14",
+      "id": "lucide:monitor-check",
+      "prefix": "lucide",
+      "name": "monitor-check",
+      "sha256": "a0a4c49839dd1d8f74e71b6af954de48fd43237613e5849e548a04237ded079f",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-15",
+      "id": "lucide:file-search",
+      "prefix": "lucide",
+      "name": "file-search",
+      "sha256": "5622dc50ba6b4e261d32d9d15b6422cbb6dcc8b42b52fa2f99257655ddf83c29",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-16",
+      "id": "lucide:inspection-panel",
+      "prefix": "lucide",
+      "name": "inspection-panel",
+      "sha256": "1fbfbfae382dfe27d6c3d40dd8e2b4972c17e20a1a0c6e9dccdcb9b74f57d46c",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-17",
+      "id": "lucide:circle-gauge",
+      "prefix": "lucide",
+      "name": "circle-gauge",
+      "sha256": "870639ef7809e3d4b94787e88dcc64198e70a451d6028f8cda72056c752d6633",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-18",
+      "id": "lucide:focus",
+      "prefix": "lucide",
+      "name": "focus",
+      "sha256": "bed148658aab9f701a9ac9da198c3ec8c9c6e8ea5f6c90960d06d0b2d292de7c",
+      "collection": "Lucide",
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-19",
+      "id": "tabler:scan",
+      "prefix": "tabler",
+      "name": "scan",
+      "sha256": "1d9150cc37f8f1f1dbeacc331546a8fd720b0408c128994029d1f13a10896112",
+      "collection": "Tabler Icons",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+      }
+    },
+    {
+      "code": "S-20",
+      "id": "tabler:scan-eye",
+      "prefix": "tabler",
+      "name": "scan-eye",
+      "sha256": "bb8e41739b2aae53e1f1702f113763d5635ac1ea1477c0cacb2474a8dc3c498c",
+      "collection": "Tabler Icons",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+      }
+    },
+    {
+      "code": "S-21",
+      "id": "tabler:zoom-check",
+      "prefix": "tabler",
+      "name": "zoom-check",
+      "sha256": "d2aa28e34e5146f08ac12347fbd655b85f7b1148cfe09eefe57053d02b71f6e5",
+      "collection": "Tabler Icons",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+      }
+    },
+    {
+      "code": "S-22",
+      "id": "tabler:stethoscope",
+      "prefix": "tabler",
+      "name": "stethoscope",
+      "sha256": "6b8738cb134ac4699ea193a1fbeae46ffedb70e445c2391231095420a568fff6",
+      "collection": "Tabler Icons",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+      }
+    },
+    {
+      "code": "S-23",
+      "id": "tabler:radar",
+      "prefix": "tabler",
+      "name": "radar",
+      "sha256": "0b624b7383f16b29e3ec47090655aac3ccbd855e214651b918050b8796899316",
+      "collection": "Tabler Icons",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+      }
+    },
+    {
+      "code": "S-24",
+      "id": "tabler:activity",
+      "prefix": "tabler",
+      "name": "activity",
+      "sha256": "83b82389702d7efa2386108713d62f2cb89906fdd2f163e52dbb0e14f32a8f0f",
+      "collection": "Tabler Icons",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+      }
+    },
+    {
+      "code": "S-25",
+      "id": "tabler:checkup-list",
+      "prefix": "tabler",
+      "name": "checkup-list",
+      "sha256": "420370f9a0434985329beb21ed6db87d462cc00695f85542adea4bcd880ea38e",
+      "collection": "Tabler Icons",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+      }
+    },
+    {
+      "code": "S-26",
+      "id": "tabler:clipboard-check",
+      "prefix": "tabler",
+      "name": "clipboard-check",
+      "sha256": "e8a29b6ef7d15edddd4ec10ff61c989f07603eb91bfc0a070b706fdb01f9dccb",
+      "collection": "Tabler Icons",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+      }
+    },
+    {
+      "code": "S-27",
+      "id": "tabler:shield-check",
+      "prefix": "tabler",
+      "name": "shield-check",
+      "sha256": "5ee4e02e3b2241fa939f96f196d538aa868bf5eb1838429201a68ddb37e44c9c",
+      "collection": "Tabler Icons",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+      }
+    },
+    {
+      "code": "S-28",
+      "id": "tabler:file-search",
+      "prefix": "tabler",
+      "name": "file-search",
+      "sha256": "3509dfbdeff3ba6a724d39a53e4fa2561e56ee6617eda7c1d3425eda6322d589",
+      "collection": "Tabler Icons",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+      }
+    },
+    {
+      "code": "S-29",
+      "id": "ri:scan-2-line",
+      "prefix": "ri",
+      "name": "scan-2-line",
+      "sha256": "7a8ca9284bf920a6c2de1042e72f4119c863576ca5edda2bc2bdf6276af27e85",
+      "collection": "Remix Icon",
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/cyberalien/RemixIcon/blob/master/License"
+      }
+    },
+    {
+      "code": "S-30",
+      "id": "ri:stethoscope-line",
+      "prefix": "ri",
+      "name": "stethoscope-line",
+      "sha256": "7dfc20316490b636bbb5769814c1b51351e48e82f8c117a9305a6042d835bb25",
+      "collection": "Remix Icon",
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/cyberalien/RemixIcon/blob/master/License"
+      }
+    },
+    {
+      "code": "S-31",
+      "id": "ri:radar-line",
+      "prefix": "ri",
+      "name": "radar-line",
+      "sha256": "efac10bab107f4e6cb073c13d04fa5b32007e9a37693209531c4afb7efae6ffc",
+      "collection": "Remix Icon",
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/cyberalien/RemixIcon/blob/master/License"
+      }
+    },
+    {
+      "code": "S-32",
+      "id": "ri:pulse-line",
+      "prefix": "ri",
+      "name": "pulse-line",
+      "sha256": "f6dcd77cfd27b3dd9100591bdd1ea77059914f8f678f9464c73629799bcf9fec",
+      "collection": "Remix Icon",
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/cyberalien/RemixIcon/blob/master/License"
+      }
+    },
+    {
+      "code": "S-33",
+      "id": "ri:focus-2-line",
+      "prefix": "ri",
+      "name": "focus-2-line",
+      "sha256": "a4f825e1631e8ee353280973df4e5d50b28c27d6397a8e41480416746fbed232",
+      "collection": "Remix Icon",
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/cyberalien/RemixIcon/blob/master/License"
+      }
+    },
+    {
+      "code": "S-34",
+      "id": "ri:file-search-line",
+      "prefix": "ri",
+      "name": "file-search-line",
+      "sha256": "2572769b43502a82f4d03bf8c72d0b8ac176344b1dccabc8c832c9c50b717b83",
+      "collection": "Remix Icon",
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/cyberalien/RemixIcon/blob/master/License"
+      }
+    },
+    {
+      "code": "S-35",
+      "id": "ph:scan",
+      "prefix": "ph",
+      "name": "scan",
+      "sha256": "141c06e93cc8ae5ff8f6e2d48b765f79f4e5114065317736a017e4404f9493af",
+      "collection": "Phosphor",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/phosphor-icons/core/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-36",
+      "id": "ph:stethoscope",
+      "prefix": "ph",
+      "name": "stethoscope",
+      "sha256": "6e20c161ed907becec16e6b255349ebe023205dbd0e5d1760e2652cab298e1e8",
+      "collection": "Phosphor",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/phosphor-icons/core/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-37",
+      "id": "ph:pulse",
+      "prefix": "ph",
+      "name": "pulse",
+      "sha256": "66aac9143b550d39f8637380361da6596a97ddbdb5116fb57dd01b23ecb7385c",
+      "collection": "Phosphor",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/phosphor-icons/core/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-38",
+      "id": "ph:list-checks",
+      "prefix": "ph",
+      "name": "list-checks",
+      "sha256": "9a8af07c39f00dcbc0b846ec77a7d0488c9427a16f71a77bcb3659ed8a80e798",
+      "collection": "Phosphor",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/phosphor-icons/core/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-39",
+      "id": "mingcute:scan-2-line",
+      "prefix": "mingcute",
+      "name": "scan-2-line",
+      "sha256": "ea039aae5014801a91edaa2eda17310283c71d670f0956916ed04a868f44c6b0",
+      "collection": "MingCute Icon",
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/Richard9394/MingCute/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-40",
+      "id": "mingcute:stethoscope-line",
+      "prefix": "mingcute",
+      "name": "stethoscope-line",
+      "sha256": "71505bcc74b1235ddc4d1104fac7e10f0af6b30e219c4adcca28e46d64645e0f",
+      "collection": "MingCute Icon",
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/Richard9394/MingCute/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-41",
+      "id": "mingcute:radar-2-line",
+      "prefix": "mingcute",
+      "name": "radar-2-line",
+      "sha256": "426e0d2a41a146d7ea8ca148d90192f126d4dcf91d163ce199f704af673d4aed",
+      "collection": "MingCute Icon",
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/Richard9394/MingCute/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-42",
+      "id": "mingcute:inspect-line",
+      "prefix": "mingcute",
+      "name": "inspect-line",
+      "sha256": "a4f13817156c66284e09d8c3614596a0673099a6690c9b0d1929911d0e7c35a7",
+      "collection": "MingCute Icon",
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/Richard9394/MingCute/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-43",
+      "id": "hugeicons:scan-search",
+      "prefix": "hugeicons",
+      "name": "scan-search",
+      "sha256": "4f25bfd46eb7e9a0572c27d5b99ac81185909fb1002702bcb217dbccf558da77",
+      "collection": "Huge Icons",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT"
+      }
+    },
+    {
+      "code": "S-44",
+      "id": "hugeicons:stethoscope",
+      "prefix": "hugeicons",
+      "name": "stethoscope",
+      "sha256": "85af848be558ca7d44ad61bca7a167cd61df8fcb07583d9ca44d6f2dbe8b3c56",
+      "collection": "Huge Icons",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT"
+      }
+    },
+    {
+      "code": "S-45",
+      "id": "hugeicons:radar-01",
+      "prefix": "hugeicons",
+      "name": "radar-01",
+      "sha256": "3824841a84cdfc80641e1cbf4c42b4a51043a1e35bef101eaf0cf21c67c73187",
+      "collection": "Huge Icons",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT"
+      }
+    },
+    {
+      "code": "S-46",
+      "id": "solar:eye-scan-linear",
+      "prefix": "solar",
+      "name": "eye-scan-linear",
+      "sha256": "38ae3c3fceb0401a624d0b59ec53a53f452f2336bfeda3ac290f5ecabe891233",
+      "collection": "Solar",
+      "license": {
+        "title": "CC BY 4.0",
+        "spdx": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    {
+      "code": "S-47",
+      "id": "solar:stethoscope-linear",
+      "prefix": "solar",
+      "name": "stethoscope-linear",
+      "sha256": "d2bc6458b2c3c1ead2049e16b6ae1860585dfd9a12d2863867dec2d405961030",
+      "collection": "Solar",
+      "license": {
+        "title": "CC BY 4.0",
+        "spdx": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    {
+      "code": "S-48",
+      "id": "iconoir:activity",
+      "prefix": "iconoir",
+      "name": "activity",
+      "sha256": "a7f3f54f2b0edee499e1483356ee9a2e021ceae67251583599a682de8cee9c6e",
+      "collection": "Iconoir",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/iconoir-icons/iconoir/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-49",
+      "id": "iconoir:clipboard-check",
+      "prefix": "iconoir",
+      "name": "clipboard-check",
+      "sha256": "b26734210ea1f45281304f0c6d5ece1bee1c58988ea286f679c3d5ccf0ae373c",
+      "collection": "Iconoir",
+      "license": {
+        "title": "MIT",
+        "spdx": "MIT",
+        "url": "https://github.com/iconoir-icons/iconoir/blob/main/LICENSE"
+      }
+    },
+    {
+      "code": "S-50",
+      "id": "carbon:scan",
+      "prefix": "carbon",
+      "name": "scan",
+      "sha256": "6e794abf51eb6520cc886943b78687b689102929a52bb490ca9e4aebc093daf8",
+      "collection": "Carbon",
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0"
+      }
+    }
+  ]
+}

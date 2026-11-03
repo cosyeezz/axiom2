@@ -19,7 +19,9 @@ export type ProviderUsageMetric =
   /** Only adapters with an absolute Token balance contract may emit this metric. Model is an exact local identity, never inferred from a percentage. */
   | { id: string; label: string; kind: "tokens"; model: string; used: number | null; remaining: number | null; part?: CostPart }
   | { id: string; label: string; kind: "balance"; balance: string | null; unlimited?: boolean; hasCredits?: boolean }
-  | { id: string; label: string; kind: "count"; count: number | null; expiresAt?: number; expiries?: number[] };
+  | { id: string; label: string; kind: "count"; count: number | null; expiresAt?: number; expiries?: number[] }
+  /** Upstream-metered allowance (e.g. Kiro credits). Fractional values are kept; unit is upstream display text, never a currency. */
+  | { id: string; label: string; kind: "quota"; used: number | null; limit: number | null; unit?: string; resetsAt?: number; expiresAt?: number };
 
 export type ProviderAccountState = "active" | "disabled" | "unauthorized" | "unknown";
 export const providerAccountStateLabel = (state: ProviderAccountState) => ({ active: "检查通过", disabled: "账号或工作区异常", unauthorized: "授权已失效", unknown: "状态未确认" })[state];
@@ -48,5 +50,9 @@ export function usageMetricValue(metric: ProviderUsageMetric): string {
   if (metric.kind === "balance") return metric.unlimited ? "无限" : metric.balance ?? "—";
   if (metric.kind === "count") return metric.count === null ? "—" : `${metric.count} 次`;
   if (metric.kind === "tokens") return metric.remaining === null ? "—" : `${metric.remaining.toLocaleString("en-US")} Token`;
+  if (metric.kind === "quota") {
+    const amount = (value: number | null) => value === null ? "—" : value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+    return `${amount(metric.used)} / ${amount(metric.limit)}${metric.unit ? ` ${metric.unit}` : ""}`;
+  }
   return metric.usedPercent === null ? "—" : `${Number(metric.usedPercent.toFixed(1))}%`;
 }

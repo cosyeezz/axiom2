@@ -1,0 +1,5 @@
+# Recover artifact/doc aggregate only
+
+08 static capture succeeded; its later preserve_results.py copied all22files but failed while rejecting a legitimate pre-existing rootREADME sibling evidence link. Keep that failed source/transcript and completed copies. Hypothesis: allowing **only exact `../kiro-macos-native-01/FAILURE.md`**, in addition to native-02 files, resolves this harness scope error without loosening arbitrary paths.
+
+One new `verify_preservation.py`, own CreateNew output. Read existing repo06/authority-review4 and08/capture18files against the copied task manifests/inventory, require0400; do not recopy or depend on TEMP originals. Reconstruct durable hashes because the failed attempt did not emit its aggregate manifest. Check5index/SUMMARY docs; seal06–08+this case/rootREADME/05SUMMARY, keeping all failed sources. Per-file2MiB/total8MiB, CPU5s/alarm15s/outer20s. No subprocess, target execution, network, control/API, official or model call. No rerun of collectors/GET/HTTP/static capture or occupied preserver. New passed result is artifact/document validation only, not M3/parity.

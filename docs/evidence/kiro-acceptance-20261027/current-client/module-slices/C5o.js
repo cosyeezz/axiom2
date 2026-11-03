@@ -1,0 +1,1 @@
+function C5o(t,e,r,n){if(NMl(!r,n??"unknown"),r)return;P.debug(`${e}: content collection is disabled, setting x-amzn-codewhisperer-optout to true`);let s=c(a=>async l=>{let u=l;return u.request.headers={...u.request.headers,"x-amzn-codewhisperer-optout":"true"},a(l)},"d");t.middlewareStack.add(s,{step:"build"})};

@@ -1,0 +1,138 @@
+diff --git a/app/src/server/model-runtime.ts b/app/src/server/model-runtime.ts
+index 843214c..7950a3b 100644
+--- a/app/src/server/model-runtime.ts
++++ b/app/src/server/model-runtime.ts
+@@ -1,8 +1,9 @@
+ import { existsSync } from "node:fs";
+ import { dirname, join } from "node:path";
+-import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
++import { getAgentDir, ModelRuntime, readStoredCredential } from "@earendil-works/pi-coding-agent";
+ import { accountRuntimeStores, readModelCredential, selectedCatalogPath } from "./model-account-storage.js";
+ import { installModelCopies } from "./model-copies.js";
++import { installAccountHeaders } from "./model-account-headers.js";
+ import { openAIProvider, installOpenAITransport } from "./providers/openai.js";
+ import { installProviderRequestObserver, recognizeProviderRequestTransport } from "./provider-request-observer.js";
+ import { catalogMetadata, credentialMetadata } from "./model-metadata.js";
+@@ -41,7 +42,8 @@ async function registerModelProvider(runtime: ModelRuntime, providerId: string)
+   if (!definition || runtime.getRegisteredNativeProvider(providerId)) return;
+   const provider = await definition.load();
+   if (runtime.getRegisteredNativeProvider(providerId)) return;
+-  if (providerId === "kiro" || providerId === "codebuddy-cn") recognizeProviderRequestTransport(provider);
++  if (providerId === "kiro") recognizeProviderRequestTransport(provider, (await import("./providers/kiro-native.js")).kiroNativeFetch);
++  else if (providerId === "codebuddy-cn") recognizeProviderRequestTransport(provider);
+   // pi registers synchronously but starts an unawaited refresh afterwards. Keep
+   // registration from mutating a worker's captured model files in the background.
+   const refresh = runtime.refresh;
+@@ -123,6 +125,9 @@ export async function createModelRuntime(options: RuntimeOptions = {}) {
+     // their models must not fall through to a generic OpenAI transport.
+     if (needed.has(provider.template.id)) await registerModelProvider(runtime, provider.template.id);
+   }
++  if (!configurationOnly && !metadataOnly)
++    installAccountHeaders(runtime, options.modelsPath === undefined ? join(getAgentDir(), "models.json") : options.modelsPath,
++      provider => effectiveCredentials ? effectiveCredentials.read(provider) : Promise.resolve(readStoredCredential(provider, authPath)));
+   if (configurationOnly) {
+     // Parsing/composition only. Availability and credentials belong to a real
+     // request; even reading their files here would recreate a model gate.
+diff --git a/app/src/server/provider-request-observer.ts b/app/src/server/provider-request-observer.ts
+index 607f410..c776f40 100644
+--- a/app/src/server/provider-request-observer.ts
++++ b/app/src/server/provider-request-observer.ts
+@@ -13,11 +13,19 @@ const initialApis = new Map(httpApis.map(api => {
+   return [api, { stream: provider?.stream, streamSimple: provider?.streamSimple }] as const;
+ }));
+ const nativeResult = createAssistantMessageEventStream().result;
+-const nativeHttp = new WeakMap<Provider, Pick<Provider, "stream" | "streamSimple">>();
++const nativeHttp = new WeakMap<Provider, Pick<Provider, "stream" | "streamSimple"> & { transport?: typeof fetch }>();
+ 
+ /** Called only for the application's known built-in factories, not extensions. */
+-export function recognizeProviderRequestTransport(provider: Provider) {
+-  nativeHttp.set(provider, { stream: provider.stream, streamSimple: provider.streamSimple });
++export function recognizeProviderRequestTransport(provider: Provider, transport?: typeof fetch) {
++  nativeHttp.set(provider, { stream: provider.stream, streamSimple: provider.streamSimple, transport });
++}
++
++/** Observability must wrap the provider's sender, not silently replace it with generic Fetch. */
++export function providerRequestDefaultTransport(runtime: Pick<ModelRuntime, "getRegisteredProviderConfig" | "getRegisteredNativeProvider">,
++  model: Parameters<StreamFn>[0]): typeof fetch | undefined {
++  if (runtime.getRegisteredProviderConfig(model.provider)?.streamSimple) return undefined;
++  const native = runtime.getRegisteredNativeProvider(model.provider), known = native && nativeHttp.get(native);
++  return native && known && known.stream === native.stream && known.streamSimple === native.streamSimple ? known.transport : undefined;
+ }
+ 
+ export function providerRequestHttpTransport(runtime: Pick<ModelRuntime, "getRegisteredProviderConfig" | "getRegisteredNativeProvider">,
+@@ -37,7 +45,8 @@ export function providerRequestHttpTransport(runtime: Pick<ModelRuntime, "getReg
+ 
+ /** Observe completion promises, never consume/replay stream events or response bodies. */
+ export function observeProviderRequests<F extends StreamFn>(base: F, emit: (event: ProviderRequestEvent) => void,
+-  httpTransport: (model: Parameters<StreamFn>[0], options: Parameters<StreamFn>[2]) => boolean): F {
++  httpTransport: (model: Parameters<StreamFn>[0], options: Parameters<StreamFn>[2]) => boolean,
++  defaultTransport?: (model: Parameters<StreamFn>[0]) => typeof fetch | undefined): F {
+   const observed: StreamFn = (model, context, options) => {
+     // Pi routes this into runtime.streamSimple again with the physical model.
+     if (model.api === "pi-virtual") return base(model, context, options);
+@@ -65,7 +74,7 @@ export function observeProviderRequests<F extends StreamFn>(base: F, emit: (even
+       return replacement;
+     } };
+     if (physicalHttp) {
+-      const fetcher = options?.fetch ?? globalThis.fetch;
++      const fetcher = options?.fetch ?? defaultTransport?.(model) ?? globalThis.fetch;
+       next.fetch = async (...args: Parameters<typeof fetch>) => {
+         // Kiro enterprise profile discovery also uses options.fetch, before onPayload.
+         // Auth/catalog preparation is not inference and must keep the original transport.
+@@ -109,6 +118,7 @@ export function installProviderRequestObserver(runtime: ModelRuntime) {
+   };
+   const httpTransport = (model: Parameters<StreamFn>[0], options: Parameters<StreamFn>[2]) =>
+     providerRequestHttpTransport(runtime, model, options);
+-  runtime.stream = observeProviderRequests(runtime.stream.bind(runtime), emit, httpTransport);
+-  runtime.streamSimple = observeProviderRequests(runtime.streamSimple.bind(runtime), emit, httpTransport);
++  const defaultTransport = (model: Parameters<StreamFn>[0]) => providerRequestDefaultTransport(runtime, model);
++  runtime.stream = observeProviderRequests(runtime.stream.bind(runtime), emit, httpTransport, defaultTransport);
++  runtime.streamSimple = observeProviderRequests(runtime.streamSimple.bind(runtime), emit, httpTransport, defaultTransport);
+ }
+diff --git a/app/tsconfig.server.json b/app/tsconfig.server.json
+index 57b28b0..a37766e 100644
+--- a/app/tsconfig.server.json
++++ b/app/tsconfig.server.json
+@@ -1,5 +1,5 @@
+ {
+   "extends": "./tsconfig.json",
+   "compilerOptions": { "noEmit": false, "outDir": "dist", "rootDir": "src", "sourceMap": true },
+-  "include": ["src/server", "src/shared"]
++  "include": ["src/server", "src/shared", "src/native-providers"]
+ }
+diff --git a/package.json b/package.json
+index 4fd6105..0c2173e 100644
+--- a/package.json
++++ b/package.json
+@@ -20,6 +20,7 @@
+     "app/dist/client/",
+     "app/dist/server/",
+     "app/dist/shared/",
++    "app/dist/native-providers/",
+     "app/skills/",
+     "app/package.json"
+   ],
+diff --git a/scripts/check-package.mjs b/scripts/check-package.mjs
+index 9a40b90..320ed58 100644
+--- a/scripts/check-package.mjs
++++ b/scripts/check-package.mjs
+@@ -34,7 +34,7 @@ const request = (url, options = {}) => fetch(url, { ...options, signal: options.
+ try {
+   const [packed] = JSON.parse(npm(["pack", "--ignore-scripts", "--foreground-scripts=false", "--json", "--pack-destination", temporary]));
+   const paths = packed.files.map((file) => file.path);
+-  for (const file of ["npm-shrinkwrap.json", "bin/axiom2.mjs", "bin/service.mjs", "app/dist/server/index.js", "app/dist/server/agent-worker.js", "app/dist/server/compression-worker.js", "app/dist/client/index.html"])
++  for (const file of ["npm-shrinkwrap.json", "bin/axiom2.mjs", "bin/service.mjs", "app/dist/server/index.js", "app/dist/server/agent-worker.js", "app/dist/server/compression-worker.js", "app/dist/native-providers/index.js", "app/dist/client/index.html"])
+     assert.ok(paths.includes(file), `Missing runtime file: ${file}`);
+   const nativeArchitectures = process.env.AXIOM_VERIFIED_PACKAGE_DIR ? ["x64", "arm64"] : process.platform === "linux" ? [process.arch] : [];
+   const nativeDigests = {}, nativeAssets = {};
+@@ -173,8 +173,8 @@ try {
+     for (const shim of ["axiom2", "axiom2.cmd", "axiom2.ps1"]) {
+       await assert.rejects(access(join(installed, "node_modules/.bin", shim)), { code: "ENOENT" });
+     }
+-    for (const worker of ["agent-worker.js", "compression-worker.js"]) {
+-      execFileSync(process.execPath, ["--input-type=module", "-e", "await import(process.argv[1]);", pathToFileURL(join(installed, "app/dist/server", worker)).href], {
++    for (const entry of ["server/agent-worker.js", "server/compression-worker.js", "native-providers/index.js"]) {
++      execFileSync(process.execPath, ["--input-type=module", "-e", "await import(process.argv[1]);", pathToFileURL(join(installed, "app/dist", entry)).href], {
+         cwd: temporary, env: serviceEnv, encoding: "utf8", timeout: 30_000,
+       });
+     }

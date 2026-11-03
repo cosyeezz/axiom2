@@ -1,0 +1,28 @@
+--- 64c5 contract
++++ 9f42 contract
+@@ -4,7 +4,7 @@
+ >
+ > 全量源码统计与能力范围：[全面能力盘点](agent-runtime-capability-inventory.md)（151项审计分类，不是151个核心方法）；完整矩阵明确当前链路、部分支持、构件与缺口。
+ >
+-> 事实依据：[可替换运行时调研](pluggable-agent-runtime-research.md)。本轮映射按当前工作树 HEAD `da7c037fa0157a74a750ec044d165c73ca751b58` 抽查；设计文档中的新目录和类型均为建议，不代表已存在。候选运行时沿用前文固定版本证据，未安装或执行。
++> 事实依据：[可替换运行时调研](pluggable-agent-runtime-research.md)。本轮映射在 HEAD 为 `da7c037fa0157a74a750ec044d165c73ca751b58` 的脏工作树中抽查；HEAD不覆盖全部被审计字节，逐文件manifest及非原子快照限制见全面能力盘点；设计文档中的新目录和类型均为建议，不代表已存在。候选运行时沿用前文固定版本证据，未安装或执行。
+ 
+ ## 1. 核心决策
+ 
+@@ -329,7 +329,7 @@
+ 
+ ### 6.3 费用与模型不混成一层
+ 
+-- ModelGateway 负责选择与凭据授权接口；adapter 负责该 runtime 的模型适配。ModelChoice 不是 Pi Model，unsupported provider 也不会自动变兼容。
++- ModelGateway 消费宿主已授权并发布的模型选择与凭据引用，负责原生凭据解析及provider协议适配；授权政策、凭据发放和配置发布仍归宿主，runtime adapter负责可信的agent模型桥。ModelChoice 不是 Pi Model，unsupported provider 也不会自动变兼容。
+ - 记录逻辑选择与请求实际 provider/model 两者，不能把变更后的选择反写旧请求。模型选择本身不探测模型，不因 advisory availability 静默回退；配置失败归属于后续实际请求。
+ - usage 必须标明 request/activity 粒度和 source/revision。input/output/cache tokens、provider cost、宿主估价各自可未知；不把 context occupancy 当账单、不把未知记零，也不重复累加摘要或重放投影。
+ - 价格和 usage 来源留在宿主唯一账本。请求失败、取消和强杀都可能收费；后台压缩等独立请求也须可归属。
+@@ -403,6 +403,6 @@
+ - **可靠交付**：接纳≠消费≠native flush≠宿主结果交付；未知投递和未知工具副作用不盲重试；停止/flush 失败不复用。
+ - **事件可靠性**：背压、gap、重复、重连、无 token 流、部分历史都能明确呈现；最终文本不替代任务结果身份。
+ - **安全与费用**：工具和原生 shell 无旁路，子任务限制不变；取消可收费、未知不为零；所有进程/后代都纳入清理。
+-- **存档独立**：旧 Pi 兼容、缺 adapter 明确失败、跨 runtime 只能显式交接；每种原生上下文只有一个压缩控制者。
++- **存档独立**：旧 Pi 兼容、缺 adapter 明确失败、跨 runtime 只能显式交接；每个原生上下文提交只有一个获授权写者/协调器；Axiom异步压缩与原生安全网可并存，但触发策略必须串行提交并复验上下文版本和冲突。
+ 
+ 本轮仅整理接口与迁移设计，并做文档/类型参考的静态核验；不表示上述产品回归、FakeAdapter 测试或 DSH 集成已经执行。真正接入、模型实测和部署属于后续实施范围。

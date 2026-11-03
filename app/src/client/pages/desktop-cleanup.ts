@@ -1,12 +1,13 @@
 import type { ResourceState } from '../../shared/resources.js';
 import type { ReaState } from '../../shared/rea.js';
 import type { RtkState } from '../../shared/rtk.js';
+import type { FfmpegState } from '../../shared/ffmpeg.js';
 import type { OpenCliState } from '../../shared/builtin-tools.js';
 import type { ModelProxyState, ProxyKernel } from '../../shared/model-proxy.js';
 import { reaEngineLabels } from '../../shared/rea-engines.js';
-export type CleanupStates = { resources: ResourceState; rea: ReaState; rtk: RtkState; opencli: OpenCliState; modelProxy: ModelProxyState };
+export type CleanupStates = { resources: ResourceState; rea: ReaState; rtk: RtkState; ffmpeg?: FfmpegState; opencli: OpenCliState; modelProxy: ModelProxyState };
 export type CleanupFamily = keyof CleanupStates;
-export const cleanupFamilies: CleanupFamily[] = ['resources', 'rea', 'rtk', 'opencli', 'modelProxy'];
+export const cleanupFamilies: CleanupFamily[] = ['resources', 'rea', 'rtk', 'ffmpeg', 'opencli', 'modelProxy'];
 export type CleanupRow = { id: string; family: CleanupFamily; label: string; op: string; revision: string; params: Record<string, string>; available: boolean; scope: string[]; retained: string[]; warning?: string; credentials?: boolean; readOnly?: boolean };
 export function cleanupRows(states: Partial<CleanupStates>): CleanupRow[] {
   const rows: CleanupRow[] = [];
@@ -27,6 +28,8 @@ export function cleanupRows(states: Partial<CleanupStates>): CleanupRow[] {
     if (!data) continue;
     rows.push({ ...base('rtk', kind === 'stats' ? 'RTK 效果记录' : 'RTK 保留原文', data.count > 0, [kind === 'stats' ? `清空 ${data.count} 条效果记录；不会缩小或物理擦除数据库文件。` : `删除 ${data.count} 份原文；聊天中的旧回查路径将失效。`], ['RTK 程序、过滤设置和另一类数据保留。', ...data.retained.map(path => `未识别或存在链接的文件保留：${path}`)]), id: `rtk:${kind}`, op: kind === 'stats' ? 'rtk.cleanupStats' : 'rtk.cleanupOriginals', warning: '数据删除不可撤销。清理完成后，新任务仍会产生新数据。' });
   }
+  const ffmpeg = states.ffmpeg;
+  if (ffmpeg) rows.push({ ...base('ffmpeg', 'FFmpeg 与 FFprobe', !!(ffmpeg.version || ffmpeg.error || ffmpeg.managedFiles), ['移除 FFmpeg 双程序、全部托管版本、配置及专属环境。'], ['视频、已抽帧图片、技能及系统安装保留。']), warning: ffmpeg.error });
   const opencli = states.opencli;
   if (opencli) rows.push({ ...base('opencli', 'OpenCLI', !!(opencli.configured || opencli.removalPending), ['移除托管程序与旧版本，解除 Axiom 的程序配置引用。'], ['公共 npm 缓存、外部安装、浏览器扩展、浏览器档案与设置保留。']), warning: opencli.error || opencli.installationError || opencli.pendingOperation });
   const proxy = states.modelProxy;
@@ -80,6 +83,8 @@ export function cleanupProgress(row: CleanupRow, state: CleanupStates[CleanupFam
       const data = value.dataCleanup?.[row.op === 'rtk.cleanupStats' ? 'stats' : 'originals'];
       error = value.dataCleanupError || value.dataCleanupErrors?.[row.op === 'rtk.cleanupStats' ? 'stats' : 'originals']; removed = !!data && data.count === 0;
     } else { error = value.error; pending = !!value.removalPending; removed = !value.version && !value.executable && !value.cleanupPaths?.length; }
+  } else if (row.family === 'ffmpeg') {
+    const value = state as FfmpegState; job = value.job?.id === jobId ? value.job : undefined; error = value.error; removed = !value.version && !value.directory && !value.error && !value.managedFiles;
   } else if (row.family === 'opencli') {
     const value = state as OpenCliState; job = value.job?.id === jobId ? value.job : undefined; error = value.error || value.installationError; pending = !!value.removalPending; removed = !value.configured && !value.cleanup?.paths.length;
   } else {

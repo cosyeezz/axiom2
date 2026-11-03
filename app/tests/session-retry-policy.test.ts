@@ -145,21 +145,21 @@ test("classification, explicit disable/zero budget and custom timing remain nati
   });
 });
 
-test("CodeBuddy failed message ownership disables generic session replay and history omission", async t => {
-  for (const content of [[], [{ type: "text" as const, text: "partial" }], [{ type: "toolCall" as const, id: "candidate", name: "read", arguments: {} }]]) {
+test("native zero-replay providers disable generic session replay and history omission by failed message ownership", async t => {
+  for (const provider of ["codebuddy-cn", "qoder", "qoder-cn"]) for (const content of [[], [{ type: "text" as const, text: "partial" }], [{ type: "toolCall" as const, id: "candidate", name: "read", arguments: {} }]]) {
     const f = await fixture(t, { retry: { baseDelayMs: 1, maxAgentDelayMs: 1 } });
     // Current model is deliberately OpenAI: classification follows the actual failed message.
-    f.respond(() => ({ ...response("503 service unavailable"), provider: "codebuddy-cn", content }));
+    f.respond(() => ({ ...response("503 service unavailable"), provider, content }));
     await f.session.prompt("OWNED_NO_REPLAY_QUERY");
     assert.equal(f.calls(), 1); assert.equal(f.retries().length, 0); assert.equal(f.session.isIdle, true);
     assert.equal(f.events.filter(event => event.type === "agent_end").every(event => !event.willRetry), true);
     assert.equal(f.manager.getEntries().filter(entry => entry.type === "context_edit").length, 0);
     assert.equal(f.settings.getRetrySettings().enabled, true, "shared summary settings are unchanged");
     const bridge = f.session as any;
-    assert.equal(bridge._willRetryAfterAgentEnd({ messages: [{ ...response("503"), provider: "codebuddy-cn" }, response()] }), false);
-    assert.equal(bridge._willRetryAfterAgentEnd({ messages: [{ ...response(), provider: "codebuddy-cn" }, { ...response("503"), provider: "kiro" }] }), true,
+    assert.equal(bridge._willRetryAfterAgentEnd({ messages: [{ ...response("503"), provider }, response()] }), false);
+    assert.equal(bridge._willRetryAfterAgentEnd({ messages: [{ ...response(), provider }, { ...response("503"), provider: "kiro" }] }), true,
       "latest assistant owns classification; Kiro retains its prior policy");
-    assert.equal(await bridge._prepareRetry({ ...response("429 Too Many Requests"), provider: "codebuddy-cn" }), false);
+    assert.equal(await bridge._prepareRetry({ ...response("429 Too Many Requests"), provider }), false);
   }
 });
 

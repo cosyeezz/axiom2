@@ -19,6 +19,10 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { ensureTopicSnapshot, injectTopicSnapshot } from "./memory-topics.js";
 import type { MemoryTopicSnapshot } from "../shared/memory-tree.js";
 import { memoryQueryTool } from "./memory-tool.js";
+import { webReadTool } from "./web-read-tool.js";
+import { WebReadClient } from "./web-access/rpc.js";
+import { webSearchTool } from "./web-search-tool.js";
+import { WebSearchClient } from "./web-access/search-rpc.js";
 import { memoryFileOperations } from "./memory-write-guard.js";
 import { pendingMemoryRead, recordMemoryRead } from "./memory-recovery.js";
 import { within } from "./memory-files.js";
@@ -28,6 +32,7 @@ import { nativeInputs, nativeQueuedMessages, recallNativeInputs, retainedInput }
 import { queueTaskNotifications } from "./agents/task-notifications.js";
 import { join, resolve, dirname } from "node:path";
 import { applyOpenCliEnvironment } from "./integrations/opencli-runtime.js";
+import { ffmpegEnvironment } from "./integrations/ffmpeg-config.js";
 import { createInstalledResourceLoader } from "./installed-resource-loader.js";
 import {
   createAgentSession,
@@ -59,6 +64,7 @@ import { agentSessionUsage } from "./agent-session-usage.js";
 import { installKiroCompactionUsage } from "./kiro-compaction-usage.js";
 import { installNativeCompactionUsage } from "./native-compaction-usage.js";
 import { disableKiroCacheWarming } from "./kiro-cache-policy.js";
+import { freshKiroRunIdentity, withKiroRunIdentity } from "./kiro-run-identity.js";
 import { freshCodeBuddyRunIdentity, withCodeBuddyRunIdentity } from "./codebuddy-run-identity.js";
 import { installNativeCompactionPolicy } from "./native-compaction-policy.js";
 import { CompressionMemory } from "./compression-memory.js";
@@ -264,7 +270,7 @@ async function performReload(id: string, resumed: boolean, cold = false) {
       await prepareReload?.(capabilities);
       await session.reload();
       if (activeInput?.task) session.setActiveToolsByName(taskPhase.stage === "summary" ? [] : subagentTools);
-      else session.setActiveToolsByName([...new Set([...session.getActiveToolNames(), ...taskToolNames, "memory_query"])]);
+      else session.setActiveToolsByName([...new Set([...session.getActiveToolNames(), ...taskToolNames, "memory_query", "web_read", "axiom_search"])]);
     }
     if (cancelled) throw Error("会话已停止，重载结果待确认。");
     send({ type: "reload-stage", id, stage: "comparing" });
@@ -329,6 +335,8 @@ function canAcceptInput() {
 }
 async function shutdown() {
   cancelled = true;
+  webCalls.clear();
+  searchCalls.clear();
   budgetReminder?.dispose();
   await session?.abort();
   await session?.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
@@ -462,6 +470,12 @@ function closeCompressionRequests() {
   compressionCancels.clear();
 }
 
+const searchCalls = new WebSearchClient();
+const callSearch = (id: string, params: unknown, signal?: AbortSignal, progress?: (text: string) => void) =>
+  searchCalls.call(leaseSender(activeLease, activeInput?.runId), id, params, signal, progress);
+const webCalls = new WebReadClient();
+const callWeb = (id: string, params: unknown, signal?: AbortSignal) =>
+  webCalls.call(leaseSender(activeLease, activeInput?.runId), id, params, signal);
 const pendingCalls = new Map<
   string,
   { resolve: (data: unknown) => void; reject: (error: Error) => void }
@@ -514,6 +528,8 @@ function delivered() {
 const send = (value: unknown) => leaseSender(activeLease, activeInput?.runId)(value);
 process.on("disconnect", () => {
   cancelled = true;
+  webCalls.clear();
+  searchCalls.clear();
   budgetReminder?.dispose();
   void session?.abort().finally(() => process.exit(1));
   setTimeout(() => process.exit(1), 9000).unref();
@@ -591,6 +607,8 @@ process.on("message", (value: any) => {
       return;
     }
   }
+  if (value.type === "web-reply") { webCalls.reply(value); return; }
+  if (value.type === "web-search-reply" || value.type === "web-search-progress") { searchCalls.reply(value); return; }
   if (value.type === "task-reply") {
     const pending = pendingCalls.get(value.key);
     pendingCalls.delete(value.key);
@@ -830,7 +848,7 @@ async function run(input: WorkerInput) {
       // Only the host's inline lifecycle/permission hooks run in a child.
       ...(input.task ? { noExtensions: true, noPromptTemplates: true } : {}),
       extensionFactories: [...(!input.task && input.capabilities ? capabilityExtensions(input.capabilities, input.root) : []), (pi) => {
-        const spawnHook: BashSpawnHook = context => ({ ...context, env: toolEnvironment(context.env) });
+        const spawnHook: BashSpawnHook = context => ({ ...context, env: ffmpegEnvironment(input.root, toolEnvironment(context.env)) });
         pi.registerTool({ ...createBashToolDefinition(input.cwd, { spawnHook,
           shellPath: settingsManager.getShellPath(), commandPrefix: settingsManager.getShellCommandPrefix() }), defaultActive: false });
         pi.registerTool({ ...createPowerShellToolDefinition(input.cwd, { spawnHook }), defaultActive: false });
@@ -940,7 +958,7 @@ async function run(input: WorkerInput) {
       settingsManager,
       resourceLoader: loader,
       sessionManager: manager,
-      customTools: input.task ? [] : [...taskTools(callTask), memoryQueryTool((id, params, signal) => callTask("memory_query", id, params, signal))],
+      customTools: input.task ? [] : [...taskTools(callTask), memoryQueryTool((id, params, signal) => callTask("memory_query", id, params, signal)), webReadTool(callWeb), webSearchTool(callSearch)],
       ...(input.task
         ? { tools: subagentTools, excludeTools: [...taskToolNames] }
         // Main agents keep authorized extension tools and the platform shell.
@@ -981,7 +999,7 @@ async function run(input: WorkerInput) {
     });
     if (!input.task)
       session.setActiveToolsByName([
-        ...new Set([...session.getActiveToolNames(), ...taskToolNames, "memory_query"]),
+        ...new Set([...session.getActiveToolNames(), ...taskToolNames, "memory_query", "web_read", "axiom_search"]),
       ]);
     // Binding resources is not a model/auth probe. Keep the explicit choice;
     // invalid definitions fail only if this session actually requests a model.
@@ -1026,11 +1044,13 @@ async function run(input: WorkerInput) {
     const baseStream = session.agent.streamFunction;
     const accountObserver = createSessionAccountObserver(session.modelRuntime, join(process.env.AXIOM_PI_DIR || join(input.root, "pi"), "auth.json"),
       proof => runSend({ type: "model-account-proof", ...proof }));
-    // A fresh logical run owns one continuation across tools, not per HTTP call.
-    // Resume/synthetic cross-run preservation is not established; do not invent it.
+    // A fresh logical run owns one continuation across tools/retries, not per HTTP call.
+    // Resume/synthetic cross-run preservation is not yet established; do not invent it.
+    const kiroRunIdentity = freshKiroRunIdentity(input, session.sessionManager.getSessionId());
     const codeBuddyRunIdentity = freshCodeBuddyRunIdentity(input, session.sessionManager.getSessionId());
     const observedStream = latency.wrap((model, context, options) => {
       if (modelRequestError) throw modelRequestError;
+      options = withKiroRunIdentity(model, options, kiroRunIdentity);
       options = withCodeBuddyRunIdentity(model, options, codeBuddyRunIdentity);
       let quotaRequest: AccountRequestContext | undefined;
       if (options?.sessionId === session!.sessionManager.getSessionId()) {
@@ -1406,7 +1426,7 @@ async function run(input: WorkerInput) {
     compressionBoundary();
     closeCompressionRequests();
     delivered();
-    reusable = outcome.status === "completed" && session.isIdle && pendingCalls.size === 0;
+    reusable = outcome.status === "completed" && session.isIdle && pendingCalls.size === 0 && webCalls.size === 0 && searchCalls.size === 0;
     send({ type: "done", ...outcome,
       ...(input.task && taskPhase.stage === "summary" && outcome.status === "completed" ? { reasonCode: "BUDGET_SUMMARY" } : {}), usage: usage() });
   } catch (error) {
@@ -1427,6 +1447,8 @@ async function run(input: WorkerInput) {
         "pi 初始化或执行失败，未收到具体错误原因。"),
     });
   } finally {
+    webCalls.clear();
+    searchCalls.clear();
     windowRun?.close();
     if (canonicalWindow === windowRun) canonicalWindow = undefined;
     sourceRun?.end();

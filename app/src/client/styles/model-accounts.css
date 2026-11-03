@@ -1,4 +1,23 @@
-/* Account management is a workspace, not an empty quota dashboard. Never style shared views here. */
+/* Embedded connection accounts; preserve standalone fixture scopes below. */
+.provider-accounts { min-width: 0; padding: 20px 0; }
+.provider-accounts .accounts-page-heading { flex-wrap: wrap; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+.provider-accounts .accounts-page-heading > div { min-width: 0; }
+.provider-accounts .accounts-page-heading h3 { margin: 0; }
+.provider-accounts .accounts-page-heading .row { flex-wrap: wrap; }
+.provider-accounts .accounts-search { width: min(100%, 360px); margin-bottom: 16px; }
+.provider-accounts .model-account-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); align-items: start; gap: 14px; }
+.provider-accounts .model-account-grid[data-extended="true"] { grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
+.provider-accounts .model-account-card:not([data-presentation="generic"]) { align-self: stretch; }
+.provider-accounts .accounts-empty { padding: 20px 0; color: var(--muted); }
+.provider-accounts .account-card-actions .btn { min-height: 44px; }
+.models-workspace .config-tabs { max-width: 100%; overflow-x: auto; }
+.models-workspace .config-tab { white-space: nowrap; }
+@media (max-width: 480px) {
+  .models-workspace .config-tab { padding-left: 8px; padding-right: 8px; font-size: 12px; }
+  .provider-accounts .account-details-button { min-height: 44px; }
+}
+
+/* Standalone design fixtures only; do not style shared containers here. */
 .model-accounts-workspace .container { flex: none; max-width: 1280px; padding: 24px 28px 40px; margin: 0 auto; }
 .model-accounts-workspace .accounts-page-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 16px; padding-bottom: 20px; border-bottom: 1px solid var(--border-soft); }
 .model-accounts-workspace .accounts-page-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; min-width: 0; }
@@ -146,4 +165,268 @@
   .model-account-card :is(.account-card-actions .btn, .provider-usage-refresh) { min-width: max(44px, calc(44px * var(--display-font-scale, 1))); min-height: max(44px, calc(30px * var(--display-font-scale, 1))); }
   .model-account-card .provider-usage-expiries summary, .model-account-card .provider-usage-link { min-width: max(44px, calc(44px * var(--display-font-scale, 1))); min-height: max(44px, calc(28px * var(--display-font-scale, 1))); align-content: center; }
   .model-account-dialog :is(.btn, .icon-btn) { min-height: max(44px, calc(32px * var(--display-font-scale, 1))); min-width: 44px; }
+}
+
+/* Fixed account card template: header -> identity -> validity -> cycle windows -> provider info rows -> footer.
+   Info rows: label left, value right on one line; long values scroll inside their own cell instead of wrapping or truncating. */
+.model-account-card .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.model-account-card .account-card-header { flex-wrap: wrap; align-items: flex-start; gap: 6px 10px; }
+.model-account-card .account-card-avatar { flex: 0 0 auto; display: inline-grid; place-items: center; width: calc(32px * var(--display-font-scale, 1)); height: calc(32px * var(--display-font-scale, 1)); border-radius: 8px; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); font-weight: 700; font-size: 14px; }
+.model-account-card .account-card-title { flex: 1 1 140px; min-width: 0; }
+.model-account-card .account-card-heading .account-active-mark { font-weight: 600; color: var(--accent-on); background: var(--accent); }
+.model-account-card[data-confirmed="false"] .account-card-heading .account-active-mark { color: var(--muted); background: color-mix(in srgb, var(--fg) 6%, transparent); }
+.model-account-card .account-plan-badge { min-width: 0; max-width: 100%; overflow-wrap: anywhere; padding: 1px 6px; border-radius: 4px; color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); font-size: 11px; font-weight: 600; line-height: 18px; }
+.model-account-card .account-status-chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border: 1px solid var(--border-soft); border-radius: 999px; color: var(--fg-2); font-size: 11px; line-height: 18px; white-space: nowrap; }
+.model-account-card .account-status-chip::before { content: ""; flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.model-account-card .account-status-chip[data-state="active"] { color: var(--success); border-color: color-mix(in srgb, var(--success) 35%, transparent); background: color-mix(in srgb, var(--success) 7%, transparent); }
+.model-account-card .account-status-chip[data-state="active"]::before { background: var(--success); }
+.model-account-card .account-status-chip:is([data-state="disabled"], [data-state="unauthorized"], [data-state="missing"], [data-state="expired"]) { color: var(--danger-text); border-color: color-mix(in srgb, var(--danger-text) 35%, transparent); font-weight: 600; }
+.model-account-card .account-status-chip:is([data-state="disabled"], [data-state="unauthorized"], [data-state="missing"], [data-state="expired"])::before { background: var(--danger-text); }
+.model-account-card .account-card-identity { margin-top: 2px; }
+.model-account-card .account-card-meta { margin-top: 1px; font-size: 11px; }
+.model-account-card .account-card-tools { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.model-account-card .account-card-tools .icon-btn { width: max(28px, calc(28px * var(--display-font-scale, 1))); height: max(28px, calc(28px * var(--display-font-scale, 1))); color: var(--muted); }
+.model-account-card .account-card-tools .icon-btn:hover:not(:disabled) { color: var(--fg); }
+.model-account-card .account-card-tools .account-remove:hover:not(:disabled) { color: var(--danger-text); }
+.model-account-card .account-copy-feedback { margin: 0; color: var(--muted); font-size: 11px; }
+
+.model-account-card .account-provider-panel { gap: 14px; }
+.model-account-card .account-windows { display: grid; gap: 10px; min-width: 0; }
+.model-account-card .account-windows .provider-usage-metric[data-metric-kind="window"] { margin-top: 0; padding-top: 0; }
+.model-account-card .account-info-rows { display: grid; gap: 8px; min-width: 0; margin: 0; font-size: 12px; line-height: 1.5; }
+.model-account-card .account-info-rows > div { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 12px; row-gap: 1px; min-width: 0; padding: 0; border: 0; background: none; }
+.model-account-card .account-info-rows dt { display: inline-flex; align-items: center; gap: 6px; min-width: 0; margin: 0; color: var(--fg-2); font-size: 12px; white-space: nowrap; }
+.model-account-card .account-info-rows dt .ui-glyph { flex: 0 0 auto; width: 14px; height: 14px; color: var(--muted); }
+.model-account-card .account-info-rows dd { display: flex; align-items: center; justify-content: flex-end; gap: 4px; min-width: 0; margin: 0; overflow-wrap: normal; }
+.model-account-card .account-info-value { min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; white-space: nowrap; text-align: right; color: var(--fg); font: 600 12px/1.5 var(--font-body); font-variant-numeric: tabular-nums; }
+.model-account-card .account-info-action { flex: 0 0 auto; display: inline-grid; place-items: center; width: max(24px, calc(24px * var(--display-font-scale, 1))); height: max(24px, calc(24px * var(--display-font-scale, 1))); color: var(--muted); }
+.model-account-card span.account-info-action { opacity: 0.6; cursor: default; }
+.model-account-card .account-info-action .ui-glyph { width: 13px; height: 13px; }
+.model-account-card .account-info-note { grid-column: 1 / -1; min-width: 0; color: var(--muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.model-account-card .account-info-note .provider-usage-expiries summary { padding: 2px 0; }
+.model-account-card .account-info-rows .metric-fraction { font-size: 0.85em; }
+
+@media (max-width: 600px), (pointer: coarse) {
+  .model-account-card .account-card-tools .icon-btn, .model-account-card button.account-info-action { width: max(44px, calc(32px * var(--display-font-scale, 1))); height: max(44px, calc(32px * var(--display-font-scale, 1))); }
+}
+
+/* Fixed card size: every card is the same square, independent of content. Body scrolls inside; header and footer stay put.
+   At least two cards per row on desktop; one column only when two would be unreadably narrow (< 540px container). */
+.provider-accounts { container-type: inline-size; }
+.provider-accounts .model-account-grid, .provider-accounts .model-account-grid[data-extended="true"] { grid-template-columns: repeat(auto-fill, minmax(min(320px, calc((100% - 14px) / 2)), 1fr)); align-items: start; }
+@container (max-width: 539px) { .provider-accounts .model-account-grid, .provider-accounts .model-account-grid[data-extended="true"] { grid-template-columns: minmax(0, 1fr); } }
+.provider-accounts .model-account-card, .provider-accounts .model-account-card:not([data-presentation="generic"]) { align-self: start; aspect-ratio: 1 / 1; height: auto; min-height: 0; overflow: hidden; gap: 10px; padding: 14px 14px 10px; }
+/* Header grid: avatar | heading | tools on the first row; identity and meta use the full width below, under the tools.
+   Only an extreme header (e.g. a very long unbroken name) scrolls, capped so the body keeps room. */
+.model-account-card .account-card-header { flex: 0 1 auto; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 2px 10px; min-height: 0; max-height: 55%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.model-account-card .account-card-title { display: contents; }
+.model-account-card .account-card-header > .account-card-avatar { grid-column: 1; grid-row: 1 / span 2; }
+.model-account-card .account-card-heading { grid-column: 2; grid-row: 1; min-width: 0; align-self: center; }
+.model-account-card .account-card-header > .account-card-tools { grid-column: 3; grid-row: 1; margin-left: 0; }
+.model-account-card :is(.account-card-identity, .account-card-meta) { grid-column: 2 / -1; min-width: 0; }
+.model-account-card .account-window > strong { justify-self: end; text-align: right; }
+.model-account-card .account-card-heading { gap: 3px 6px; }
+.model-account-card .account-card-heading h3 { font-size: 14px; line-height: 20px; }
+.model-account-card .account-card-identity { overflow-wrap: anywhere; }
+.model-account-card .account-card-tools { align-self: flex-start; gap: 0; }
+.model-account-card .account-card-tools .icon-btn { width: max(26px, calc(26px * var(--display-font-scale, 1))); height: max(26px, calc(26px * var(--display-font-scale, 1))); }
+.model-account-card .account-provider-panel { flex: 1 1 0; min-height: 0; gap: 0; }
+.model-account-card .account-card-body { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; margin-right: -6px; padding-right: 6px; }
+.model-account-card .account-card-body:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.model-account-card .account-card-body > * { flex: 0 0 auto; }
+.model-account-card .account-windows { gap: 8px; }
+.model-account-card .account-info-rows { gap: 5px; }
+.model-account-card .account-window-reset { grid-column: 1; order: 2; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.model-account-card .provider-usage-progress { height: 5px; margin: 2px 0 0; }
+.model-account-card .provider-quota-estimate { padding-top: 8px; }
+.model-account-card .provider-usage-toolbar { flex: 0 0 auto; margin-top: 0; padding-top: 8px; gap: 2px 8px; }
+.model-account-card .account-identity-source { margin: 0; }
+
+/* Selectable card icon (brand mark or neutral glyph). */
+.model-account-card button.account-card-avatar { padding: 0; border: 1px solid var(--border); color: var(--fg); background: color-mix(in srgb, var(--fg) 4%, transparent); cursor: pointer; }
+.model-account-card button.account-card-avatar:hover { border-color: var(--muted); background: color-mix(in srgb, var(--fg) 9%, transparent); }
+.model-account-card button.account-card-avatar:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:is(.model-account-card .account-card-avatar, .account-icon-option) > :is(.ui-glyph, .account-brand-mark) { width: 18px; height: 18px; }
+.account-brand-mark { display: block; flex-shrink: 0; }
+.model-account-dialog .account-icon-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin: 12px 0; }
+.model-account-dialog .account-icon-option { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; color: var(--fg-2); background: transparent; font-size: 12px; text-align: left; cursor: pointer; }
+.model-account-dialog .account-icon-option:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 6%, transparent); }
+.model-account-dialog .account-icon-option[aria-pressed="true"] { border-color: var(--accent); color: var(--fg); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+@media (max-width: 600px), (pointer: coarse) {
+  /* Touch: 44px targets leave too little room for a fixed header/footer in a square, so the whole card scrolls (size unchanged). */
+  .provider-accounts .model-account-card, .provider-accounts .model-account-card:not([data-presentation="generic"]) { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+  .model-account-card .account-provider-panel, .model-account-card .account-card-body { flex: 0 0 auto; overflow: visible; margin-right: 0; padding-right: 0; }
+  .model-account-card .account-card-header { flex: 0 0 auto; max-height: none; overflow: visible; row-gap: 4px; }
+  .model-account-card .account-card-header > .account-card-tools { grid-column: 2 / -1; grid-row: 1; justify-self: end; flex-wrap: wrap; justify-content: flex-end; }
+  .model-account-card .account-card-heading { grid-column: 1 / -1; grid-row: 2; }
+  .model-account-card .account-card-header > .account-card-avatar { grid-row: 1; }
+  .model-account-card :is(.account-card-identity, .account-card-meta) { grid-column: 1 / -1; }
+  .model-account-card .account-card-tools .icon-btn { width: 44px; height: 44px; }
+  .model-account-card button.account-card-avatar { width: 44px; height: 44px; }
+  .model-account-dialog .account-icon-option { min-height: 44px; }
+}
+
+/* Compact card type scale (prototype account-manager-compact-v2): 13px title, 12px figures, 11px labels, 10px meta.
+   Display settings still scale every px here through the build-time typography plugin. */
+.model-account-card { font-size: 11px; line-height: 1.45; }
+.provider-accounts .model-account-card, .provider-accounts .model-account-card:not([data-presentation="generic"]) { gap: 8px; padding: 12px 12px 8px; }
+.model-account-card .account-card-header { gap: 2px 8px; }
+.model-account-card .account-card-heading { gap: 2px 5px; }
+.model-account-card .account-card-heading h3 { font-size: 13px; line-height: 18px; font-weight: 600; }
+.model-account-card .account-card-heading :is(.account-active-mark, .account-plan-badge) { padding: 0 5px; font-size: 10px; line-height: 16px; }
+.model-account-card .account-status-chip { gap: 4px; padding: 0 6px; font-size: 10px; line-height: 16px; }
+.model-account-card .account-status-chip::before { width: 5px; height: 5px; }
+.model-account-card .account-card-identity { margin-top: 1px; font-size: 11px; line-height: 16px; }
+.model-account-card .account-card-meta { margin-top: 0; font-size: 10px; line-height: 15px; }
+.model-account-card .account-card-avatar, .model-account-card button.account-card-avatar { width: 28px; height: 28px; border-radius: 7px; }
+:is(.model-account-card .account-card-avatar, .account-icon-option) > :is(.ui-glyph, .account-brand-mark) { width: 16px; height: 16px; }
+.model-account-card .account-card-tools .icon-btn { width: 24px; height: 24px; }
+.model-account-card .account-card-tools .icon-btn .ui-glyph { width: 14px; height: 14px; }
+.model-account-card .account-card-body { gap: 8px; }
+.model-account-card .account-info-rows { gap: 4px; font-size: 11px; line-height: 1.45; }
+.model-account-card .account-info-rows dt { gap: 5px; font-size: 11px; }
+.model-account-card .account-info-rows dt .ui-glyph { width: 12px; height: 12px; }
+.model-account-card .account-info-value { font: 600 11px/1.45 var(--font-body); font-variant-numeric: tabular-nums; }
+.model-account-card .account-info-note { font-size: 10px; line-height: 1.4; }
+.model-account-card .account-info-expired .account-info-value { color: var(--danger-text); }
+.model-account-card .account-windows { gap: 6px; }
+.model-account-card .provider-usage-metric.account-window { gap: 1px 8px; line-height: 1.4; }
+.model-account-card .provider-usage-metric.account-window > span:first-child { font-size: 11px; }
+.model-account-card .provider-usage-metric.account-window > strong { font: 600 12px/1.4 var(--font-body); font-variant-numeric: tabular-nums; }
+.model-account-card .provider-usage-progress { height: 4px; margin: 1px 0 0; }
+.model-account-card :is(.account-window-reset, .provider-usage-availability, .provider-usage-remaining) { font-size: 10px; line-height: 1.4; }
+.model-account-card .account-window-reset[data-align="end"] { grid-column: 2; justify-self: end; }
+.model-account-card :is(.account-usage-state, .provider-usage-note, .provider-usage-estimate) { min-height: 0; font-size: 11px; line-height: 1.5; }
+.model-account-card .provider-usage-toolbar { padding-top: 6px; gap: 2px 8px; }
+.model-account-card :is(.provider-usage-updated, .account-copy-feedback) { font-size: 10px; }
+/* Compact estimate: label | remaining | total on one row each; the scope note lives in the section tooltip. */
+.model-account-card .provider-quota-estimate[data-compact] { padding-top: 6px; font-size: 10px; line-height: 1.4; }
+.model-account-card .provider-quota-estimate[data-compact] .provider-quota-heading { margin-bottom: 2px; }
+.model-account-card .provider-quota-estimate[data-compact] .provider-quota-heading > strong { font-size: 11px; font-weight: 600; }
+.model-account-card .provider-quota-estimate[data-compact] .provider-quota-windows { gap: 2px; }
+.model-account-card .provider-quota-estimate[data-compact] .provider-quota-window { grid-template-columns: minmax(0, 1fr) auto auto; gap: 0 10px; align-items: baseline; }
+.model-account-card .provider-quota-estimate[data-compact] :is(.provider-quota-label, .provider-quota-window > span) { grid-column: auto; white-space: nowrap; }
+.model-account-card .provider-quota-estimate[data-compact] .provider-quota-window strong { font-size: 11px; font-weight: 600; }
+@media (max-width: 600px), (pointer: coarse) {
+  .model-account-card .account-card-tools .icon-btn, .model-account-card button.account-card-avatar { width: 44px; height: 44px; }
+}
+
+/* Dense account summary. The square never scrolls; complete values and overflow sections live in Details. */
+.provider-accounts .model-account-card,
+.provider-accounts .model-account-card:not([data-presentation="generic"]) {
+  container-type: inline-size;
+  overflow: clip;
+  padding: 10px 10px 7px;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+.model-account-card .account-card-header {
+  flex: 0 0 auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 1px 7px;
+  max-height: none;
+  overflow: visible;
+}
+.model-account-card .account-card-header > .account-card-avatar { grid-column: 1; grid-row: 1 / span 2; }
+.model-account-card .account-card-heading { grid-column: 2; grid-row: 1; gap: 2px 4px; }
+.model-account-card .account-card-heading h3 { max-width: 100%; font-size: 12px; font-weight: 500; line-height: 16px; }
+.model-account-card .account-card-name {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+.model-account-card .account-card-name:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.model-account-card .account-card-heading :is(.account-active-mark, .account-plan-badge, .account-auth-badge) {
+  max-width: 100%;
+  min-width: 0;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 400;
+  line-height: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.model-account-card .account-card-heading .account-plan-badge { max-width: 50%; }
+.model-account-card .account-auth-badge { color: var(--muted); background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.model-account-card .account-card-identity { grid-column: 2 / -1; margin: 0; font-size: 10px; line-height: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.model-account-card .account-card-meta { display: none; }
+.model-account-card .account-card-avatar, .model-account-card button.account-card-avatar { width: 26px; height: 26px; border-radius: 6px; }
+.model-account-card .account-card-avatar > :is(.ui-glyph, .account-brand-mark) { width: 14px; height: 14px; }
+.model-account-card .account-card-header > .account-card-tools { grid-column: 3; grid-row: 1; flex-wrap: nowrap; gap: 0; }
+.model-account-card .account-card-tools .icon-btn { width: 20px; height: 22px; min-width: 0; min-height: 0; padding: 3px; color: var(--muted); }
+.model-account-card .account-card-tools .icon-btn .ui-glyph { width: 12px; height: 12px; }
+.model-account-card .account-card-tools { opacity: 0; transition: opacity 120ms ease; }
+.model-account-card:is(:hover, :focus-within) .account-card-tools { opacity: 1; }
+.model-account-card .account-card-tools .icon-btn:hover:not(:disabled) { color: var(--fg); background: color-mix(in srgb, var(--fg) 6%, transparent); }
+.model-account-card .account-card-tools .account-remove:hover:not(:disabled) { color: var(--danger-text); }
+.model-account-card .account-provider-panel { flex: 1 1 0; min-height: 0; overflow: clip; gap: 0; }
+.model-account-card .account-card-body { flex: 1 1 0; min-height: 0; overflow: clip; gap: 6px; margin: 0; padding: 0; }
+.model-account-card .account-card-body [hidden] { display: none !important; }
+.model-account-card .account-info-rows { gap: 3px; font-size: 10px; line-height: 1.35; }
+.model-account-card .account-info-rows > div { column-gap: 7px; }
+.model-account-card .account-info-rows dt { gap: 4px; font-size: 10px; }
+.model-account-card .account-info-rows dt .ui-glyph { width: 11px; height: 11px; }
+.model-account-card .account-info-value { overflow: visible; white-space: normal; overflow-wrap: anywhere; font: 400 10px/1.35 var(--font-body); font-variant-numeric: tabular-nums; }
+.model-account-card .account-info-rows .metric-fraction { font-size: 0.9em; font-weight: 400; }
+.model-account-card .account-info-note { font-size: 9px; line-height: 1.3; }
+.model-account-card .account-windows { gap: 5px; }
+.model-account-card .provider-usage-metric.account-window { gap: 0 6px; line-height: 1.35; }
+.model-account-card .provider-usage-metric.account-window > span:first-child { font-size: 10px; }
+.model-account-card .provider-usage-metric.account-window > strong { font: 500 10px/1.35 var(--font-body); font-variant-numeric: tabular-nums; }
+.model-account-card .provider-usage-progress { height: 3px; margin: 2px 0 1px; }
+.model-account-card :is(.account-window-reset, .provider-usage-availability, .provider-usage-remaining) { font-size: 9px; font-weight: 400; line-height: 1.3; }
+.model-account-card :is(.account-usage-state, .provider-usage-note, .provider-usage-estimate) { font-size: 10px; line-height: 1.35; }
+.model-account-card .provider-quota-estimate[data-compact] { padding-top: 4px; font-size: 9px; line-height: 1.3; }
+.model-account-card .provider-quota-estimate[data-compact] .provider-quota-heading > strong,
+.model-account-card .provider-quota-estimate[data-compact] .provider-quota-window strong { font-size: 10px; font-weight: 400; }
+.model-account-card .provider-quota-estimate[data-compact] .provider-quota-window { gap: 0 5px; }
+.model-account-card :is(.account-more, .account-inline-detail) { display: inline-flex; align-items: center; gap: 4px; width: fit-content; max-width: 100%; padding: 0; border: 0; background: none; color: var(--muted); font: 400 9px/1.4 var(--font-body); text-align: left; cursor: pointer; }
+.model-account-card :is(.account-more, .account-inline-detail):hover { color: var(--fg); }
+.model-account-card :is(.account-more, .account-inline-detail) .ui-glyph { width: 10px; height: 10px; }
+.model-account-card .provider-usage-toolbar { position: relative; flex: 0 0 auto; justify-content: space-between; flex-wrap: nowrap; margin-top: 5px; padding-top: 5px; gap: 6px; }
+.model-account-card .account-footer-state { display: flex; align-items: center; flex-wrap: wrap; gap: 1px 7px; min-width: 0; }
+.model-account-card .account-status-chip { max-width: 100%; padding: 0; border: 0; border-radius: 0; background: none; color: var(--muted); font-size: 9px; font-weight: 400; line-height: 14px; white-space: normal; }
+.model-account-card .account-status-chip::before { width: 5px; height: 5px; background: var(--warn); }
+.model-account-card .account-status-chip[data-state="saved"]::before { background: var(--muted); }
+.model-account-card .account-status-chip[data-state="active"] { color: var(--muted); background: none; border: 0; }
+.model-account-card .account-status-chip:is([data-state="disabled"], [data-state="unauthorized"], [data-state="missing"], [data-state="expired"]) { color: var(--muted); border: 0; font-weight: 400; }
+.model-account-card :is(.provider-usage-updated, .account-copy-feedback) { font-size: 9px; font-weight: 400; }
+.model-account-card .account-copy-feedback { position: absolute; bottom: 100%; left: 0; padding: 3px; background: var(--surface); }
+.model-account-card .account-details-link { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: none; color: var(--muted); font: 400 10px/18px var(--font-body); cursor: pointer; }
+.model-account-card .account-details-link .ui-glyph { width: 12px; height: 12px; }
+.model-account-card .account-details-link:hover { color: var(--fg); }
+.model-account-dialog .account-detail-metrics { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
+@container (max-width: 300px) {
+  .model-account-card .provider-usage-updated { display: none; }
+}
+@media (hover: none), (pointer: coarse) {
+  .model-account-card .account-card-tools { opacity: 1; }
+}
+@media (max-width: 600px), (pointer: coarse) {
+  /* Keep 44px hit targets without doubling the entire toolbar at 200% text size. Glyphs still scale. */
+  .model-account-card .account-card-tools .icon-btn { width: max(44px, calc(20px * var(--display-font-scale, 1))); height: max(44px, calc(22px * var(--display-font-scale, 1))); }
+  .model-account-card button.account-card-avatar { width: max(44px, calc(26px * var(--display-font-scale, 1))); height: max(44px, calc(26px * var(--display-font-scale, 1))); }
+  .model-account-card .account-card-header > .account-card-tools { grid-column: 2 / -1; grid-row: 1; justify-self: end; }
+  .model-account-card .account-card-header > .account-card-avatar { grid-column: 1; grid-row: 1; }
+  .model-account-card .account-card-heading { grid-column: 1 / -1; grid-row: 2; }
+  .model-account-card .account-card-identity { grid-column: 1 / -1; grid-row: 3; }
+  .model-account-card .account-details-link { min-height: max(44px, calc(18px * var(--display-font-scale, 1))); padding-inline: 4px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .model-account-card .account-card-tools { transition: none; }
 }

@@ -25,5 +25,6 @@ export function hasQuotaRecord(usage: ProviderUsage | undefined, now = Date.now(
   return usage.metrics.some(metric => metric.kind === "window" ? known(metric.usedPercent) && metric.usedPercent! <= 100
     : metric.kind === "tokens" ? known(metric.remaining)
     : metric.kind === "count" ? known(metric.count) && Number.isInteger(metric.count)
+    : metric.kind === "quota" ? known(metric.used) && known(metric.limit)
     : metric.unlimited === true || metric.hasCredits === false || metric.balance !== null && /^[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(metric.balance));
 }

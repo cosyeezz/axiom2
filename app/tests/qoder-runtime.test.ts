@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 import { ModelService } from "../src/server/model-service.js";
 import { Logins } from "../src/server/auth.js";
 import { ensureModelProvider, nativeProviderTemplates } from "../src/server/model-runtime.js";
+import { ModelAccountService } from "../src/server/model-accounts.js";
+import { readModelCredential, selectedAuthPath, selectedCatalogPath } from "../src/server/model-account-storage.js";
 import { closeModelNetworks } from "../src/server/model-network.js";
 
 const providerId = "qoder-cn";
@@ -29,8 +31,9 @@ test("Qoder regional templates are available without an experimental opt-in", ()
 });
 test("Qoder isolated worker login, signed catalog, reopened settings and snapshot runtime", { timeout: 45000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-qoder-runtime-"));
-  const envKeys = ["AXIOM_PI_DIR", "NODE_OPTIONS", "AXIOM_QODER_FIXTURE_DIR", "AXIOM_EXPERIMENTAL_QODER"] as const;
+  const envKeys = ["AXIOM_PI_DIR", "NODE_OPTIONS", "AXIOM_QODER_FIXTURE_DIR", "AXIOM_EXPERIMENTAL_QODER", "AXIOM_EXECUTION_PROFILE", "AXIOM_MODEL_ACCOUNT_BINDINGS", "AXIOM_MODEL_MANAGED_ACCOUNTS"] as const;
   const previous = envKeys.map(key => process.env[key]), previousFetch = globalThis.fetch;
+  for (const key of ["AXIOM_EXECUTION_PROFILE", "AXIOM_MODEL_ACCOUNT_BINDINGS", "AXIOM_MODEL_MANAGED_ACCOUNTS"]) delete process.env[key];
   const preload = fileURLToPath(new URL("./fixtures/qoder-network.cjs", import.meta.url));
   process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ""} --require=${JSON.stringify(preload)}`;
   process.env.AXIOM_QODER_FIXTURE_DIR = root; process.env.AXIOM_PI_DIR = join(root, "pi");
@@ -57,9 +60,10 @@ test("Qoder isolated worker login, signed catalog, reopened settings and snapsho
       assert.notEqual(logins.get(owner, flow.id).state.status, "failed", logins.get(owner, flow.id).state.message);
       assert.ok(Date.now() < deadline, "Login completion timeout"); await delay(10);
     }
-    assert.equal(logins.get(owner, flow.id).state.status, "completed");
-    const stored = JSON.parse(readFileSync(join(service.dir, "auth.json"), "utf8"))[providerId];
-    assert.equal(stored.access, "dt-FIXTURE"); assert.equal(stored.region, "cn"); assert.ok(stored.machineId);
+    assert.equal(logins.get(owner, flow.id).state.status, "completed", logins.get(owner, flow.id).state.message);
+    const stored = readModelCredential(providerId, join(service.dir, "auth.json"));
+    assert.ok(stored?.type === "oauth");
+    assert.equal(stored.access, "dt-FIXTURE"); assert.equal(stored.region, "cn"); assert.ok(typeof stored.machineId === "string");
     const reopened = new ModelService(root), view = await reopened.read();
     assert.equal(view.providers.find(item => item.providerId === providerId)?.auth?.configured, true);
     assert.equal(view.providers.find(item => item.providerId === providerId)?.name, "Qoder 国内版");
@@ -71,18 +75,21 @@ test("Qoder isolated worker login, signed catalog, reopened settings and snapsho
     const requests = readFileSync(join(root, "requests.jsonl"), "utf8").trim().split("\n").map(line => JSON.parse(line));
     assert.ok(requests.some(item => item.path === "/algo/api/v2/model/list"));
     assert.ok(requests.every(item => item.worker === "1"));
-    const storedModels = readFileSync(join(service.dir, "models-store.json"), "utf8");
+    const authPath = selectedAuthPath(providerId, join(service.dir, "auth.json"));
+    const catalogPath = selectedCatalogPath(providerId, join(service.dir, "auth.json"), join(service.dir, "models-store.json"));
+    const storedModels = readFileSync(catalogPath, "utf8");
     assert.ok(!storedModels.includes("dt-FIXTURE") && !storedModels.includes("fixture-user") && !storedModels.includes(stored.machineId));
     const snapshotPath = join(root, "snapshot.json");
     writeFileSync(snapshotPath, JSON.stringify({ providers: { [providerId]: { modelOverrides: { auto: { name: "Snapshot Auto" } } } } }));
-    const snapshotAuth = readFileSync(join(service.dir, "auth.json"), "utf8");
+    const snapshotAuth = readFileSync(authPath, "utf8");
     const snapshot = await reopened.runtime(snapshotPath), model = snapshot.getModel(providerId, "auto")!;
-    assert.equal(readFileSync(join(service.dir, "models-store.json"), "utf8"), storedModels, "offline restore must not rewrite the cache");
-    assert.equal(readFileSync(join(service.dir, "auth.json"), "utf8"), snapshotAuth, "offline restore must not rewrite credentials");
+    assert.equal(readFileSync(catalogPath, "utf8"), storedModels, "offline restore must not rewrite the cache");
+    assert.equal(readFileSync(authPath, "utf8"), snapshotAuth, "offline restore must not rewrite credentials");
     assert.ok(model, "catalog must survive a new runtime"); assert.equal(model.name, "Snapshot Auto");
     const result = await snapshot.completeSimple(model, { messages: [{ role: "user", content: "hello", timestamp: 1 }] }, { fetch: async (input) => {
       const url = new URL(String(input)); assert.equal(url.origin, "https://gateway.qoder.com.cn");
       if (url.pathname.endsWith("endpoints")) return new Response(JSON.stringify({ inferNodes: ["https://gateway.qoder.com.cn"] }));
+      if (url.pathname.endsWith("getDataPolicy")) return new Response(JSON.stringify({ result: { status: "AGREE" } }));
       if (url.pathname.endsWith("model/list")) return new Response(JSON.stringify({ chat: [{ key: "auto", max_output_tokens: 1024 }] }));
       assert.equal(url.pathname, "/algo/api/v2/service/pro/sse/agent_chat_generation");
       return new Response('data: {"statusCodeValue":200,"body":"{\\"choices\\":[{\\"delta\\":{\\"content\\":\\"ok\\"},\\"finish_reason\\":\\"stop\\"}]}"}\n\ndata: {"statusCodeValue":200,"body":"[DONE]"}\n\n', { headers: { "content-type": "text/event-stream" } });
@@ -102,8 +109,10 @@ test("Qoder isolated worker login, signed catalog, reopened settings and snapsho
     assert.equal((await restored.getAvailable(providerId)).length, 1);
     await ensureModelProvider(restored, "qoder");
     assert.equal(restored.getRegisteredNativeProvider("qoder")?.name, "Qoder");
-    await snapshot.logout(providerId);
-    assert.ok(!(await snapshot.listCredentials()).some(item => item.providerId === providerId));
+    const accounts = new ModelAccountService(reopened), accountView = await accounts.list();
+    const active = accountView.accounts.find(row => row.providerId === providerId && row.active);
+    assert.ok(active); await accounts.remove(active.id, accountView.revision);
+    assert.equal(readModelCredential(providerId, join(service.dir, "auth.json")), undefined);
   } finally {
     await logins.close(); await closeModelNetworks(root); globalThis.fetch = previousFetch;
     envKeys.forEach((key, index) => { if (previous[index] === undefined) delete process.env[key]; else process.env[key] = previous[index]; });

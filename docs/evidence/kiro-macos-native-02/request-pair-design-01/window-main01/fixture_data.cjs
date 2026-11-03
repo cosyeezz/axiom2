@@ -1,0 +1,5 @@
+'use strict';
+const body=JSON.stringify({systemPrompt:'固定安全指令',conversationState:{history:[{userInputMessage:{content:'历史',modelId:'deepseek-3.2'}}],currentMessage:{userInputMessage:{modelId:'deepseek-3.2',content:'受控输入',userInputMessageContext:{tools:[{toolSpecification:{name:'own_tool',description:'local test',inputSchema:{json:{type:'object'}}}}]}}}},custom:{preserve:true},security:{policy:'retain'},unknown:{nested:['值',1]}});
+const header='POST /v1/responses HTTP/1.1\r\nHost: fixture.invalid\r\nContent-Type: application/json\r\nContent-Length: '+Buffer.byteLength(body)+'\r\n\r\n';
+function pick(w){const s=w.snapshot();return {state:s.state,fault:s.fault,windowClosed:s.windowClosed,channelReady:s.channelReady,observedCandidates:s.observedCandidates,reservedFrames:s.reservedFrames,queuedFrames:s.queuedFrames,peakQueuedFrames:s.peakQueuedFrames,nodeState:s.observers[0]?.status.state??'missing',nodeFault:s.observers[0]?.status.fault??'missing',undiciState:s.observers[1]?.status.state??'missing',channelState:s.channel?.state??'missing',channelFault:s.channel?.fault??'missing'};}
+module.exports={body,header,pick};

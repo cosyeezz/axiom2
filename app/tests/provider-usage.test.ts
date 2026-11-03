@@ -206,7 +206,7 @@ test("cache is single-flight, rate limited, stale on failure, and invalidated by
   fail = false; writeFileSync(f.modelsPath, '{"providers":{"openai":{}}}');
   assert.equal((await service.read("openai")).status, "ready"); assert.equal(calls, 4);
   writeFileSync(f.authPath, "{}"); assert.equal((await service.read("openai")).status, "unavailable"); assert.equal(calls, 4);
-  assert.equal((await service.read("qoder")).status, "unsupported"); assert.equal(calls, 4);
+  assert.equal((await service.read("jiuliyun")).status, "unsupported"); assert.equal(calls, 4);
 });
 
 test("usage timeouts have an explicit safe reason without changing stored auth", async t => {

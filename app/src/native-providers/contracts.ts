@@ -95,7 +95,7 @@ export type NativeStreamEvent =
   | { type: "usage"; state: "partial"; counts?: never }
   | { type: "usage"; state: "complete"; counts: NativeTokenUsage }
   | { type: "diagnostic"; diagnostic: NativeDiagnostic }
-  | { type: "done"; reason: "stop" | "toolUse" }
+  | { type: "done"; reason: "stop" | "toolUse" | "length" }
   | { type: "error"; reason: "aborted" | "error"; message: string };
 
 export interface NativeStreamOptions {

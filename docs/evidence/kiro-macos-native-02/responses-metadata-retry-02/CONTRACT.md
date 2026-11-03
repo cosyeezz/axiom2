@@ -1,0 +1,3 @@
+# Follow-up static dependencies
+
+Purpose: resolve newly located dependencies left by completed case01: main-turn continuation generation/preservation (not nested memory graph), Kce/yo retry classification, Det mode, eve backoff, and callPosition updates. Existing public KAS0.66.70 same-digest source only. No execution/network/model calls/auth/settings. Budget: ten focused windows, 100KiB delivered source, three minutes. First locate exact symbols, then acquire windows; no full AST/decompiler. Save limitations if scope insufficient. This is not resumption or replay of a failed test; case01 ended normally with useful evidence.

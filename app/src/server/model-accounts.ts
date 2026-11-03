@@ -6,11 +6,12 @@ import type { Credential } from "@earendil-works/pi-ai";
 import { AppError, object, text } from "../shared/protocol.js";
 import type { AddModelAccount, ModelAccounts } from "../shared/model-accounts.js";
 import type { SessionAccountTarget, SessionAccountUsage } from "../shared/session-account-usage.js";
-import { accountDirectory, privateJson, readAccountIndex, writeAccountIndex, modelCredentialRevision, type AccountIndex, type AccountRecord } from "./model-account-storage.js";
+import { directCredentialStore, accountDirectory, privateJson, readAccountIndex, writeAccountIndex, modelCredentialRevision, type AccountIndex, type AccountRecord } from "./model-account-storage.js";
 import type { ModelService } from "./model-service.js";
 import { modelNetwork } from "./model-network.js";
 import { ProviderUsageService } from "./provider-usage.js";
 import { accountInfo } from "./model-account-info.js";
+import { beginAccountRemoval } from "./model-account-admission.js";
 
 const revisionOf = (index: AccountIndex) => createHash("sha256").update(JSON.stringify(index)).digest("hex");
 const credentialText = (credential: Credential | undefined, field: string) => {
@@ -71,6 +72,58 @@ export class ModelAccountService {
       return this.snapshot(index);
     });
   }
+  async rename(id: unknown, label: unknown, revision: unknown) {
+    return this.models.serial(async () => {
+      if (this.models.authActive) throw new AppError("AUTH_BUSY", "请先完成或取消正在进行的认证。");
+      const index = this.index(), row = this.account(index, id);
+      if (revision !== revisionOf(index)) throw new AppError("REVISION_CONFLICT", "账号列表已改变，请刷新后重试。");
+      row.label = text(label, "账号名称", 160);
+      writeAccountIndex(this.models.dir, index);
+      return this.snapshot(index);
+    });
+  }
+  async remove(id: unknown, revision: unknown, replacementId?: unknown, confirmStop = false) {
+    return this.models.serial(async () => {
+      if (this.models.authActive) throw new AppError("AUTH_BUSY", "请先完成或取消正在进行的认证。");
+      const index = this.index(), row = this.account(index, id);
+      if (revision !== revisionOf(index)) throw new AppError("REVISION_CONFLICT", "账号列表已改变，请刷新后重试。");
+      const active = index.active[row.providerId] ?? index.accounts.find(item => item.providerId === row.providerId && item.legacy)?.id;
+      const remaining = index.accounts.filter(item => item.providerId === row.providerId && item.id !== row.id);
+      let replacement: AccountRecord | undefined;
+      if (active === row.id && remaining.length) {
+        replacement = remaining.find(item => item.id === replacementId);
+        if (!replacement) throw new AppError("ACCOUNT_REPLACEMENT_REQUIRED", "删除默认账号前，请明确选择下一个默认账号。");
+        if (!this.credential(replacement)) throw new AppError("ACCOUNT_AUTH_MISSING", "下一个默认账号没有认证，请先新增账号或删除无认证记录。");
+      }
+      // Old executions may still be bound to this slot even when it is no longer default.
+      // The existing execution guard is conservative: confirmation stops this connection's runs.
+      this.models.authActive = true;
+      let removal: ReturnType<typeof beginAccountRemoval> | undefined;
+      try {
+      const config = JSON.parse(await this.models.raw());
+      if (config.providers?.[row.providerId]?.apiKey !== undefined)
+        throw new AppError("ACCOUNT_INLINE_AUTH_CONFLICT", "连接中仍有旧版内嵌密钥；请先保存连接设置完成安全迁移，再删除账号，避免旧认证重新出现。");
+      removal = beginAccountRemoval(this.models.dir, row.providerId);
+      await this.models.beforeLogout?.([row.providerId], confirmStop);
+      removal.revoke();
+      const dir = this.dir(row), credentials = await directCredentialStore(join(dir, "auth.json"));
+      await credentials.delete(row.providerId);
+      if (this.credential(row)) throw new AppError("ACCOUNT_DELETE_FAILED", "无法确认账号认证已删除，请刷新后重试。");
+      index.accounts = index.accounts.filter(item => item.id !== row.id);
+      if (active === row.id) {
+        delete index.active[row.providerId];
+        if (replacement) index.active[row.providerId] = replacement.id;
+      }
+      try { writeAccountIndex(this.models.dir, index); }
+      catch { throw new AppError("PARTIAL_ACCOUNT_FAILURE", "认证已删除，但账号记录未能更新；请刷新列表后重试删除。连接配置未修改。"); }
+      this.usageServices.delete(row.id);
+      // Never remove the legacy root directory. Independent slots contain only this account.
+      try { rmSync(accountDirectory(this.models.dir, row.id), { recursive: true, force: true }); }
+      catch { throw new AppError("PARTIAL_ACCOUNT_FAILURE", "账号已删除，但其本地缓存未能清理。请刷新列表；连接配置未修改。"); }
+      return this.snapshot(index);
+      } finally { removal?.release(); this.models.authActive = false; }
+    });
+  }
   prepare(providerId: string, input: unknown) {
     const draft = object(input), label = text(draft.label, "账号名称", 160);
     const region = draft.region === undefined || draft.region === "" ? "" : text(draft.region, "账号区域", 160);
@@ -81,8 +134,10 @@ export class ModelAccountService {
   }
   async configure(staged: ReturnType<ModelAccountService["prepare"]>) {
     const config = JSON.parse(await this.models.raw());
-    // Network policy is inherited from the model connection, not from another account's credentials.
-    privateJson(join(staged.dir, "models.json"), { providers: Object.hasOwn(config.providers, staged.providerId) ? { [staged.providerId]: config.providers[staged.providerId] } : {} });
+    // Network policy is inherited, but a previous inline key is never a login source.
+    const provider = Object.hasOwn(config.providers, staged.providerId) ? config.providers[staged.providerId] : undefined;
+    if (provider) delete provider.apiKey;
+    privateJson(join(staged.dir, "models.json"), { providers: provider ? { [staged.providerId]: provider } : {} });
   }
   async commit(staged: ReturnType<ModelAccountService["prepare"]>, type: "oauth" | "api_key", selectIfFirst = false) {
     return this.models.serial(async () => {
@@ -91,7 +146,7 @@ export class ModelAccountService {
       const index = this.index();
       if (index.accounts.some(row => row.id === staged.id)) return;
       // There is nothing to switch away from for a brand-new supplier. Make its first
-      // successful login usable even though single-account cards are intentionally hidden.
+      // successful login usable; later logins never change the selected account.
       if (selectIfFirst && !index.accounts.some(row => row.providerId === staged.providerId) && !Object.hasOwn(index.active, staged.providerId))
         index.active = { ...index.active, [staged.providerId]: staged.id };
       index.accounts.push({ id: staged.id, providerId: staged.providerId, label: staged.draft.label, region: staged.draft.region ?? "", createdAt: Date.now() });

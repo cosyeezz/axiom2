@@ -2,9 +2,9 @@
 
 ## 状态与使用
 
-Qoder 默认作为普通供应商提供，不需要实验开关，名称不带“实验性”。**国内站已有 OAuth 的最小文本／工具调用，以及真实 Axiom 会话的首轮文本和 thinking 已通过；同会话续轮遭遇 `10605`，工具和图片完整验收尚未完成，不能据此宣称全面稳定可用。** 验证状态不作为隐藏入口或禁止调用的条件。本实现沿用 CodeBuddy 国内版的接入流程：参考 9Router、静态复核官方发布客户端、实现原生 provider、运行隔离测试。并非部署 9Router 网关，也不是把 Qoder 当成标准 OpenAI API。
+Qoder 默认作为普通供应商提供，不需要实验开关，名称不带“实验性”。**2026-11-01：finish 计时帧、工具续帧空 ID 和图片优先上传补丁已部署。受控文本与上下文两轮已过，图片准确识别尚未通过：官方 CLI 两次答错，原生内联否认视觉，URL 实验被上游业务 406 拒绝。历史受控工具 case 遇到 10605，完整工具与图片验收仍未完成，不能宣称生产可用。** 详见[1.1.81 修复报告](qoder-repair-1181.md)及[图片修复与当前边界](qoder-image-repair-1181.md)。 验证状态不作为隐藏入口或禁止调用的条件。本实现沿用 CodeBuddy 国内版的接入流程：参考 9Router、静态复核官方发布客户端、实现原生 provider、运行隔离测试。并非部署 9Router 网关，也不是把 Qoder 当成标准 OpenAI API。
 
-原 `AXIOM_EXPERIMENTAL_QODER` 环境变量不再控制展示、登录、刷新、目录或推理；未设置或保留旧值 `0` 均可使用。去除门控本身不启动登录或改变真实配置；后续最终修复的构建、一次后台重启及会话验证另见下文，未部署。
+原 `AXIOM_EXPERIMENTAL_QODER` 环境变量不再控制展示、登录、刷新、目录或推理；未设置或保留旧值 `0` 均可使用。去除门控本身不启动登录或改变真实配置。最新修复已经构建并由独立重启加载，不是仅在测试进程中生效；下文旧调用记录仅代表各自当时版本。
 
 “添加供应商”默认提供两个独立项：
 
@@ -28,26 +28,38 @@ Qoder 默认作为普通供应商提供，不需要实验开关，名称不带�
 - 动态目录同时规范化系统与账号 BYOK 模型、视觉／思考能力、effort 和上下文档位；`enable:false/0` 均排除。BYOK 私密配置只留在内存，按官方规则写入 `custom_model`，不进入公开模型描述或 `model_config`。
 - 系统提示、文本、工具定义、分片/并行工具调用和工具结果；SSE 信封解包、延迟 usage 合并、取消及错误处理。
 - 目录声明视觉能力的模型支持用户消息与工具结果中的 PNG/JPEG/GIF/WebP base64 图片；不根据名称猜测，不自动换模型。原始用户及工具结果图片先校验，不支持的模型／格式明确拒绝。思考开关、目录允许的等级、预算及签名／加密 reasoning item 多轮回放已接入；`preserve=false` 去除历史思考。
-- 账号目录中没有所选模型时失败，不回退到其他模型；推理失败不自动重放已签名请求。
-- 区分 HTTP 错误与事件流内的错误状态。对于嵌套错误体中的已知业务码，优先显示其含义：`10605` 为当前模型资源繁忙，`110/112` 为额度或频率限制；不会仅因外层状态是 403 就要求重新登录。未知 401/403 仍提示检查认证、权限、账号地区或服务端限制，不回显上游错误原文。
+- 账号目录中没有所选模型时失败，不回退到其他模型；provider 及 Axiom/Pi 会话外层都禁止自动重放失败的 Qoder 推理，不以失败历史省略来重试。
+- 区分 HTTP 错误与事件流内的错误状态。对于嵌套错误体中的已知业务码，优先显示其含义：`10605` 为模型排队（CLI `modelQueued`，显示为当前模型资源繁忙），`110/112` 为额度或频率限制，业务 `406` 按官方 CLI 归为内容安全拒绝、无自动重放（不把普通 HTTP 406 一概归为安全错误）；不会仅因外层状态是 403 就要求重新登录。未知 401/403 仍提示检查认证、权限、账号地区或服务端限制，不回显上游错误原文。
 - 编码后请求体的**本地**上限为 6 MiB。全历史图片在解码和 SDK 序列化前先按双份 base64 预检；SDK payload 及最终官方 payload 都在 JSON 序列化前计算 UTF-8、转义和重复字段开销，编码前再次校验预计线长。编码器使用有界字节缓冲，不再创建逐字符数组。请求 JSON 嵌套深度本地上限 128 层；不接受循环或非普通 JSON 对象，也不执行访问器或可调用的自定义 `toJSON`（含函数自有、继承及非枚举钩子）。这些输入在序列化和网络请求前明确拒绝；无钩子的普通函数保持 JSON 的省略行为。JSON 响应及单个 SSE 事件上限 4 MiB，读取时累计检查。这些不是供应商限制，也不是整个进程峰值内存保证。目录缓存 5 分钟。
 - 对 HTTP 非成功响应及设备授权等待响应的 body 采用非阻塞取消清理，清理 promise 不阻塞错误或等待状态的返回；仍保留调用者 abort 和 timeout，不因此增加重放。
 - 可持久化公开模型描述以供离线快照恢复；令牌、用户/机器身份及私有目录配置不进入模型缓存。无外部并发改写时，冷启动不创建缺失的模型缓存，已有缓存恢复不重写认证或目录文件；并发删除/替换缓存的竞态尚未专项验证。
 
-流式处理要求明确的 `finish_reason`；无结束状态的 EOF/裸 `[DONE]` 判为不完整响应。支持裸 JSON／envelope、quota／notification 控制帧和 `event:finish` 规则；检查结束状态冲突、结束后的新增内容及畸形工具参数。终态与最终 usage 后仍读取后续帧，仅在没有半帧且空闲一秒时本地完成，以避免无限 keepalive；此前的临时 usage 不满足完成条件。这与官方严格等到 EOF／裸 `[DONE]` 有意保留差异，详见[客户端行为对齐](qoder-client-parity.md)。
+流式处理要求明确的 `finish_reason`；无结束状态的 EOF/裸 `[DONE]` 判为不完整响应。支持裸 JSON／envelope、quota／notification 控制帧、受限裸 finish 计时帧和 `event:finish` 规则；工具续帧的空／null／省略 ID 按 index 沿用首帧 ID，初始空 ID、非空 ID 冲突和非法最终 JSON 仍拒绝；检查结束状态冲突、结束后的新增内容及畸形工具参数。终态与最终 usage 后仍读取后续帧，仅在没有半帧且空闲一秒时本地完成，以避免无限 keepalive；此前的临时 usage 不满足完成条件。这与官方严格等到 EOF／裸 `[DONE]` 有意保留差异，详见[客户端行为对齐](qoder-client-parity.md)。
 
 ### 图像协议与能力边界
 
-官方 CLI 1.1.78 的 legacy 和 modern 构造器都支持图文混合数组：内联图片投影为 `image_url.url = data:<MIME>;base64,<data>`，保留顺序，同时填写相同的 `content` 和 `contents`；`chat_context.imageUrls` 保持 `null`，不添加顶层 `image_urls`。Axiom 按此投影用户图片。合并后的原生构造器也直接在 `role:tool` 中保留图文混合数组、`contents` 和调用 ID，不再依赖 Pi 中间请求的合成 user 图片消息；后续真实 user 消息不会被去重。
+官方 CLI 1.1.81 的 legacy 和 modern 构造器都支持图文混合数组，通常先上传改为 URL，失败时保留内联图片；内联投影为 `image_url.url = data:<MIME>;base64,<data>`，保留顺序，同时填写相同的 `content` 和 `contents`；`chat_context.imageUrls` 保持 `null`，不添加顶层 `image_urls`。Axiom 按此投影用户图片。合并后的原生构造器也直接在 `role:tool` 中保留图文混合数组、`contents` 和调用 ID，不再依赖 Pi 中间请求的合成 user 图片消息；后续真实 user 消息不会被去重。
 
-Axiom 公共图片入口仍限制单条消息最多 4 张、单张 5 MiB、合计 10 MiB，并验证规范 base64、MIME 与文件头一致。**文件头校验不等于完整解码或有效图像证明**。Qoder 的双字段和 base64 膨胀还受整个历史请求的 6 MiB 本地上限约束，因此 5 MiB 的单图不保证能提交；超限需缩图或压缩会话。只接受内联图片，不拉取远程 URL，不复制未审计的上传／签名流程。官方上传失败后保留内联数据的静态分支，不等于已证明服务器接受所有内联图片；真实会话验收仍须单列记录。
+Axiom 公共图片入口仍限制单条消息最多 4 张、单张 5 MiB、合计 10 MiB，并验证规范 base64、MIME 与文件头一致。**文件头校验不等于完整解码或有效图像证明**。Qoder 的双字段和 base64 膨胀还受整个历史请求的 6 MiB 本地上限约束，因此 5 MiB 的单图不保证能提交；超限需缩图或压缩会话。公共入口只接受内联图片，不开放任意远程 URL。内部已按官方流程向对应地区 center 上传，经 HTTPS URL 替换原位图片；上传失败保留内联数据，不自动刷新后重传。缓存、并发、取消、签长度及格式封装见[图片修复报告](qoder-image-repair-1181.md)。产品不主动下载 URL；私有零推理预检查单独下载核验字节，已证明新编译产品上传 200 且 PNG 不变，但未证明模型准确识图或所有内联图片可用。
 
 旧的离线模型描述可能仍只有 `text`，请重新拉取目录并保存真实能力。目录视觉能力仅接受布尔值 `is_vl:true`，字符串或数值不作视觉声明。若当前目录撤回图片能力，旧的 image 元数据也不会绕过检查。高级调用方仍可通过原生 `customModelOverride` 显式指定自定义模型的 `isVl:true` 和 API Key（直接 options、`metadata.qoder` 或 `samplingParams.qoder`）；这不改变目录模型，不是自动切换，且不绕过图片格式和请求体预算校验。思考能力与等级按当前目录规范化，并支持原生多轮回放，见[客户端行为对齐](qoder-client-parity.md)。以下真实调用记录及回归统计对应各自当时版本，不代表此次合并后重新执行了在线验收。
 
 输入输出上限采用账号目录中的值；缺失时按官方发布物回退到 200000／32000，不代表服务端能力已验证。显式输出预算不再由 provider 按目录上限裁剪；显式上下文只接受合法档位，不自动抬高计费档位。高级采样、预算、上下文和功能开关入口见[客户端行为对齐](qoder-client-parity.md)。费用元数据初始为 0，**只表示未知，不表示免费**。自动模型的实际选择、费用和权限由供应商决定。
 
-## 真实调用记录
+## 最新修复与验收（2026-11-01）
 
+基准已更新为国内官方 CLI `@qodercn-ai/qoderclicn@1.1.81`，原生请求版本、签名 `cosyVersion` 和 business.version 同步。仅按协议白名单构造头，丢弃宿主注入的 UA／额外 headers，不自动发送 hostname 或宿主 session ID；原生会话 ID 以账号和宿主 session 在内存映射为独立 UUID。Data-Policy 来自真实查询，不替用户同意、不伪造 UMID；保留调用方真正的 system、history 和 tools。
+
+- 图片补丁关联覆盖 **50 旧项＋9 新项通过（分轮）**；新 fixture 首轮断言及类型问题已修正，不能称首轮 59/59。外层 zero-replay **19/19** 和之前的 runtime **2/2** 是未变代码的既有结果，不冒充此次重跑，也不把旧通用 runtime 的 8/9 算成全过。
+- 根完整构建退出 0；最新独立重启 `96136 → 5441`，2026-11-01 08:22:37（+08:00），HTTP 200、WS connected。正常账号路由的编译产品仅 1 次真实图片上传，URL 下载逐字节一致，最终 hook 阻断推理；不代表真实 worker 图片续轮已通过。
+- 独立 SDK 文本和真实 UI 首轮文本均通过；另一个真实 WS-worker 会话中，T1 文本、T2 前文回忆与整数变换连续通过。当时受控同一会话的两次工具请求均在上游 `10605` 处结束，无工具调用或结果；未绕过失败继续发最后回忆轮。这不代表当前所有工具请求的状态，之后外部用户记录也不拼入本 case 签收。
+- 非推理 queue 状态 GET 曾返回 `isQueued:false / serviceAvailable:true`，但它使用新 requestSet，**不证明此前失败请求已恢复或实际推理可用**。未实现官方 CLI 的显式排队恢复，不自动重发。
+
+详细 CLI 定位、命令、分层证据和剩余条件见[修复报告](qoder-repair-1181.md)及[图片报告](qoder-image-repair-1181.md)。图片准确识别、真实工具图续轮、真实 PAT／到期 refresh、国际站及长期稳定性仍未验收；原图片实验 8 个逻辑调用已耗尽，新上传检查为独立 0 推理范围。
+
+## 历史真实调用记录
+
+以下保留当时记录；部分本机临时目录现已不存在，不能当作本次重新验证的证据。最新可复核副本保存在仓库的[1.1.81 证据目录](evidence/qoder-repair-1181/)。
 2026-10-25，操作者明确授权后，通过 Axiom 的 `ModelService.runtime()` → `completeSimple()` 和供应商网络配置，复用已保存的 `qoder-cn` OAuth 连接，以直连方式调用配置中的 `dfmodel`（DeepSeek-Flash）。未使用官方 CLI 或 9Router 代理，未发送项目内容。
 
 - 输入：`Reply with exactly AXIOM_QODER_OK and nothing else.`；输出上限 128 tokens。
@@ -88,19 +100,21 @@ Axiom 公共图片入口仍限制单条消息最多 4 张、单张 5 MiB、合�
 
 为避免脚本把错误答案或异 run 数据误判为成功，私有驱动另增加发前 selection／thinking／cwd、message.get 与分片 hydration 后的归属及内容一致性、request/inputIds 精确关联、工具调用／结果 ID 和顺序、原文单行 JSON、新图片 API bytes/hash 等本地断言；`run.completed` 与独立 `verification.passed` 分开。独立纯 helper 初轮 195 例发现 6 项漏拒，保留旧失败后修复，最新原 195 加相邻边界共 **528/528** 通过；重新冻结后的 mock 驱动及补充检查共 **66/66** 通过，各命令 exit 0。原记录重 grade 的 T1 仍通过，非 completed 记录仅为 not-completed。修复后 helper/client 及受保护记录的首尾 SHA 一致；没有因此发送真实请求或改动原 state、四次调用记录、默认选择及已发送文本。见 [纯断言复测](/private/tmp/axiom-qoder-recheck.8iefbebo/REPORT.md) 和 [mock 驱动复测](/private/tmp/qoder-offline-refreeze.PDJ46H/REPORT/index.md)。这些验证只覆盖本地记录断言和注入数据，不能独立证明远程图片字节真实性、实际 provider 或六轮真实效果；新图也仅在本地生成、未发给模型。
 
-**当前阻塞是模型资源繁忙；完整续轮、真实工具／图片和稳定性尚不能签收。** 不通过换模型、重复建会话、自动排队恢复或只看 `completed` 来替代剩余验收。
+**该次历史验收受模型资源繁忙阻塞；不能用它签收完整续轮、真实工具／图片和稳定性。** 最新受控同会话文本上下文已通过，当时工具 case 在 `10605` 处停止，不推广为当前所有工具请求结论，见上文。 不通过换模型、重复建会话、自动排队恢复或只看 `completed` 来替代剩余验收。
 
 ## 仍未验收
 
 1. 真实 PAT → 用户信息 → 模型目录 → 最小聊天全链路；完整 COSY 签名及机器身份字段与官方客户端的逐字节等价性。本次国内站已接受实际签名请求，但不能推广到其他账号或通道。
-2. 国内独立客户端发布物及国际站真实账号闭环；国内站目前完成已有 OAuth 的基础文本、最小测试工具及上述 Axiom 首轮文本／thinking，完整同会话验收仍受阻。
-3. 真实设备登录、到期刷新、长期运行；本轮真实 Axiom 的推导／上下文续轮、实际工具执行及结果续轮、用户图片和工具图片。
-4. 企业组织、私有/VPC 端点、security/fast 推理通道、服务账号、独立图片上传、新版 model-server HTTP/gRPC 传输。已支持的 base64 图片不等于实现官方全部附件前处理链。
+2. 国际站真实账号闭环；国内官方 1.1.81 发布物已静态复核并完成独立 CLI 文本基线，国内站已有 OAuth 的真实 Axiom 同会话文本／上下文两轮通过，实际工具完整验收仍受阻。
+3. Axiom 的真实设备登录、PAT／到期刷新、长期运行；修后实际工具执行及结果续轮、最后综合回忆、用户图片和工具图片。独立 CLI 自己登录成功不替代 Axiom 登录验收。
+4. 企业组织、私有/VPC 端点、security/fast 推理通道、服务账号、新版 model-server HTTP/gRPC 传输；国际站图片上传及识别。国内普通账号的编译产品上传已单独核验，不等于真实图片识别或官方全部附件前处理链已验收。
 5. 真实价格、计费和上下文档位；本实现不主动提高收费上下文档位。
 
 不能仅因为 mock 测试或一次真实短请求通过而宣称全面稳定可用。继续扩大联调范围需有相应授权，使用合法账号和无敏感内容的测试会话；不应从本机其他客户端配置中自动提取凭据。
 
 ## 静态核验依据
+
+最新国内版 1.1.81 的身份头、finish 计时帧、工具空 ID 和排队语义定位见[修复报告](qoder-repair-1181.md)；以下 1.1.78／9Router 资料保留为早期证据，不表示当前版本仍为 1.1.78。
 
 - 9Router `v0.5.104`，commit `87a74e1bda3677193c6f71a7e2100c90311f0689`。参考 `open-sse/executors/qoder.js`、`shared/qoder/{cosy,encoding,sse}.js`、`services/qoderModels.js` 和 OAuth 服务。六个关键文件与公开 tag 字节一致。
 - 官方 npm `@qoder-ai/qodercli@1.1.78`，下载产物通过 registry SHA-512 integrity 检查。对发布物做静态分析，并在隔离配置、禁网和禁子进程环境运行 help/version/list-models 探针；未执行签名 WASM、未登录真实账户。
@@ -119,7 +133,9 @@ Axiom 公共图片入口仍限制单条消息最多 4 张、单张 5 MiB、合�
 
 ## 离线验证
 
-在 `app/` 下执行（使用隔离临时目录）：
+最新图片补丁的 50 旧项＋9 新项分轮结果见[图片报告](qoder-image-repair-1181.md)；19 项外层重放回归及前轮构建见[修复报告](qoder-repair-1181.md)。以下为历史轮次的命令与结果，未在本次重复执行。
+
+早期在 `app/` 下执行（使用隔离临时目录）：
 
 ```sh
 TMPDIR=/private/tmp ./node_modules/.bin/tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 \
@@ -137,7 +153,7 @@ TMPDIR=/private/tmp ./node_modules/.bin/tsx --import ./tests/vite-assets.mjs --t
 
 2026-10-26 图像及资源安全初版，上述七文件 **57/57 通过、无跳过、退出码 0**，受检源码及测试首尾 SHA-256 一致；根目录完整 `npm run build`（bootstrap/native、TypeScript、Vite、server）退出 **0**。新增覆盖双地区多轮图像、Pi 工具图片投影及相邻结果、严格目录能力和撤回、规范 MIME 文件头、原始历史图片累计／并发预算、UTF-8/转义/重复字段开销、编码字节兼容、受控诊断与取消。日志：`/private/tmp/axiom-qoder-budget-regression.88w2P8/`，构建：`/private/tmp/axiom-qoder-e2e.NEKIrV/build-3.log`。这些仍是离线验证及构建，不表示真实图片服务或完整会话已通过。
 
-随后补齐非阻塞 body 取消，以及对象／函数访问器和 `toJSON` 序列化旁路防护。**最终冻结版本**上述七文件 **62/62 通过，fail/skip/cancel 均为 0，退出码 0**；3153 个受检文件首尾 SHA 一致。独立复审另有 30 项测试和 4 个独立 probe 全过，包括 18 个函数 hook 变体拒绝且 hook 执行次数 0、5 个 SDK 变体网络调用 0、12 个精确预算及 1000 个 JSON fuzz。最终关联回归见 [oro5l54z](/private/tmp/axiom-qoder-final-regression.oro5l54z/)，独立审查见 [ENuUin](/private/tmp/axiom-qoder-final-review.ENuUin/)。根目录完整构建第 5 次 **退出码 0**，包含 TypeScript、Vite 与 server 构建，见 [build-5.log](/private/tmp/axiom-qoder-e2e.NEKIrV/build-5.log)；不是以旧的 57 项或 build-3 冒充最终版本。该版本已由上文唯一一次 verified 重启加载。
+随后补齐非阻塞 body 取消，以及对象／函数访问器和 `toJSON` 序列化旁路防护。**最终冻结版本**上述七文件 **62/62 通过，fail/skip/cancel 均为 0，退出码 0**；3153 个受检文件首尾 SHA 一致。独立复审另有 30 项测试和 4 个独立 probe 全过，包括 18 个函数 hook 变体拒绝且 hook 执行次数 0、5 个 SDK 变体网络调用 0、12 个精确预算及 1000 个 JSON fuzz。最终关联回归见 [oro5l54z](/private/tmp/axiom-qoder-final-regression.oro5l54z/)，独立审查见 [ENuUin](/private/tmp/axiom-qoder-final-review.ENuUin/)。根目录完整构建第 5 次 **退出码 0**，包含 TypeScript、Vite 与 server 构建，见 [build-5.log](/private/tmp/axiom-qoder-e2e.NEKIrV/build-5.log)；不是以旧的 57 项或 build-3 冒充最终版本。该历史版本当时由上文 verified 重启加载；当前服务已由 1.1.81 修复报告中的后续重启替代。
 
 独立 2 MiB 图像编码探针曾发现初版峰值 RSS 约 427 MiB；修复后同类探针约 144.5 MiB，并在解码／推理前拒绝过预算请求。这是特定离线探针，不是整个应用的峰值承诺，也不证明真实服务端图像理解。纯文档和私有验收脚本变动不要求再次构建或重启未变的产品代码。
 

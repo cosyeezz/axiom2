@@ -59,6 +59,7 @@ test("Qoder generation validation and budget thresholds follow the published con
 });
 test("Qoder final wire honors Pi thinking, explicit none, context, tool choice, features and native onPayload", async () => {
   const { models, model } = await fixture();
+  let nativeSession: string | undefined;
   for (const reasoning of [undefined, "off", "high"] as const) {
     let hooks = 0;
     const options: SimpleStreamOptions = { apiKey: "pt-MOCK", maxTokens: 3000, ...(reasoning !== undefined ? { reasoning: reasoning === "off" ? undefined : reasoning } : {}), toolChoice: "none", sessionId: "session-fixture",
@@ -71,7 +72,9 @@ test("Qoder final wire honors Pi thinking, explicit none, context, tool choice, 
         assert.deepEqual([body.parameters.temperature, body.parameters.top_p, body.parameters.top_k, body.parameters.max_tokens], [2, 0.7, 5, 3000]);
         assert.equal(body.parameters.tool_choice, "none"); assert.equal(body.parameters.context_length, 128000);
         assert.deepEqual(body.business.feature_switches, { fast: "true" }); assert.deepEqual(body.patches, { fixture: "native" });
-        assert.equal(body.session_id, "session-fixture"); assert.equal(body.request_id, body.chat_record_id); assert.equal(body.request_set_id, body.request_id);
+        assert.notEqual(body.session_id, "session-fixture"); assert.match(body.session_id, /^[0-9a-f-]{36}$/);
+        if (nativeSession) assert.equal(body.session_id, nativeSession); else nativeSession = body.session_id;
+        assert.equal(body.request_id, body.chat_record_id); assert.equal(body.request_set_id, body.request_id);
         assert.equal(body.system, context.systemPrompt); assert.equal(body.messages[0].content, context.systemPrompt);
         return response();
       } };
@@ -88,10 +91,11 @@ test("Qoder invalid context is omitted and explicit budget/none changes final re
   const noExplicit = buildQoderRequest({}, normalized, "intl", model, transcript);
   assert.equal(noExplicit.parameters.context_length, undefined); assert.equal(noExplicit.business.feature_switches, undefined);
 });
-test("Qoder vision sends user and tool images as image_url arrays and retains tool errors", async () => {
+test("Qoder upload fallback retains inline user/tool images and tool errors", async () => {
   const { models, model } = await fixture(), image = { type: "image" as const, mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=" };
   const vision: Context = { messages: [{ role: "user", content: [{ type: "text", text: "look" }, image], timestamp: 1 }, { role: "toolResult", toolCallId: "one", toolName: "read", isError: true, timestamp: 2, content: [image] }] };
   const result = await models.completeSimple(model, vision, { apiKey: "pt-MOCK", fetch: async (_url, init) => {
+    if (String(_url).includes("/image/upload")) return new Response(null, { status: 503 });
     const body = JSON.parse(decodeQoderBody(String(init?.body)));
     assert.equal(body.messages[0].content[1].image_url.url, `data:image/png;base64,${image.data}`); assert.deepEqual(body.messages[0].content, body.messages[0].contents);
     assert.equal(body.messages[1].tool_call_id, "one"); assert.equal(body.messages[1].is_error, true); assert.equal(body.messages[1].content[0].type, "image_url"); return response();
@@ -151,5 +155,11 @@ test("Qoder cleanup never awaits an uncooperative cancellation; UMID headers are
   const body = new ReadableStream({ cancel() { cancelled = true; return new Promise<void>(() => {}); } });
   await assert.rejects(qoderJson(async () => new Response(body, { status: 403 }), "https://fixture.invalid", {}), /权限/); assert.equal(cancelled, true);
   const headers = qoderHeaders("body", "https://api2.qoder.sh/algo/api/v2/service/pro/sse/agent_chat_generation", { token: "dt-X", userId: "U", machineId: "M" });
-  assert.equal(headers["Cosy-Machinetoken"], undefined); assert.equal(headers["Cosy-Machinetype"], undefined); assert.equal(headers["Cosy-Version"], "1.1.78"); assert.match(headers["Cosy-Machineos"], new RegExp(`_${process.platform}$`));
+  assert.equal(headers["Cosy-MachineToken"], undefined); assert.equal(headers["Cosy-MachineType"], undefined); assert.equal(headers["Cosy-Version"], "1.1.81"); assert.match(headers["Cosy-MachineOS"], new RegExp(`_${process.platform}$`));
+  assert.equal(headers["Cosy-MachineHostname"], undefined); assert.equal(headers["Cosy-ClientIp"], undefined);
+  assert.equal(headers["Cosy-Business-Product"], "cli"); assert.equal(headers["Cosy-Business-Type"], "agent"); assert.equal(headers["Cosy-Scene"], "assistant");
+  assert.equal(headers["User-Agent"], "undici");
+  const auth = qoderHeaders("", "https://api2.qoder.sh/algo/api/v2/model/list?Encode=1", { token: "dt-X", userId: "U", machineId: "M" }, "agree");
+  assert.equal(auth["Cosy-MachineToken"], "M"); assert.equal(auth["Cosy-MachineType"], "5"); assert.equal(auth["Cosy-ClientIp"], "M"); assert.equal(auth["Cosy-Data-Policy"], "agree");
+  for (const item of [headers, auth]) for (const key of ["Cosy-Bodyhash", "Cosy-Bodylength", "Cosy-Sigpath", "Cosy-Organization-Id", "Cosy-Organization-Tags", "X-Request-Id"]) assert.equal(item[key], undefined);
 });

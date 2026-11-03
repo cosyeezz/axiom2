@@ -1,0 +1,10 @@
+# Logical-run continuation — live06
+
+New hypothesis: newly deployed caller-owned continuation reaches the normal SDK wire, remains constant across one read-tool loop, and changes for the next completed user run without changing conversation identity. Development4317 restart5u2nwa8y verified PID35319; installation4319 untouched.
+
+- Fresh session, kiro/deepseek-3.2/off, full existing caller system/history/tools/security. First prompt requests read exactly once of /tmp/axiom-kiro-responses-live-06.txt and final marker AXIOM_KIRO_CONTINUATION_06_91e7a2c4. Only after success, one second prompt requests no tool and exact AXIOM_KIRO_NEXT_RUN_06_6b4d29a1.
+- Exclusive tool.claim and next-turn.claim immediately before the respective prompt. No replay on failure, unknown receipt or timeout. Total active observation budget150s after first prompt. First failure cancels second prompt. No automatic model fallback, manual retry or official model requests.
+- Temporary provider-only mitm127.0.0.1:8080 with existing extraCA; TLS verification remains enabled. Save baseline flow IDs before prompts. Account for every added auth/aux/inference flow. Every outcome restores builtin profile71e33e85-237e-43f2-83ae-a0dc887525e8 through normal UI and reads back config.
+- Pass: exactly one read tool/result with matching call ID and fixture marker; final markers exact; both run completions valid. First two main requests share UUID v4 continuation equal to first host runId. Third main request continuation equals second runId and differs from first, conversation/root stable; preserve matching function_call/output history. Main HTTP1.1/UA/close/header-name set stays as live05; responses200 with completed SSE/[DONE].
+- Raw tokens, bodies, contexts and unknown errors remain RAM only. Persist allowlisted predicates, counts, paths, flow/session/run IDs and fixed markers; no raw conversation or sensitive hashes.
+- Scope excludes official cross-run resume/preservation, adaptive retry, optout(true remains), OAuth and directTLS/server indistinguishability. This does not reopen failed/closed cases.

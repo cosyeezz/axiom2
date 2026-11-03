@@ -8,6 +8,8 @@ import { Store } from "../src/server/storage.js";
 import { TaskRecords } from "../src/server/tasks/records.js";
 import { TaskScheduler } from "../src/server/tasks/scheduler.js";
 import { TaskDelivery } from "../src/server/tasks/delivery.js";
+import { TaskWindows } from "../src/server/task-windows.js";
+import type { WindowTaskPage } from "../src/shared/task-window.js";
 import { ServiceRecoveryCoordinator, serviceRecoveryDelayMs } from "../src/server/service-recovery.js";
 import type { Agents } from "../src/server/agents.js";
 import { Tasks } from "../src/server/tasks.js";
@@ -142,6 +144,39 @@ test("preflight failure is retryable after other sessions, including old blocked
     assert.equal(requestIds.size, 3, "a failed external request receipt must not poison the next preflight attempt");
     assert.equal(f.store.recoveries.pending().length, 0);
   } finally { await coordinator?.close(); f.store.close(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test("background recovery failures stay internal and preserve actual task and run errors", async t => {
+  const f = fixture();
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 10000 });
+  const windows = new TaskWindows(f.store, () => "a".repeat(64));
+  let coordinator: ServiceRecoveryCoordinator | undefined;
+  try {
+    const parent = f.session(), records = new TaskRecords(f.store);
+    const child = records.rows("WHERE id=?", records.create(parent, "recovery", "context", [{ task: "child" }], selection).taskIds[0])[0];
+    const runId = f.interrupted({ workspaceId: child.workspaceId, sessionId: child.sessionId });
+    f.store.db.prepare("UPDATE tasks SET status='interrupted',error=NULL WHERE id=?").run(child.id);
+    f.store.db.prepare("UPDATE runs SET error='original execution error' WHERE id=?").run(runId);
+    assert.equal(windows.read(parent, "before", { op: "open" }).ok, true);
+    const published: string[] = [];
+    t.mock.method(f.agents, "publish", (scope: string) => { published.push(scope); });
+    coordinator = new ServiceRecoveryCoordinator(f.agents, { recover: async () => { throw Error("recovery preflight failed"); } } as unknown as Tasks);
+    coordinator.start(); t.mock.timers.tick(0); await flush();
+    assert.equal(windows.shouldInvalidate(parent, false), false, "the parent metadata itself did not change");
+    assert.equal(published.includes(`tasks:${parent.workspaceId}:${parent.sessionId}`), false);
+    assert.match(f.store.recoveries.get(child.sessionId)?.error ?? "", /recovery preflight failed/);
+    assert.equal(f.store.db.prepare("SELECT error FROM runs WHERE id=?").get(runId)?.error, "original execution error");
+    const reply = windows.read(parent, "after", { op: "open" });
+    assert.equal(reply.ok, true);
+    if (!reply.ok) throw Error("expected task window");
+    assert.equal((reply.data as WindowTaskPage).items[0].hasError, false);
+    assert.equal(records.rows("WHERE id=?", child.id)[0].error, null);
+    f.store.db.prepare("UPDATE tasks SET error='original task error' WHERE id=?").run(child.id);
+    f.store.recoveries.block(child.sessionId, "internal recovery blocked");
+    assert.equal(f.store.recoveries.get(child.sessionId)?.error, "internal recovery blocked");
+    assert.equal(records.rows("WHERE id=?", child.id)[0].error, "original task error");
+    assert.equal(f.store.db.prepare("SELECT error FROM runs WHERE id=?").get(runId)?.error, "original execution error");
+  } finally { await coordinator?.close(); windows.close(); f.store.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
 test("a coordinator read error cannot disable future recovery ticks", async t => {

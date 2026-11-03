@@ -1,0 +1,15 @@
+import {readFileSync,writeFileSync,cpSync,mkdirSync,mkdtempSync,symlinkSync,readdirSync,existsSync} from 'node:fs';
+import {join,dirname,resolve} from 'node:path';
+import {tmpdir} from 'node:os';
+import {createHash} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+const dir=dirname(fileURLToPath(import.meta.url)),repo=resolve(dir,'../../..'),sha=bytes=>createHash('sha256').update(bytes).digest('hex');
+if(existsSync(join(dir,'FROZEN-RUNTIME.json')))throw Error('FROZEN_EXISTS');
+const previous=JSON.parse(readFileSync(join(dir,'../codebuddy-native-component-live-02/FROZEN-RUNTIME.json')));
+const snapshotRoot=mkdtempSync(join(tmpdir(),'axiom-codebuddy-fixed-'));mkdirSync(join(snapshotRoot,'app'));cpSync(join(repo,'app/dist'),join(snapshotRoot,'app/dist'),{recursive:true});cpSync(join(repo,'app/package.json'),join(snapshotRoot,'app/package.json'));symlinkSync(join(repo,'app/node_modules'),join(snapshotRoot,'app/node_modules'),'dir');
+const hash=path=>({path,sha256:sha(readFileSync(join(snapshotRoot,path)))}),walk=path=>readdirSync(join(snapshotRoot,path),{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name)).flatMap(entry=>entry.isDirectory()?walk(join(path,entry.name)):[hash(join(path,entry.name))]);
+const artifacts=previous.artifacts.map(file=>hash(file.path)),files=[...walk('app/dist'),hash('app/package.json')];
+const sources=['app/src/native-providers/codebuddy/client.ts','app/tests/codebuddy-native-client.test.ts'].map(path=>({path,sha256:sha(readFileSync(join(repo,path)))}));
+const proofPaths=['core-after.log','sdk-after.log','build-01.log'];const verification=proofPaths.map(path=>({path:'../codebuddy-native-fix-03/'+path,sha256:sha(readFileSync(join(dir,'../codebuddy-native-fix-03',path)))}));
+const manifest={snapshotRoot,scope:'full current build snapshot; empty tool-name continuation fix tested core41 SDK14; no deployment; node_modules symlink is not immutable',files,artifacts,sources,verification,changedArtifactsFromOld:artifacts.filter(file=>previous.artifacts.find(old=>old.path===file.path)?.sha256!==file.sha256).map(file=>file.path)};
+writeFileSync(join(dir,'FROZEN-RUNTIME.json'),JSON.stringify(manifest,null,2)+'\n',{flag:'wx',mode:0o600});console.log(JSON.stringify({files:files.length,artifacts:artifacts.length,manifestSHA256:sha(readFileSync(join(dir,'FROZEN-RUNTIME.json'))),changedArtifacts:manifest.changedArtifactsFromOld}));

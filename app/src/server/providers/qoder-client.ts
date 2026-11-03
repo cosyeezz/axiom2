@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getCurrentSystemPrompt, type Api, type Model, type StreamOptions, type TranscriptContext } from "@earendil-works/pi-ai";
-import { object, QoderError, type QoderRegion } from "./qoder-protocol.js";
+import { object, QoderError, qoderVersion, type QoderRegion } from "./qoder-protocol.js";
 import { positiveInteger, qoderEffort, qoderFeatureSelections, qoderLimit, qoderReasoning, qoderSupportsContext, record, type QoderConfig } from "./qoder-catalog.js";
 
 export interface QoderClientOptions {
@@ -183,7 +183,7 @@ export function buildQoderRequest(body: Record<string, unknown>, config: QoderCo
     ? lastUser.filter(part => object(part).type === "text").map(part => object(part).text).join("\n") : "";
   const requestId = options.requestId || randomUUID(), sessionId = input?.sessionId || requestId;
   const features = qoderFeatureSelections(config, options.functionSwitchSelections);
-  const business = { ...(options.business ?? { product: "cli", version: "1.1.78", type: "agent", stage: "start", id: randomUUID(), name: String(text).slice(0, 30), begin_at: Date.now() }), ...(features ? { feature_switches: features } : {}) };
+  const business = { ...(options.business ?? { product: "cli", version: qoderVersion, type: "agent", stage: "start", model_key: model.id, id: randomUUID(), name: String(text).slice(0, 30), begin_at: Date.now() }), ...(features ? { feature_switches: features } : {}) };
   return {
     request_id: requestId, request_set_id: options.requestSetId || requestId, chat_record_id: requestId, session_id: sessionId,
     ...(options.sourceSessionId ? { source_session_id: options.sourceSessionId } : {}), ...(options.customContext !== undefined ? { custom_context: options.customContext } : {}),

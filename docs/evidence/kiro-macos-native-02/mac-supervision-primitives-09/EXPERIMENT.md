@@ -1,0 +1,9 @@
+# Static bootout string xref and immediate function only
+
+Hypothesis: in the exact current-host **shipped file** frozen by08, the immediate function referencing `service bootout (%s)` directly branches/calls the import stub for `_coalition_terminate`. A negative limited-pattern result does not establish absence of indirect/transitive behavior.
+
+Input only08/capture/launchd.snapshot1236160B/SHA7b636e967e77705d88aad9ad9ea9af627852d83686cd19ab4d94c6010cd67b09; arm64e UUID3FEC147A-7931-3FCD-BDB9-59C9A814779C. No new live OS capture. Parse bounded fat/Mach-O load commands/sections/LC_FUNCTION_STARTS/indirect-symbol table to map the **one exact literal** and one import. One bounded32-bit opcode prefilter through __TEXT,__text (<=512KiB), matching direct ADR or **adjacent ADRP+ADD**, not full-program disassembly/analysis. Patterns are deliberately incomplete. At most16locators/two table-delimited immediate functions, each<=4096B/total8192B; over-cap stops without expanding. No caller/callee/stdlib/kernel closure.
+
+Only after ranges located, make synthetic **non-executed** Mach-O carriers preserving original VA, save exact bytes; <=two otool calls, each5s/CPU2s/512KiB streams. MainCPU10s/alarm30s/outer40s, input2MiB/output<=4MiB. Minimal ownHOME/TMP/PATH/LANG env, no inherited auth/proxy/DYLD/NODE_OPTIONS. Save source UUID/slice/full hashes, string/stub/xref/function offsets, direct BL/tail B numeric targets, rawASM/commands/exits/gaps. Table intervals/syntactic calls do not prove CFG reachability or runtime usage.
+
+New CreateNew results directory; failures remain, no unchanged retries or unbounded widening. Pure helper tests may run independently in separate TEMP against synthetic bytes, with source frozen during tests. **No target execution/attach/process scan, launchctl/XPC/service/coalition control, privilege/global change, official/KAS/model or credential inspection.** This case cannot pass MacM3 or native parity.

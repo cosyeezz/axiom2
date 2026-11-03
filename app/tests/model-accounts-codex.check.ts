@@ -35,11 +35,13 @@ try {
   assert.equal(await a.getByRole("progressbar", { name: "Spark 5小时 剩余额度", exact: true }).getAttribute("value"), "0");
   await a.getByText("额度已达上限", { exact: true }).waitFor(); await a.getByText("3 次", { exact: true }).waitFor();
   await a.getByText("重置券到期明细 · 3", { exact: true }).click();
-  assert.equal(await a.locator(".provider-usage-expiries li time").count(), 3);
-  assert.equal(await a.locator(".provider-usage-expiries li time").first().getAttribute("datetime"), "2099-01-01T00:00:00.000Z");
+  const expiryDetails = page.getByRole("dialog", { name: "账号详情：Codex A" });
+  assert.equal(await expiryDetails.locator('ol[aria-label="重置券到期明细"] li time').count(), 3);
+  assert.equal(await expiryDetails.locator('ol[aria-label="重置券到期明细"] li time').first().getAttribute("datetime"), "2099-01-01T00:00:00.000Z");
+  await expiryDetails.getByRole("button", { name: "关闭", exact: true }).click();
   assert.equal(await a.getByRole("link", { name: /供应商样本金额/ }).count(), 0);
   await a.getByText("费用估算", { exact: true }).waitFor();
-  await a.getByText(/尚未按账号拆分；多账号混用/).waitFor();
+  assert.match(await a.locator(".provider-quota-estimate").getAttribute("title") ?? "", /尚未按账号拆分；多账号混用/, "card keeps the estimate scope as a tooltip, not body text");
   await a.getByText("订阅有效至", { exact: true }).waitFor();
   assert.equal(await a.locator('.provider-usage-account time').getAttribute("datetime"), "2098-06-01T00:00:00.000Z");
   await a.getByRole("button", { name: "查看账号详情" }).click();

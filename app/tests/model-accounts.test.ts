@@ -14,6 +14,7 @@ import { credentialMetadata } from "../src/server/model-metadata.js";
 import { createModelRuntime } from "../src/server/model-runtime.js";
 import { ExecutionProfiles } from "../src/server/execution-profile.js";
 import { organizerConfigurationKey } from "../src/server/memory-runner.js";
+import { beginAccountRemoval } from "../src/server/model-account-admission.js";
 import { configuration } from "../src/server/models.js";
 import { Logins } from "../src/server/auth.js";
 import { modelNetwork, closeModelNetworks } from "../src/server/model-network.js";
@@ -22,7 +23,7 @@ const oauth = (name: string) => ({ type: "oauth" as const, access: `FIXTURE_${na
 async function fixture(run: (models: ModelService, accounts: ModelAccountService, root: string) => Promise<void>) {
   const root = mkdtempSync(join(tmpdir(), "axiom-accounts-unit-"));
   // This suite exercises the mutable backend selection, not the parent agent's captured profile.
-  const environment = ["AXIOM_PI_DIR", "AXIOM_EXECUTION_PROFILE", "AXIOM_MODEL_ACCOUNT_BINDINGS", "AXIOM_MODEL_PROVIDER"];
+  const environment = ["AXIOM_PI_DIR", "AXIOM_EXECUTION_PROFILE", "AXIOM_MODEL_ACCOUNT_BINDINGS", "AXIOM_MODEL_MANAGED_ACCOUNTS", "AXIOM_MODEL_PROVIDER"];
   const previous = new Map(environment.map(key => [key, process.env[key]]));
   for (const key of environment) delete process.env[key];
   const models = new ModelService(root), accounts = new ModelAccountService(models);
@@ -65,6 +66,78 @@ test("account cards preserve legacy, add without activating, select per provider
   const oldLegacy = selected.accounts.find(row => row.providerId === "openai" && row.legacy)!;
   await choose(accounts, oldLegacy.id); assert.deepEqual(accountBindings(models.dir), {});
   assert.equal(readFileSync(auth, "utf8"), original);
+}));
+
+test("account rename and deletion preserve other slots, legacy providers and shared connection settings", () => fixture(async (models, accounts) => {
+  const auth = join(models.dir, "auth.json");
+  privateJson(auth, { openai: oauth("LEGACY"), anthropic: { type: "api_key", key: "FIXTURE_OTHER" } });
+  const a = await add(accounts, "openai", "A", oauth("A")), b = await add(accounts, "openai", "B", oauth("B"));
+  await choose(accounts, a.id);
+  const before = await accounts.list(), raw = await models.raw(), aKey = readFileSync(join(a.dir, "auth.json"), "utf8");
+  const renamed = await accounts.rename(b.id, "新名称", before.revision);
+  assert.equal(renamed.accounts.find(row => row.id === b.id)!.label, "新名称");
+  await assert.rejects(accounts.rename(b.id, "stale", before.revision), { code: "REVISION_CONFLICT" });
+  await assert.rejects(accounts.remove(a.id, renamed.revision), { code: "ACCOUNT_REPLACEMENT_REQUIRED" });
+  let stops = 0;
+  models.beforeLogout = async (providers, confirmed) => {
+    assert.deepEqual(providers, ["openai"]);
+    if (!confirmed) throw Object.assign(Error("running"), { code: "ACTIVE_RUNS_CONFIRMATION_REQUIRED" });
+    stops++;
+  };
+  await assert.rejects(accounts.remove(a.id, renamed.revision, b.id), { code: "ACTIVE_RUNS_CONFIRMATION_REQUIRED" });
+  assert.equal(readFileSync(join(a.dir, "auth.json"), "utf8"), aKey);
+  assert.equal(models.authActive, false);
+  const removed = await accounts.remove(a.id, renamed.revision, b.id, true);
+  assert.equal(stops, 1);
+  assert.equal(removed.accounts.find(row => row.id === b.id)!.active, true);
+  assert.equal(existsSync(a.dir), false);
+  assert.equal((readStoredCredential("openai", join(b.dir, "auth.json")) as any).access, "FIXTURE_B_ACCESS");
+  const legacy = removed.accounts.find(row => row.providerId === "openai" && row.legacy)!;
+  await accounts.remove(legacy.id, removed.revision, undefined, true);
+  assert.equal(readStoredCredential("openai", auth), undefined);
+  assert.deepEqual(readStoredCredential("anthropic", auth), { type: "api_key", key: "FIXTURE_OTHER" });
+  assert.equal(await models.raw(), raw);
+  await accounts.remove(b.id, (await accounts.list()).revision, undefined, true);
+  assert.equal((await accounts.list()).accounts.some(row => row.providerId === "openai"), false);
+  assert.deepEqual(accountBindings(models.dir), {});
+}));
+
+test("account mutation is blocked during interactive login and missing authentication remains visible", () => fixture(async (models, accounts) => {
+  const a = await add(accounts, "fixture", "missing", { type: "api_key", key: "FIXTURE_KEY" });
+  rmSync(join(a.dir, "auth.json"));
+  const list = await accounts.list();
+  assert.equal(list.accounts[0].type, undefined);
+  models.authActive = true;
+  await assert.rejects(accounts.rename(a.id, "rename", list.revision), { code: "AUTH_BUSY" });
+  await assert.rejects(accounts.remove(a.id, list.revision), { code: "AUTH_BUSY" });
+  models.authActive = false;
+  await accounts.remove(a.id, list.revision);
+  assert.equal((await accounts.list()).accounts.length, 0);
+}));
+
+test("selected missing credentials fail closed instead of using environment, inline keys or legacy auth", () => fixture(async (models, accounts) => {
+  const previous = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "FIXTURE_ENV_OTHER";
+  try {
+    privateJson(join(models.dir, "auth.json"), { openai: { type: "api_key", key: "FIXTURE_LEGACY" } });
+    const staged = await add(accounts, "openai", "selected", { type: "api_key", key: "FIXTURE_SELECTED" });
+    await choose(accounts, staged.id);
+    const options = { authPath: join(models.dir, "auth.json"), modelsPath: join(models.dir, "models.json"), refreshOnCreate: false };
+    const captured = await createModelRuntime(options);
+    rmSync(join(staged.dir, "auth.json"));
+    await assert.rejects(captured.getAuth("openai"), { code: "ACCOUNT_AUTH_MISSING" });
+    await assert.rejects(captured.refresh({ providers: ["openai"], allowNetwork: true }), { code: "ACCOUNT_AUTH_MISSING" });
+    privateJson(join(models.dir, "models.json"), { providers: { openai: { apiKey: "FIXTURE_INLINE_OTHER" } } });
+    const missing = await createModelRuntime(options);
+    await assert.rejects(missing.getAuth("openai"), { code: "ACCOUNT_AUTH_MISSING" });
+    const list = await accounts.list(), legacy = list.accounts.find(row => row.legacy)!;
+    await accounts.activate(legacy.id, list.revision);
+    const legacyRuntime = await createModelRuntime(options);
+    rmSync(join(models.dir, "auth.json"));
+    await assert.rejects(legacyRuntime.getAuth("openai"), { code: "ACCOUNT_AUTH_MISSING" });
+    const stores = (await accountRuntimeStores(options.authPath, join(models.dir, "models-store.json")))!;
+    await assert.rejects(stores.credentials.modify("openai", async () => ({ type: "api_key", key: "SHOULD_NOT_REVIVE" })), { code: "ACCOUNT_AUTH_MISSING" });
+  } finally { if (previous === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = previous; }
 }));
 
 test("metadata and model discovery use only active independent credentials without creating auth/cache files", () => fixture(async (models, accounts, root) => {
@@ -112,6 +185,25 @@ test("stored account keys override legacy inline keys and normalize without touc
   assert.deepEqual(readStoredCredential("fixture", join(staged.dir, "auth.json")), { type: "api_key", key: "FIXTURE_SELECTED_KEY", env: { FIXTURE_ENV: "preserved" } });
 }));
 
+test("connection saves cannot replace or clear account keys, or orphan accounts by removing their connection", () => fixture(async (models, accounts) => {
+  privateJson(join(models.dir, "models.json"), { providers: { fixture: { api: "openai-completions", baseUrl: "http://127.0.0.1:1/v1", models: [] } } });
+  const slot = await add(accounts, "fixture", "keep", { type: "api_key", key: "FIXTURE_KEEP" });
+  await choose(accounts, slot.id);
+  const before = await models.raw(), auth = readFileSync(join(slot.dir, "auth.json"), "utf8");
+  for (const mutation of [{ key: "FIXTURE_REPLACE" }, { clearKey: true }]) {
+    const draft = await models.read();
+    Object.assign(draft.providers.find(row => row.providerId === "fixture")!, mutation);
+    await assert.rejects(models.save({ ...draft, confirmLogout: true }), { code: "ACCOUNT_AUTH_REQUIRED" });
+  }
+  await assert.rejects(models.save({ ...(await models.read()), providers: [], confirmLogout: true }), { code: "ACCOUNT_CONNECTION_IN_USE" });
+  assert.equal(await models.raw(), before);
+  assert.equal(readFileSync(join(slot.dir, "auth.json"), "utf8"), auth);
+  const draft = await models.read();
+  draft.providers.find(row => row.providerId === "fixture")!.name = "Shared connection";
+  await models.save(draft);
+  assert.equal(readFileSync(join(slot.dir, "auth.json"), "utf8"), auth);
+}));
+
 test("unsafe account paths, hard-linked credentials, corrupt and dangling indexes fail closed without overwriting", () => fixture(async (models, accounts, root) => {
   const folder = join(models.dir, "model-accounts"), outside = join(root, "outside"); mkdirSync(outside);
   symlinkSync(outside, folder); assert.throws(() => readAccountIndex(models.dir), { code: "ACCOUNT_STORAGE_INVALID" });
@@ -138,7 +230,76 @@ test("execution profiles and organizer recovery keys change with account selecti
   first.release(); second.release();
 }));
 
-test("new login isolation, normal login replacement, failure and cancellation cleanup work across real worker IPC", { timeout: 60000 }, () => fixture(async (models, accounts, root) => {
+test("rejected deletion confirmation releases admission without revoking existing profiles", () => fixture(async (models, accounts, root) => {
+  const a = await add(accounts, "fixture", "A", { type: "api_key", key: "FIXTURE_A" });
+  await choose(accounts, a.id);
+  const profiles = new ExecutionProfiles(root), raw = await models.raw();
+  const input = { entry: "memory" as const, cwd: root, modelDir: models.dir, modelsRaw: raw,
+    selection: { provider: "fixture", id: "model", thinking: "off" as const }, mode: "D" as const };
+  const before = profiles.prepare(input), revision = (await accounts.list()).revision;
+  const credential = readFileSync(join(a.dir, "auth.json"), "utf8");
+  models.beforeLogout = async (_providers, confirmed) => {
+    assert.equal(before.current(false), false, "admission is temporarily blocked during preflight");
+    for (const entry of ["agent", "memory", "compression"] as const)
+      assert.throws(() => profiles.prepare({ ...input, entry }), { code: "ACCOUNT_REMOVAL_BUSY" });
+    if (!confirmed) throw Object.assign(Error("running"), { code: "ACTIVE_RUNS_CONFIRMATION_REQUIRED" });
+  };
+  await assert.rejects(accounts.remove(a.id, revision), { code: "ACTIVE_RUNS_CONFIRMATION_REQUIRED" });
+  assert.equal(before.current(false), true, "declining stop must not permanently revoke the captured profile");
+  assert.equal(await before.currentAsync!(), true);
+  const unchanged = profiles.prepare(input);
+  assert.equal(unchanged.profileHash, before.profileHash); unchanged.release();
+  assert.equal(readFileSync(join(a.dir, "auth.json"), "utf8"), credential);
+  assert.equal((await accounts.list()).revision, revision);
+  assert.equal(models.authActive, false);
+  await accounts.remove(a.id, revision, undefined, true);
+  assert.equal(before.current(false), false, "confirmed deletion permanently revokes the old profile");
+  assert.equal(await before.currentAsync!(), false);
+  assert.equal((await accounts.list()).accounts.length, 0);
+  assert.equal(models.authActive, false); before.release();
+}));
+
+test("destructive account removal blocks all execution admissions and permanently invalidates prepared profiles", () => fixture(async (models, accounts, root) => {
+  const a = await add(accounts, "fixture", "A", { type: "api_key", key: "FIXTURE_A" });
+  await choose(accounts, a.id);
+  const profiles = new ExecutionProfiles(root), raw = await models.raw();
+  const input = { entry: "memory" as const, cwd: root, modelDir: models.dir, modelsRaw: raw,
+    selection: { provider: "fixture", id: "model", thinking: "off" as const }, mode: "D" as const };
+  const before = profiles.prepare(input);
+  assert.equal(before.current(false), true);
+  const removal = beginAccountRemoval(models.dir, "fixture");
+  try {
+    assert.equal(before.current(false), false);
+    assert.equal(await before.currentAsync!(), false);
+    for (const entry of ["agent", "memory", "compression"] as const)
+      assert.throws(() => profiles.prepare({ ...input, entry }), { code: "ACCOUNT_REMOVAL_BUSY" });
+    const other = profiles.prepare({ ...input, selection: { ...input.selection, provider: "other" } });
+    assert.equal(other.current(false), true); other.release();
+    removal.revoke();
+  } finally { removal.release(); }
+  assert.equal(before.current(false), false, "old prepared environments must not regain permission after deletion");
+  const after = profiles.prepare(input);
+  assert.equal(after.current(false), true); assert.notEqual(after.profileHash, before.profileHash);
+  before.release(); after.release();
+}));
+
+test("account deletion refuses legacy inline credentials rather than allowing later migration to resurrect them", () => fixture(async (models, accounts) => {
+  privateJson(join(models.dir, "models.json"), { providers: { fixture: { api: "openai-completions", baseUrl: "http://127.0.0.1:1/v1", apiKey: "FIXTURE_INLINE", models: [] } } });
+  const slot = await add(accounts, "fixture", "A", { type: "api_key", key: "FIXTURE_STORED" });
+  await choose(accounts, slot.id);
+  const raw = await models.raw();
+  await assert.rejects(accounts.remove(slot.id, (await accounts.list()).revision), { code: "ACCOUNT_INLINE_AUTH_CONFLICT" });
+  assert.equal(await models.raw(), raw);
+  assert.equal((readStoredCredential("fixture", join(slot.dir, "auth.json")) as any).key, "FIXTURE_STORED");
+  assert.equal(models.authActive, false);
+  await models.save(await models.read());
+  assert.equal(JSON.parse(await models.raw()).providers.fixture.apiKey, undefined);
+  await accounts.remove(slot.id, (await accounts.list()).revision);
+  await models.read({ normalizeCredentials: true });
+  assert.equal((await accounts.list()).accounts.length, 0);
+}));
+
+test("every login appends, including older callers; failure and cancellation cleanup work across real worker IPC", { timeout: 60000 }, () => fixture(async (models, accounts, root) => {
   // Generic API login and fixed local definitions never contact a paid model or OAuth service.
   privateJson(join(models.dir, "models.json"), { providers: { fixture: { api: "openai-completions", baseUrl: "http://127.0.0.1:1/v1", models: [{ id: "fixture-model", name: "Fixture", reasoning: false, input: ["text"], contextWindow: 4096, maxTokens: 1024 }] } } });
   privateJson(join(models.dir, "auth.json"), { fixture: { type: "api_key", key: "FIXTURE_LEGACY_KEY" } });
@@ -159,12 +320,17 @@ test("new login isolation, normal login replacement, failure and cancellation cl
     await until(() => !!logins.get(owner, replaced.id).state.prompt);
     logins.answer(owner, replaced.id, logins.get(owner, replaced.id).state.prompt!.id, "FIXTURE_REPLACED_KEY");
     await until(() => !models.authActive); assert.equal(logins.get(owner, replaced.id).state.status, "completed");
-    assert.equal((readStoredCredential("fixture", join(accountDirectory(models.dir, independent.id), "auth.json")) as any).key, "FIXTURE_REPLACED_KEY");
+    assert.equal((readStoredCredential("fixture", join(accountDirectory(models.dir, independent.id), "auth.json")) as any).key, "FIXTURE_NEW_KEY");
+    const appended = await accounts.list();
+    assert.equal(appended.accounts.length, 3);
+    assert.equal(appended.accounts.find(row => row.active)!.id, independent.id);
+    const third = appended.accounts.find(row => !row.legacy && row.id !== independent.id)!;
+    assert.equal((readStoredCredential("fixture", join(accountDirectory(models.dir, third.id), "auth.json")) as any).key, "FIXTURE_REPLACED_KEY");
     assert.equal(readFileSync(join(models.dir, "auth.json"), "utf8"), original);
     const cancel = await logins.start(owner, "fixture", "api_key", (await models.load()).revision, undefined, { label: "cancel" });
     await until(() => !!logins.get(owner, cancel.id).state.prompt); logins.cancel(owner, cancel.id); await until(() => !models.authActive);
-    assert.equal((await accounts.list()).accounts.length, 2);
-    assert.equal(readdirSync(join(models.dir, "model-accounts")).filter(name => name !== "index.json").length, 1);
+    assert.equal((await accounts.list()).accounts.length, 3);
+    assert.equal(readdirSync(join(models.dir, "model-accounts")).filter(name => name !== "index.json").length, 2);
     // Real IPC must return a receipt, not the key returned by Pi runtime.login.
     const staged = accounts.prepare("fixture", { label: "IPC" }); await accounts.configure(staged);
     const receipt = await modelNetwork(root, staged.dir, "fixture", join(staged.dir, "models.json"), "login", { type: "api_key" }, { prompt: async () => "FIXTURE_IPC_KEY" });
@@ -175,7 +341,7 @@ test("new login isolation, normal login replacement, failure and cancellation cl
     const failing = new Logins(models, () => {}, async () => {}, async () => {}, failedNetwork, accounts);
     const failed = await failing.start(owner, "fixture", "api_key", (await models.load()).revision, undefined, { label: "failure" });
     await until(() => !models.authActive); assert.equal(failing.get(owner, failed.id).state.status, "failed"); await failing.close();
-    assert.equal((await accounts.list()).accounts.length, 2);
+    assert.equal((await accounts.list()).accounts.length, 3);
   } finally { await logins.close(); }
 }));
 

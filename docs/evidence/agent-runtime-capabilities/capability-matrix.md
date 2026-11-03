@@ -1,0 +1,250 @@
+# Axiom 运行时抽象能力完整矩阵
+
+> 由 capability-matrix.json 生成；只做静态研究。接口族名称是建议边界，不表示已实现中性接口。
+
+归一化 **151 项 / 14 域**，来源文件 **163**；94 个直接 Pi 引用文件全部有分类。分类覆盖不是行为测试覆盖率。
+
+源码 manifest SHA256：`9f42b477d57636707e0e1d2a078fee8f33357a1504d89e4f7931f8e80043dd78`；矩阵 SHA256：`3d117c9f13818ff03fe433c431cd0f41d8fcaa644cc39d96858c65b45ea215e9`。
+
+## 口径
+
+归一化行为能力及独立故障边界；不是SDK方法数、改动文件数或实现完成率。每项只有一个主责边界，宿主协作要求另写在语义中。
+
+主责是应该收口的依赖边界，不表示整份来源文件搬迁。协作授权、事实源和失败约束仍按每项语义留在宿主。当前所有统一端口均是设计建议，live 指已有业务路径的原生实现。
+
+| 状态 | 项数 | 含义 |
+| --- | ---: | --- |
+| gap | 2 | 当前未桥接或不可移植 |
+| helper | 1 | 已有构件，未发现生产链路接线 |
+| live | 136 | 现有运行链路源码可见，未经本轮执行验证 |
+| new | 4 | 多运行时新增设计需求，产品尚未实现 |
+| partial | 8 | 现有链路但观测或保证范围有限 |
+
+| 主责边界 | 项数 |
+| --- | ---: |
+| 原生存档适配边界 | 23 |
+| Axiom宿主保留 | 57 |
+| 独立模型网关边界 | 17 |
+| 资源配置适配边界 | 14 |
+| 运行时适配边界 | 40 |
+
+## E. 执行环境与许可（10）
+
+| ID | 能力 | 主责 | 现状 | 建议接口族 | 关键语义 | 源码证据 |
+| --- | --- | --- | --- | --- | --- | --- |
+| E01 | 统一容量、排队和deadline | Axiom宿主保留 | live | `execution-host` | 继续使用唯一池；不能由第二runtime另建自主调度池。 | [server/execution-pool.ts](../../../app/src/server/execution-pool.ts)、[server/command-admission.ts](../../../app/src/server/command-admission.ts) |
+| E02 | lease、generation与回调身份围栏 | Axiom宿主保留 | live | `execution-host` | 回调入口捕获原run/lease；旧结果不重标为新执行。 | [server/execution-protocol.ts](../../../app/src/server/execution-protocol.ts)、[server/agents/runs.ts](../../../app/src/server/agents/runs.ts) |
+| E03 | 绑定前后双重执行许可 | Axiom宿主保留 | live | `execution-host` | binding_ready后重验资源及scope；绑定/预热不能默认取得推理权。 | [server/execution-protocol.ts](../../../app/src/server/execution-protocol.ts)、[server/execution-pool.ts](../../../app/src/server/execution-pool.ts)、[server/agents/runs.ts](../../../app/src/server/agents/runs.ts) |
+| E04 | 版本、解释器与环境计划 | 运行时适配边界 | live | `runtime-core` | Pi SDK、Node、worker入口、cwd/env及配置应进入适配器计划；新runtime须声明实际解释器。 | [server/execution-profile.ts](../../../app/src/server/execution-profile.ts) |
+| E05 | 资源身份及漂移复核 | 资源配置适配边界 | live | `resource-catalog` | 内容/物理身份前后复验；不是原子FS快照，也未证明任意外部JS传递依赖。 | [server/agents/resource-identity.ts](../../../app/src/server/agents/resource-identity.ts)、[server/execution-profile.ts](../../../app/src/server/execution-profile.ts) |
+| E06 | 模型快照与可写live副本所有权 | Axiom宿主保留 | live | `execution-host` | 不可变共享快照引用计数；物理agent私有live文件不随首个借用者过早删除。 | [server/execution-profile.ts](../../../app/src/server/execution-profile.ts)、[server/agents/runs.ts](../../../app/src/server/agents/runs.ts) |
+| E07 | 热复用、亲和及冷启动降级 | Axiom宿主保留 | live | `execution-host` | 会话writer亲和；资源无法证明可退single-use/禁预热，不跳过许可或清理。 | [server/execution-pool.ts](../../../app/src/server/execution-pool.ts)、[server/execution-profile.ts](../../../app/src/server/execution-profile.ts) |
+| E08 | 完整进程树清理与隔离 | Axiom宿主保留 | live | `execution-host` | 超时/断线后回收后代；未确认退出不释放唯一writer或返回可复用池。 | [server/execution-pool.ts](../../../app/src/server/execution-pool.ts)、[server/owned-process-linux.ts](../../../app/src/server/owned-process-linux.ts) |
+| E09 | 嵌套后台作业保留容量 | Axiom宿主保留 | live | `execution-host` | parentLease和nested reserve避免记忆查询父子执行互等；不另开逃逸执行通道。 | [server/execution-pool.ts](../../../app/src/server/execution-pool.ts)、[server/memory-runner.ts](../../../app/src/server/memory-runner.ts) |
+| E10 | 适配器注册、版本兼容和场景准入 | Axiom宿主保留 | new | `runtime-registry` | 当前只有Pi相关profile和技能/MCP目录；需新增runtime/contract版本、能力revision与场景门槛，不能复用资源目录冒充。 | [server/execution-profile.ts](../../../app/src/server/execution-profile.ts)、[server/capabilities.ts](../../../app/src/server/capabilities.ts) |
+
+## S. 会话与运行生命周期（8）
+
+| ID | 能力 | 主责 | 现状 | 建议接口族 | 关键语义 | 源码证据 |
+| --- | --- | --- | --- | --- | --- | --- |
+| S01 | 创建并绑定原生持久会话 | 运行时适配边界 | live | `runtime-core` | 宿主ID、原生ID和文件归属分开；在已授权存储域绑定，不透传SDK session。 | [server/agents.ts](../../../app/src/server/agents.ts)、[server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| S02 | 带身份的首次执行及同会话后续run | 运行时适配边界 | live | `runtime-core` | 逻辑run与物理worker/session复用分开；新run必须有新的绑定身份和端口。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/agents/runs.ts](../../../app/src/server/agents/runs.ts) |
+| S03 | 原生idle、settled与宿主done区分 | 运行时适配边界 | live | `runtime-core` | agent_end、message_end或最后文字均不能替代自动续跑已停止及宿主结算。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/execution-outcome.ts](../../../app/src/server/execution-outcome.ts) |
+| S04 | 用户停止与软中断分级 | 运行时适配边界 | live | `runtime-core` | live仅指当前用户stop退役worker/process tree；通用可恢复软中断尚未形成契约保证，应另声明能力，不由abort/reload暂停推定。 | [server/agents/runs.ts](../../../app/src/server/agents/runs.ts)、[server/agents.ts](../../../app/src/server/agents.ts)、[server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| S05 | 正常收尾、扩展shutdown与绑定释放 | 运行时适配边界 | live | `runtime-core` | done与closed/idle不同；abort、扩展shutdown、dispose、事件及队列waiter结清必须协调。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/agents/runs.ts](../../../app/src/server/agents/runs.ts) |
+| S06 | 部分初始化失败及未begin清理 | 运行时适配边界 | live | `runtime-core` | 保留现有失败清理；中性契约需结构化表达初始化失败、未begin的close、事件gap与未确认清理。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/execution-pool.ts](../../../app/src/server/execution-pool.ts) |
+| S07 | 原生保存证据和关闭水位 | 运行时适配边界 | partial | `runtime-core` | 现有完整磁盘记录确认不是fsync或全事件屏障；新契约不得把硬杀说成flush成功。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/agents/persisted-inputs.ts](../../../app/src/server/agents/persisted-inputs.ts)、[server/compression-context.ts](../../../app/src/server/compression-context.ts) |
+| S08 | 会话固定runtime及缺适配器不可用 | Axiom宿主保留 | new | `runtime-registry` | 旧Pi会话显式映射Pi；恢复失败不换runtime建空档；跨runtime只能新会话交接并说明损失。 | [server/storage.ts](../../../app/src/server/storage.ts)、[server/agents.ts](../../../app/src/server/agents.ts) |
+
+## I. 输入与队列（11）
+
+| ID | 能力 | 主责 | 现状 | 建议接口族 | 关键语义 | 源码证据 |
+| --- | --- | --- | --- | --- | --- | --- |
+| I01 | 首发prompt与忙碌追加分流 | 运行时适配边界 | live | `runtime-core` | cold启动尚未进入agent时不能冒充可追加；开始事件与流式状态不同。 | [server/agents.ts](../../../app/src/server/agents.ts)、[server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| I02 | steer与follow-up语义 | 运行时适配边界 | live | `runtime-core` | 保留原生插入边界；现有外部followUp拼写需显式映射，不交换两种模式。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/agents/runs.ts](../../../app/src/server/agents/runs.ts) |
+| I03 | 图片、附件和技能引用预处理 | 运行时适配边界 | live | `runtime-core` | 按输入顺序串行准备；图片能力和组合限额复验；附件不是系统指令。 | [server/images.ts](../../../app/src/server/images.ts)、[server/skill-input.ts](../../../app/src/server/skill-input.ts)、[server/skill-discovery.ts](../../../app/src/server/skill-discovery.ts)、[server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| I04 | 稳定inputId及重复文字区分 | Axiom宿主保留 | live | `input-ledger` | 按身份不是按文字去重；宿主输入账本不等于原生队列。 | [server/agents/runs.ts](../../../app/src/server/agents/runs.ts)、[server/input-continuation.ts](../../../app/src/server/input-continuation.ts) |
+| I05 | 受理、消费、保存和交付分态 | 运行时适配边界 | live | `runtime-core` | accepted只表示受理；完整落盘消费证据和业务通知交付另记。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/agents/persisted-inputs.ts](../../../app/src/server/agents/persisted-inputs.ts) |
+| I06 | 结构化原生队列快照 | 运行时适配边界 | live | `input-queue.v1` | 私有steeringQueue/followUpQueue布局集中适配；文本镜像/peek不足；漂移时拒绝而非返回空。 | [server/agents/native-queue.ts](../../../app/src/server/agents/native-queue.ts) |
+| I07 | 按ID原子撤回与消费竞争 | 运行时适配边界 | live | `input-queue.v1` | 同步读取/清空/重建，只移除目标追加；保留其他通知/原生消息，已消费不报撤回成功。 | [server/agents/native-queue.ts](../../../app/src/server/agents/native-queue.ts)、[server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| I08 | 准备中撤回墓碑及草稿归还 | Axiom宿主保留 | live | `input-ledger` | 图片准备await后复核pending；只还确认撤回草稿，超时为uncertain。 | [server/agents/runs.ts](../../../app/src/server/agents/runs.ts)、[server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| I09 | 提交异常后的保留三值查询 | 运行时适配边界 | live | `input-queue.v1` | Promise拒绝仍可能入队；retained true/false/unknown分开，未知不重发。 | [server/agents/native-queue.ts](../../../app/src/server/agents/native-queue.ts)、[server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| I10 | 完整记录游标和文件替换识别 | 原生存档适配边界 | live | `native-history.v1` | 只提交完整换行记录；替换、截断、解析/回调失败不错误推进；可读记录不等于断电持久性。 | [server/agents/persisted-inputs.ts](../../../app/src/server/agents/persisted-inputs.ts) |
+| I11 | 任务通知输入及延迟回执去重 | Axiom宿主保留 | live | `input-ledger` | 通知不是可撤用户输入；submitted与persisted分开；迟到证据只结清原身份。 | [server/agents/task-notifications.ts](../../../app/src/server/agents/task-notifications.ts)、[server/tasks/delivery.ts](../../../app/src/server/tasks/delivery.ts) |
+
+## V. 事件、观察与交互（10）
+
+| ID | 能力 | 主责 | 现状 | 建议接口族 | 关键语义 | 源码证据 |
+| --- | --- | --- | --- | --- | --- | --- |
+| V01 | 稳定消息ID及原生元数据映射 | 运行时适配边界 | live | `event-sink` | 显示messageId/native entryId/runId/toolCallId不互换；持久化前保留Axiom身份字段。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/transcript.ts](../../../app/src/server/transcript.ts) |
+| V02 | 文字、思考及committed消息 | 运行时适配边界 | live | `event-sink` | delta与最终消息分开；当前显示层存在stop→final_answer兼容推断。新中性DTO需区分原生phase、宿主显示推断和unknown；无token流不伪造。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/transcript.ts](../../../app/src/server/transcript.ts)、[shared/agent.ts](../../../app/src/shared/agent.ts) |
+| V03 | 工具started/progress/finished事件 | 运行时适配边界 | live | `event-sink` | 保留call关联、状态、时长和部分结果；工具结束不等于任务结果完成。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[shared/tool-summary.ts](../../../app/src/shared/tool-summary.ts) |
+| V04 | 运行phase与原生重试episode | 运行时适配边界 | live | `event-sink` | 重试不是新业务run；attempt/delay/nextRetryAt与最终耗尽或取消有独立状态。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/execution-outcome.ts](../../../app/src/server/execution-outcome.ts)、[shared/agent.ts](../../../app/src/shared/agent.ts) |
+| V05 | 上下文变化与持久记录确认 | 运行时适配边界 | live | `event-sink` | message_end先于append；overlay必须等磁盘证据，context reset前先排旧delta。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/agents/views.ts](../../../app/src/server/agents/views.ts) |
+| V06 | 真实请求选择及实际路由观察 | 运行时适配边界 | live | `request-observer` | 记录逻辑选择与实际provider；扩展/代理改变路由不可回写旧请求；辅助请求单独归属。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/request-selection.ts](../../../app/src/server/request-selection.ts) |
+| V07 | 事件背压、gap和终态序号 | Axiom宿主保留 | new | `event-sink` | 宿主已有IPC/wire边界，但新adapter仍需绑定级seq/eventId/最终drain水位与丢失说明，不能借wire seq替代。 | [server/execution-protocol.ts](../../../app/src/server/execution-protocol.ts)、[server/outgoing.ts](../../../app/src/server/outgoing.ts) |
+| V08 | 脱敏诊断与扩展错误 | 运行时适配边界 | live | `event-sink` | 安全摘要不能带原始凭据/扩展异常；warning不等同扩展notify UI已支持。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/error-message.ts](../../../app/src/server/error-message.ts) |
+| V09 | 人类审批、选择及问答回应 | 运行时适配边界 | gap | `interaction.v1` | 当前bindExtensions仅mode=rpc/onError，未给uiContext；需interactionId、响应、超时及取消，不能将默认false当用户拒绝。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| V10 | 终端自定义组件及扩展展示 | 资源配置适配边界 | gap | `presentation-extension` | Pi TUI widget/editor/theme等未桥到Web；不得强制移植或算当前已有通用交互。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+
+## T. 工具与权限（10）
+
+| ID | 能力 | 主责 | 现状 | 建议接口族 | 关键语义 | 源码证据 |
+| --- | --- | --- | --- | --- | --- | --- |
+| T01 | 中性工具目录及注册与激活区分 | 运行时适配边界 | live | `tool-bridge` | 工具可注册不等于active；当前环境投影只保留字段子集，不可照搬成完整工具契约。 | [server/session-environment.ts](../../../app/src/server/session-environment.ts)、[server/reload-resources.ts](../../../app/src/server/reload-resources.ts) |
+| T02 | 输入schema及原生参数适配 | 运行时适配边界 | live | `tool-bridge` | Pi TypeBox/defineTool留适配器；宿主工具使用自有schema，并在业务入口复验。 | [server/task-tools.ts](../../../app/src/server/task-tools.ts)、[server/memory-tool.ts](../../../app/src/server/memory-tool.ts) |
+| T03 | 模型内容、详情和结构化结果 | 运行时适配边界 | live | `tool-bridge` | content不等于details；中性结果需容纳text/image、structuredContent、error/unknown及可用usage，而非原生JSON任意穿透。 | [server/task-output.ts](../../../app/src/server/task-output.ts)、[shared/task-output.ts](../../../app/src/shared/task-output.ts)、[server/memory-tool.ts](../../../app/src/server/memory-tool.ts) |
+| T04 | 工具IPC、调用身份及取消 | Axiom宿主保留 | live | `tool-bridge` | lease/run/call/key绑定；AbortSignal跨进程转显式取消；取消不证明副作用没发生。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/tasks.ts](../../../app/src/server/tasks.ts)、[server/agents.ts](../../../app/src/server/agents.ts) |
+| T05 | 原生文件与平台shell工具 | 运行时适配边界 | live | `tool-bridge` | 8个可注册原生工具；平台默认及settings动态选取，不是固定13个active工具。 | [server/session-environment.ts](../../../app/src/server/session-environment.ts)、[server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| T06 | 记忆文件读写与所属范围守卫 | Axiom宿主保留 | live | `tool-policy` | edit/write候选约束与路径归属不能只靠提示词；读取提醒不等于已读证据。 | [server/memory-write-guard.ts](../../../app/src/server/memory-write-guard.ts)、[server/memory-recovery.ts](../../../app/src/server/memory-recovery.ts)、[server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| T07 | 子代理allowlist及禁止递归委派 | Axiom宿主保留 | live | `tool-policy` | 禁外扩展/模板/包与宿主委派工具；shell仍有OS权限，不宣称只读沙箱。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/tasks/commands.ts](../../../app/src/server/tasks/commands.ts) |
+| T08 | 工作到摘要阶段硬撤工具 | 运行时适配边界 | live | `configuration.v1` | 安全收紧实际tool集合且阻断非work调用；保留队列及阶段revision，不只追加政策文本。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/task-budget.ts](../../../app/src/server/task-budget.ts) |
+| T09 | 工具输出改写及嵌套调用策略 | 资源配置适配边界 | live | `tool-bridge` | RTK/REA包装在适配边界；保留原始结果引用和嵌套工具策略，不用UI简称改执行路由。 | [server/integrations/rtk-runtime.ts](../../../app/src/server/integrations/rtk-runtime.ts)、[server/integrations/rea-tool-policy.ts](../../../app/src/server/integrations/rea-tool-policy.ts) |
+| T10 | 副作用未知与非自动重放 | Axiom宿主保留 | live | `tool-policy` | 缺工具结果可补unknown配对；不能伪造success或承诺跨进程exactly-once。 | [server/resume-session.ts](../../../app/src/server/resume-session.ts)、[server/tasks/delivery.ts](../../../app/src/server/tasks/delivery.ts) |
+
+## R. 资源、提示词与扩展（12）
+
+| ID | 能力 | 主责 | 现状 | 建议接口族 | 关键语义 | 源码证据 |
+| --- | --- | --- | --- | --- | --- | --- |
+| R01 | 资源目录、来源、范围与优先级 | 资源配置适配边界 | live | `resource-catalog` | 应用Pi目录、共享模型目录和项目.pi分开；宿主授权保留，原生解析规则收口。 | [server/capability-resources.ts](../../../app/src/server/capability-resources.ts)、[server/environment-resources.ts](../../../app/src/server/environment-resources.ts)、[server/builtin-capabilities.ts](../../../app/src/server/builtin-capabilities.ts) |
+| R02 | 已安装资源发现而不自动安装 | 资源配置适配边界 | live | `resource-catalog` | 反射loader.packageManager/parseSource；缺包skip并告警；发现不执行下载或远程临时扩展。 | [server/installed-resource-loader.ts](../../../app/src/server/installed-resource-loader.ts)、[server/skill-discovery.ts](../../../app/src/server/skill-discovery.ts) |
+| R03 | 技能自动发现和显式引用 | 资源配置适配边界 | live | `resource-catalog` | legacy/null与空集不同；不自动选中的技能仍可显式引用；前置引用解析与实际执行一致。 | [server/skill-input.ts](../../../app/src/server/skill-input.ts)、[server/skill-discovery.ts](../../../app/src/server/skill-discovery.ts)、[server/skill-import.ts](../../../app/src/server/skill-import.ts)、[server/builtin-capabilities.ts](../../../app/src/server/builtin-capabilities.ts) |
+| R04 | 系统指令组合及原生差分桥 | 资源配置适配边界 | live | `instruction-composer` | 私有system-prompt模块及_preparePromptAndToolLoadout集中版本适配；opaque扩展prompt不被品牌替换破坏。 | [server/axiom-prompt.ts](../../../app/src/server/axiom-prompt.ts)、[server/environment-resources.ts](../../../app/src/server/environment-resources.ts) |
+| R05 | 只读环境预览 | 资源配置适配边界 | live | `resource-catalog` | 不创建session/运行扩展/连接MCP/安装包/推理；preview不是运行回执。 | [server/session-environment.ts](../../../app/src/server/session-environment.ts) |
+| R06 | 真实环境、资源快照及诊断 | 资源配置适配边界 | live | `configuration.v1` | 实际active工具/system/skills/retry可读；MCP选中不等于connected；敏感命令/env/URL不发UI。 | [server/session-environment.ts](../../../app/src/server/session-environment.ts)、[server/reload-resources.ts](../../../app/src/server/reload-resources.ts) |
+| R07 | skills/MCP选择及revision计划 | Axiom宿主保留 | live | `resource-policy` | 偏好/catalog/session revision分别复核；选择首轮锁定或实际重载成功才提交，不是runtime能力注册表。 | [server/capabilities.ts](../../../app/src/server/capabilities.ts)、[shared/capabilities.ts](../../../app/src/shared/capabilities.ts) |
+| R08 | 扩展生命周期和MCP工厂 | 资源配置适配边界 | live | `configuration.v1` | 显式启用codemode/tool-search/MCP并bind；getMcpServers、原生MCP命令和updateConfig有宿主限制。 | [server/capability-resources.ts](../../../app/src/server/capability-resources.ts)、[server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| R09 | MCP传输、代理、env和OAuth | 资源配置适配边界 | live | `resource-catalog` | stdio/HTTP及工具网络与模型网络隔离；变量/!command可执行，不能称纯数据无副作用。 | [server/integrations/model-proxy-tools.ts](../../../app/src/server/integrations/model-proxy-tools.ts)、[server/resources.ts](../../../app/src/server/resources.ts)、[server/integrations/rea-diagnostic-worker.ts](../../../app/src/server/integrations/rea-diagnostic-worker.ts) |
+| R10 | 显式资源安装更新及管理作业 | Axiom宿主保留 | live | `resource-policy` | 安装与发现分离；安装/改名/移动/复制/卸载保留锁、归属、revision、补偿和不确定恢复。 | [server/resources.ts](../../../app/src/server/resources.ts)、[server/pi-package-storage.ts](../../../app/src/server/pi-package-storage.ts)、[server/pi-package-worker.ts](../../../app/src/server/pi-package-worker.ts)、[server/resource-npm-operation.ts](../../../app/src/server/resource-npm-operation.ts) |
+| R11 | Pi配置存储与并发首写补丁 | 资源配置适配边界 | live | `resource-catalog` | 私有FileSettingsStorage原型补丁严格版本1.1.0；跨进程锁/别名验证是升级边界，外部未补丁Pi不在保证内。 | [server/pi-settings-storage.ts](../../../app/src/server/pi-settings-storage.ts)、[server/pi-package-storage.ts](../../../app/src/server/pi-package-storage.ts) |
+| R12 | 内置及外部组件资源注入 | 资源配置适配边界 | live | `resource-catalog` | OpenCLI/REA技能及TUI补全/frontmatter解析也有Pi依赖；OS/文件业务留宿主，格式工具可独立替换。 | [server/integrations/opencli.ts](../../../app/src/server/integrations/opencli.ts)、[server/integrations/opencli-resources.ts](../../../app/src/server/integrations/opencli-resources.ts)、[server/integrations/rea-resources.ts](../../../app/src/server/integrations/rea-resources.ts)、[server/files.ts](../../../app/src/server/files.ts)、[server/file-edit.ts](../../../app/src/server/file-edit.ts) |
+
+## C. 配置安全点与重载（8）
+
+| ID | 能力 | 主责 | 现状 | 建议接口族 | 关键语义 | 源码证据 |
+| --- | --- | --- | --- | --- | --- | --- |
+| C01 | 可操作安全点而非事件观察 | 运行时适配边界 | live | `configuration.v1` | 四个Agent hook和8种操作权限集中；能力快照不是锁，await后重新验证，事件不能授予写权。 | [server/session-safe-point.ts](../../../app/src/server/session-safe-point.ts) |
+| C02 | 模型选择revision与连续意图合并 | 运行时适配边界 | live | `configuration.v1` | 只消费最新revision；菜单选择不探测认证/可用性，不回退旧端点。 | [server/agents.ts](../../../app/src/server/agents.ts)、[server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| C03 | 选择状态、原生历史和扩展同步 | 运行时适配边界 | live | `configuration.v1` | 当前刻意绕过setModel的认证/思考clamp；扩展后再次固定宿主选择，实际请求才报应用。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/request-selection.ts](../../../app/src/server/request-selection.ts) |
+| C04 | 网络重绑与请求隔离 | 独立模型网关边界 | live | `configuration.v1` | 只在request/owned-idle安全点改env/global网络；多runtime共享进程不能假定隔离自动保持。 | [server/model-network.ts](../../../app/src/server/model-network.ts)、[server/session-safe-point.ts](../../../app/src/server/session-safe-point.ts)、[server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| C05 | 活跃重载暂停与原决策续接 | 运行时适配边界 | live | `configuration.v1` | 工具批/原生draft完成后暂停；hook内不能await自身abort，保留原continue/end决策。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/session-safe-point.ts](../../../app/src/server/session-safe-point.ts) |
+| C06 | full和skills-only实际重载 | 资源配置适配边界 | live | `configuration.v1` | 重发现、实际reload、工具及环境更新；资源消失/配置损坏拒绝，不保证旧扩展仍可继续。 | [server/reload-resources.ts](../../../app/src/server/reload-resources.ts)、[server/skill-discovery.ts](../../../app/src/server/skill-discovery.ts)、[server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| C07 | 无伪用户的重载后继续 | 运行时适配边界 | live | `configuration.v1` | 重新进入原生prompt/system生命周期且剔除唯一synthetic user；输入形态漂移明确失败并还原hook。 | [server/reload-resume.ts](../../../app/src/server/reload-resume.ts) |
+| C08 | 冷重载作业与实际应用回执 | Axiom宿主保留 | live | `configuration.v1` | 冷reload会bind和执行扩展但不推理；独立job/baseline/期限与capability commit，不新造聊天run。 | [server/session-reloads.ts](../../../app/src/server/session-reloads.ts)、[shared/reload.ts](../../../app/src/shared/reload.ts) |
+
+## A. 原生存档与只读投影（12）
+
+| ID | 能力 | 主责 | 现状 | 建议接口族 | 关键语义 | 源码证据 |
+| --- | --- | --- | --- | --- | --- | --- |
+| A01 | 存档归属、格式及物理身份验证 | 原生存档适配边界 | live | `native-history.v1` | 限定header读取/常规文件/cwd realpath/读取前后身份；损坏或错scope不能当空档。 | [server/transcript.ts](../../../app/src/server/transcript.ts) |
+| A02 | 严格只读打开与可写恢复分离 | 原生存档适配边界 | live | `native-history.v1` | parser+inMemory防止浏览修尾换行；离线读历史不创建agent或做迁移写入。 | [server/transcript.ts](../../../app/src/server/transcript.ts) |
+| A03 | 活动分支和有效模型上下文投影 | 原生存档适配边界 | live | `native-history.v1` | 保留context_edit/system/compaction/provenance；全树entries不能代替活动branch。 | [server/transcript.ts](../../../app/src/server/transcript.ts)、[server/context-usage.ts](../../../app/src/server/context-usage.ts) |
+| A04 | 压缩前原文投影 | 原生存档适配边界 | live | `native-history.v1` | 移除compaction仍应用context_edit与活动路径；全树元数据扫描不复活废弃正文。 | [server/transcript.ts](../../../app/src/server/transcript.ts)、[server/input-continuation.ts](../../../app/src/server/input-continuation.ts) |
+| A05 | 原生锚点到宿主消息及工具映射 | 原生存档适配边界 | live | `native-history.v1` | display/native/run/tool标识分层；图片及message details定位不可只依赖可见文字。 | [server/transcript.ts](../../../app/src/server/transcript.ts)、[server/message-part.ts](../../../app/src/server/message-part.ts) |
+| A06 | 原生图片及附件按需安全读取 | 原生存档适配边界 | live | `native-history.v1` | 按当前分支定位并复验MIME/base64/大小；字节不进列表回执，文件路径本身不授予访问权。 | [server/transcript.ts](../../../app/src/server/transcript.ts)、[server/images.ts](../../../app/src/server/images.ts)、[server/agents/views.ts](../../../app/src/server/agents/views.ts) |
+| A07 | UI压缩分段与模型保留边界分离 | 原生存档适配边界 | live | `native-history.v1` | 物理compaction桶不等于firstKeptEntryId；先完整分组再裁桶，摘要不新增用户turn。 | [server/history-projection.ts](../../../app/src/server/history-projection.ts)、[server/compaction-display.ts](../../../app/src/server/compaction-display.ts) |
+| A08 | 正文预览、全文revision和工具详情 | Axiom宿主保留 | live | `view-service` | 有界预览不是全文/原生context；同长度改写也失效，详情单字段按scope读取。 | [server/transcript.ts](../../../app/src/server/transcript.ts)、[server/message-part.ts](../../../app/src/server/message-part.ts)、[server/agents/views.ts](../../../app/src/server/agents/views.ts) |
+| A09 | 在线暂存覆盖及磁盘确认后释放 | Axiom宿主保留 | live | `view-service` | terminal delta仍可能未落盘；refresh前排旧delta，不能跨context revision混入旧尾部。 | [server/agents/views.ts](../../../app/src/server/agents/views.ts) |
+| A10 | 来源版本、缓存预算与未知计数 | Axiom宿主保留 | live | `view-service` | file identity/size/mtime/ctime/contextRevision与overlay版本分开；cold仍可全量解析，unknown不为0。 | [server/agents/views.ts](../../../app/src/server/agents/views.ts)、[server/session-list.ts](../../../app/src/server/session-list.ts) |
+| A11 | 原生Axiom元数据及恢复见证 | 原生存档适配边界 | live | `native-history.v1` | 自定义输入/记忆/选择/重写元数据持久兼容；不能只存通用messages正文数组。 | [server/memory-topics.ts](../../../app/src/server/memory-topics.ts)、[server/memory-recovery.ts](../../../app/src/server/memory-recovery.ts)、[server/request-selection.ts](../../../app/src/server/request-selection.ts)、[server/input-continuation.ts](../../../app/src/server/input-continuation.ts) |
+| A12 | 规范投影与原生提交观察构件 | 原生存档适配边界 | helper | `native-history.v1` | helper已存在但未见生产接线；metadata link/owned copy/receipt不等于正文版本或跨层authority，也无增量性能验证。 | [server/canonical-native-observer.ts](../../../app/src/server/canonical-native-observer.ts)、[server/canonical-projection-coordinator.ts](../../../app/src/server/canonical-projection-coordinator.ts)、[server/canonical-publisher-bridge.ts](../../../app/src/server/canonical-publisher-bridge.ts)、[server/canonical-publisher-mux.ts](../../../app/src/server/canonical-publisher-mux.ts)、[shared/canonical-source-capture.ts](../../../app/src/shared/canonical-source-capture.ts)、[shared/canonical-overlay-holder.ts](../../../app/src/shared/canonical-overlay-holder.ts)、[shared/canonical-occurrences.ts](../../../app/src/shared/canonical-occurrences.ts) |
+
+## B. 分支、重写与恢复（11）
+
+| ID | 能力 | 主责 | 现状 | 建议接口族 | 关键语义 | 源码证据 |
+| --- | --- | --- | --- | --- | --- | --- |
+| B01 | 分支点资格及宿主忙碌准入 | Axiom宿主保留 | live | `native-branch.v1` | 按现有宿主显示规则判定完整final或用户之前才可fork（final含兼容推断）；主run/子任务/queue/压缩/原生writer都需检查。 | [server/session-fork.ts](../../../app/src/server/session-fork.ts)、[server/transcript.ts](../../../app/src/server/transcript.ts) |
+| B02 | 原生fork且源叶不变 | 原生存档适配边界 | live | `native-branch.v1` | 独立manager复制原生路径；不切换源runtime，不用显示文字复制冒充native fork。 | [server/session-fork.ts](../../../app/src/server/session-fork.ts) |
+| B03 | 空分支持久化与宿主事务补偿 | 原生存档适配边界 | live | `native-branch.v1` | 首消息前fork也需可恢复；DB提交后publish失败不得删新文件；JSONL与SQLite不是单事务。 | [server/session-fork.ts](../../../app/src/server/session-fork.ts) |
+| B04 | 可编辑输入完整草稿还原 | 原生存档适配边界 | live | `native-branch.v1` | 正文/skills/图片/旧附件保留；只剥离有宿主tag且匹配规范的旧budget前缀。 | [server/session-rewrite.ts](../../../app/src/server/session-rewrite.ts) |
+| B05 | 重写revision CAS及异步后重开 | 原生存档适配边界 | live | `native-branch.v1` | 准备后重验活动branch；已回滚但新输入没发独立分类，uncertain不可重放。 | [server/session-rewrite.ts](../../../app/src/server/session-rewrite.ts)、[server/agents.ts](../../../app/src/server/agents.ts) |
+| B06 | 废弃结果与输入归属marker | 原生存档适配边界 | live | `native-branch.v1` | 全树marker抑制被废弃结果通知；不把废弃分支正文放回上下文。 | [server/session-rewrite.ts](../../../app/src/server/session-rewrite.ts)、[server/input-continuation.ts](../../../app/src/server/input-continuation.ts)、[server/tasks/delivery.ts](../../../app/src/server/tasks/delivery.ts) |
+| B07 | 原生恢复及失败尾部context修补 | 运行时适配边界 | live | `native-recovery.v1` | 仅剔除未答error/aborted/length尾；不删历史、不绕过Session retry/settling。 | [server/resume-session.ts](../../../app/src/server/resume-session.ts)、[server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| B08 | 中断工具unknown结果配对 | 原生存档适配边界 | live | `native-recovery.v1` | 缺toolResult补结果未知的错误记录，不重执行工具或造成功。 | [server/resume-session.ts](../../../app/src/server/resume-session.ts) |
+| B09 | 隐藏恢复控制及原生生命周期 | 运行时适配边界 | live | `native-recovery.v1` | 控制消息不是用户prompt；finally清控制残留，普通resume与reload后续接分开。 | [server/resume-session.ts](../../../app/src/server/resume-session.ts)、[server/reload-resume.ts](../../../app/src/server/reload-resume.ts) |
+| B10 | 服务恢复意图及child-first恢复 | Axiom宿主保留 | live | `recovery-service` | 持久intent/latestRun/scope校验；先捕获再清输入；用户stop不可被自动恢复复活。 | [server/service-recovery.ts](../../../app/src/server/service-recovery.ts)、[server/service-recovery-records.ts](../../../app/src/server/service-recovery-records.ts)、[server/storage.ts](../../../app/src/server/storage.ts) |
+| B11 | 未发送与已交worker输入恢复界限 | Axiom宿主保留 | live | `recovery-service` | 仅明确未发送或可信binding rejection才可重交；已受理/未知交付不得宿主盲重发。 | [server/service-recovery-records.ts](../../../app/src/server/service-recovery-records.ts)、[server/tasks/records.ts](../../../app/src/server/tasks/records.ts) |
+
+## P. 上下文压缩（14）
+
+| ID | 能力 | 主责 | 现状 | 建议接口族 | 关键语义 | 源码证据 |
+| --- | --- | --- | --- | --- | --- | --- |
+| P01 | 压缩策略、阈值及独立作业准入 | Axiom宿主保留 | live | `compression-service` | 手动/自动异步压缩有独立期限、并发、epoch和回执；读历史或重连不能触发模型。 | [server/compressions.ts](../../../app/src/server/compressions.ts)、[shared/compression.ts](../../../app/src/shared/compression.ts) |
+| P02 | 原生不可变快照及单写者移交 | 原生存档适配边界 | live | `native-context.v1` | 原生安全点或released sole writer捕获；闲置但被持有的manager仍不能让离线写者并写。 | [server/compression-context.ts](../../../app/src/server/compression-context.ts)、[server/compressions.ts](../../../app/src/server/compressions.ts) |
+| P03 | 序列化边界的snapshot/draft/commit | 运行时适配边界 | live | `native-context.v1` | boundary有条件授权；原生draft优先；返回draft不是已提交，entry_appended后再核。 | [server/agent-worker.ts](../../../app/src/server/agent-worker.ts)、[server/session-safe-point.ts](../../../app/src/server/session-safe-point.ts) |
+| P04 | 压缩前记忆维护与停态路径 | Axiom宿主保留 | live | `compression-service` | 每任务提醒一次；已停主agent不为提醒复活；提醒送达不等于记忆已读写。 | [server/compression-memory.ts](../../../app/src/server/compression-memory.ts)、[server/compressions.ts](../../../app/src/server/compressions.ts) |
+| P05 | 无工具隔离摘要执行 | 运行时适配边界 | live | `native-context.v1` | scratch session禁外部扩展/技能/模板/上下文/工具；摘要只能产原生checkpoint，不执行coding任务。 | [server/compression-worker.ts](../../../app/src/server/compression-worker.ts) |
+| P06 | 全量停态摘要及原生fileOps | 原生存档适配边界 | live | `native-context.v1` | 全投影覆盖、retain-none和nested fileOps正确；zero keep仍有cut point，不能丢末尾。 | [server/compression-context.ts](../../../app/src/server/compression-context.ts)、[server/compression-worker.ts](../../../app/src/server/compression-worker.ts) |
+| P07 | 真实请求前缀及保密sidecar | 运行时适配边界 | live | `native-context.v1` | 捕获真实dispatch context/options及模型配置指纹；私有前缀不含auth/header且不进UI。 | [server/compression-request.ts](../../../app/src/server/compression-request.ts)、[server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| P08 | 前缀严格匹配及缓存降级 | 运行时适配边界 | live | `native-context.v1` | session/leaf/projection/config及原生请求格式不匹配回native请求；缓存优化可降级，压缩安全不可降级。 | [server/compression-request.ts](../../../app/src/server/compression-request.ts) |
+| P09 | 模型请求参数及禁forced tool | 独立模型网关边界 | live | `native-context.v1` | 保留可复用reasoning/cache/transport，较新配置优先；forced toolChoice改none，不让摘要调用工具。 | [server/compression-request.ts](../../../app/src/server/compression-request.ts)、[server/compression-worker.ts](../../../app/src/server/compression-worker.ts) |
+| P10 | 晚摘要冲突、保留尾部及工具配对 | 原生存档适配边界 | live | `native-context.v1` | snapshot前缀与新tail验证；新原生压缩使旧结果失效；不能新增toolCall/result截断。 | [server/compression-context.ts](../../../app/src/server/compression-context.ts) |
+| P11 | 幂等应用marker与磁盘记录证据 | 原生存档适配边界 | live | `native-context.v1` | axiomCompressionId及实际序列化完整记录确认；manager内存或append返回不充分，不宣称fsync。 | [server/compression-context.ts](../../../app/src/server/compression-context.ts)、[server/agent-worker.ts](../../../app/src/server/agent-worker.ts) |
+| P12 | 取消、已应用与uncertain三态 | Axiom宿主保留 | live | `compression-service` | 取消摘要不等于撤销live queued apply；确认已落盘应completed，未确认不报cancelled。 | [server/compressions.ts](../../../app/src/server/compressions.ts)、[server/compression-worker.ts](../../../app/src/server/compression-worker.ts) |
+| P13 | 原生压缩安全网与双控制冲突 | 运行时适配边界 | live | `native-context.v1` | 当前70%原生安全网独立于可选Axiom异步阈值；新runtime需明确唯一原生上下文写控制权与冲突规则。 | [server/native-compaction-policy.ts](../../../app/src/server/native-compaction-policy.ts)、[server/compression-context.ts](../../../app/src/server/compression-context.ts) |
+| P14 | 压缩恢复、checkpoint及显示分离 | Axiom宿主保留 | live | `compression-service` | 摘要生成成功不等于应用；原生marker做重启对账；截断preview不是完整checkpoint，after估值不是live占用。 | [server/compressions.ts](../../../app/src/server/compressions.ts)、[server/compaction-display.ts](../../../app/src/server/compaction-display.ts) |
+
+## M. 模型、认证及独立推理（17）
+
+| ID | 能力 | 主责 | 现状 | 建议接口族 | 关键语义 | 源码证据 |
+| --- | --- | --- | --- | --- | --- | --- |
+| M01 | 模型运行时构造与配置模式 | 独立模型网关边界 | live | `model-gateway` | 配置读取与真实执行分离；配置模式不自动写凭据/迁移，AgentRuntime选择与provider/model是两维。 | [server/model-runtime.ts](../../../app/src/server/model-runtime.ts)、[server/model-service.ts](../../../app/src/server/model-service.ts) |
+| M02 | 模型目录、发现与思考支持 | 独立模型网关边界 | live | `model-gateway` | 逻辑选择、advisory availability和实际可请求不同；thinking支持按模型明确映射而非硬套Pi枚举。 | [server/models.ts](../../../app/src/server/models.ts)、[server/model-discovery.ts](../../../app/src/server/model-discovery.ts)、[server/models/draft.ts](../../../app/src/server/models/draft.ts) |
+| M03 | 模型副本、别名及上游路由 | 独立模型网关边界 | live | `model-gateway` | 宿主configId与上游model ID分开；保留context/usage原始provider，逻辑副本不改原生签名。 | [server/model-copies.ts](../../../app/src/server/model-copies.ts)、[server/model-metadata.ts](../../../app/src/server/model-metadata.ts) |
+| M04 | 配置revision及安全持久化 | Axiom宿主保留 | live | `model-administration` | 乐观并发、字段来源和密钥脱敏；无效选择到实际请求才失败，不自动回退。 | [server/models.ts](../../../app/src/server/models.ts)、[server/model-service.ts](../../../app/src/server/model-service.ts)、[server/model-metadata.ts](../../../app/src/server/model-metadata.ts) |
+| M05 | API key解析和原生凭据适配 | 独立模型网关边界 | live | `credential-gateway` | 不将密钥写进HostSessionSpec或nativeRef；读取授权与native凭据格式适配分开。 | [server/model-service.ts](../../../app/src/server/model-service.ts)、[server/model-runtime.ts](../../../app/src/server/model-runtime.ts)、[server/usage-accounts.ts](../../../app/src/server/usage-accounts.ts) |
+| M06 | 宿主登录交互、同步及撤销 | Axiom宿主保留 | live | `auth-service` | 提示流程、owner socket、断开清理、同步错误和provider撤销独立于agent的interaction端口。 | [server/auth.ts](../../../app/src/server/auth.ts)、[server/auth-browser.ts](../../../app/src/server/auth-browser.ts)、[server/model-service.ts](../../../app/src/server/model-service.ts) |
+| M07 | 模型代理和隔离网络worker | Axiom宿主保留 | live | `network-service` | 账户/模型查询网络和工具MCP网络隔离；全局状态与解释器限制进入执行隔离计划。 | [server/model-network.ts](../../../app/src/server/model-network.ts)、[server/model-network-worker.ts](../../../app/src/server/model-network-worker.ts) |
+| M08 | CodeBuddy provider兼容 | 独立模型网关边界 | live | `model-gateway` | 保留自有provider路由/目录/鉴权与流适配；接入新Harness不自动继承。 | [server/providers/codebuddy-cn.ts](../../../app/src/server/providers/codebuddy-cn.ts)、[server/providers/codebuddy-auth.ts](../../../app/src/server/providers/codebuddy-auth.ts)、[server/providers/codebuddy-models.ts](../../../app/src/server/providers/codebuddy-models.ts) |
+| M09 | Qoder provider兼容 | 独立模型网关边界 | live | `model-gateway` | 原生认证、目录和流事件需独立provider bridge，不把模型接口当AgentRuntime接口。 | [server/providers/qoder.ts](../../../app/src/server/providers/qoder.ts)、[server/providers/qoder-client.ts](../../../app/src/server/providers/qoder-client.ts)、[server/providers/qoder-auth.ts](../../../app/src/server/providers/qoder-auth.ts)、[server/providers/qoder-catalog.ts](../../../app/src/server/providers/qoder-catalog.ts) |
+| M10 | Kiro provider、协议及专门测量 | 独立模型网关边界 | live | `model-gateway` | 保留thinking/tool配对、凭据、缓存及用量来源限制；不能声称第二runtime天然支持同一套订阅。 | [server/providers/kiro.ts](../../../app/src/server/providers/kiro.ts)、[server/providers/kiro-chat.ts](../../../app/src/server/providers/kiro-chat.ts)、[server/providers/kiro-chat-protocol.ts](../../../app/src/server/providers/kiro-chat-protocol.ts)、[server/providers/kiro-auth.ts](../../../app/src/server/providers/kiro-auth.ts)、[server/providers/kiro-callback.ts](../../../app/src/server/providers/kiro-callback.ts)、[server/providers/kiro-catalog.ts](../../../app/src/server/providers/kiro-catalog.ts)、[server/providers/kiro-thinking.ts](../../../app/src/server/providers/kiro-thinking.ts)、[server/providers/kiro-usage.ts](../../../app/src/server/providers/kiro-usage.ts)、[server/kiro-cache-policy.ts](../../../app/src/server/kiro-cache-policy.ts) |
+| M11 | 无工具单次后台推理 | 独立模型网关边界 | live | `inference-job` | completeSimple不是AgentSession；每请求完整独立context，复用transport不继承上次消息；toolCall拒绝。 | [server/memory-worker.ts](../../../app/src/server/memory-worker.ts)、[server/memory-runner.ts](../../../app/src/server/memory-runner.ts) |
+| M12 | 推理deadline、取消及清理 | 独立模型网关边界 | live | `inference-job` | 排队也计总期限；取消后usage归原lease；completed仍需cleaned确认，错误/length/不完整结果分类。 | [server/memory-worker.ts](../../../app/src/server/memory-worker.ts)、[server/memory-runner.ts](../../../app/src/server/memory-runner.ts) |
+| M13 | 账户额度及provider用量查询 | Axiom宿主保留 | live | `quota-service` | 独立账户、缓存/身份复验留宿主；余额/窗口额度与逐请求成本不同，不要求创建agent，结果带来源/时间与未知态。 | [server/provider-usage.ts](../../../app/src/server/provider-usage.ts)、[server/provider-usage-cache.ts](../../../app/src/server/provider-usage-cache.ts)、[server/providers/openai-usage.ts](../../../app/src/server/providers/openai-usage.ts)、[server/usage-accounts.ts](../../../app/src/server/usage-accounts.ts) |
+| M14 | 模型流式、完成式及简化选项入口 | 独立模型网关边界 | live | `model-gateway` | stream/streamSimple/complete/completeSimple语义区分，Pi消息流与结果留实现内；不据SDK能力宣称所有音频/embedding等已接入。 | [server/model-runtime.ts](../../../app/src/server/model-runtime.ts)、[server/memory-worker.ts](../../../app/src/server/memory-worker.ts)、[server/providers/kiro-chat.ts](../../../app/src/server/providers/kiro-chat.ts) |
+| M15 | 可选deferred轮询及取消 | 独立模型网关边界 | partial | `model-gateway` | 现有复制路由包装streamDeferred/cancelDeferred，不证明已有宿主延期推理工作流；统一端口需独立能力声明，当前request observer未覆盖。 | [server/model-copies.ts](../../../app/src/server/model-copies.ts)、[server/provider-request-observer.ts](../../../app/src/server/provider-request-observer.ts) |
+| M16 | provider序列化、签名及终结协议 | 独立模型网关边界 | partial | `model-gateway` | 系统/工具/图片/签名回放留provider适配；Kiro EOF本地政策和Qoder末尾usage等待窗不冒充上游终结契约已实测。 | [server/providers/kiro-chat-protocol.ts](../../../app/src/server/providers/kiro-chat-protocol.ts)、[server/providers/kiro-thinking-stream.ts](../../../app/src/server/providers/kiro-thinking-stream.ts)、[server/providers/kiro-eventstream.ts](../../../app/src/server/providers/kiro-eventstream.ts)、[server/providers/kiro-tool-input.ts](../../../app/src/server/providers/kiro-tool-input.ts)、[server/providers/kiro-profile.ts](../../../app/src/server/providers/kiro-profile.ts)、[server/providers/qoder-client.ts](../../../app/src/server/providers/qoder-client.ts)、[server/providers/qoder-protocol.ts](../../../app/src/server/providers/qoder-protocol.ts)、[server/providers/qoder-sse.ts](../../../app/src/server/providers/qoder-sse.ts) |
+| M17 | 结构化模型失败和重试安全 | 独立模型网关边界 | live | `model-gateway` | 分类stage/category/partial/evidence并脱敏；provider/transport重试与agent重试分开，部分输出不可盲重放。 | [server/providers/kiro-failure.ts](../../../app/src/server/providers/kiro-failure.ts)、[server/providers/codebuddy-response.ts](../../../app/src/server/providers/codebuddy-response.ts)、[server/providers/qoder-protocol.ts](../../../app/src/server/providers/qoder-protocol.ts) |
+
+## U. 请求观测、用量与费用（10）
+
+| ID | 能力 | 主责 | 现状 | 建议接口族 | 关键语义 | 源码证据 |
+| --- | --- | --- | --- | --- | --- | --- |
+| U01 | 请求选择及原生usage解码 | 原生存档适配边界 | live | `usage-ledger` | 实际request选择与后改菜单分开；原生分支记录和累计usage不能互换。 | [server/request-usage.ts](../../../app/src/server/request-usage.ts)、[server/request-selection.ts](../../../app/src/server/request-selection.ts)、[server/agent-session-usage.ts](../../../app/src/server/agent-session-usage.ts) |
+| U02 | token类别、provider成本及宿主估价 | Axiom宿主保留 | live | `usage-ledger` | input/output/cache读写、provider cost与估价各自保留来源；未知不写0，不将摘要重放重复计费。 | [server/usage-cost.ts](../../../app/src/server/usage-cost.ts)、[server/costs.ts](../../../app/src/server/costs.ts)、[server/public-model-pricing.ts](../../../app/src/server/public-model-pricing.ts) |
+| U03 | 当前上下文占用及测量来源 | 原生存档适配边界 | live | `context-meter` | 原生projection/usage变更后失效；Kiro partial/zero应估计而非旧值回退，账单不是occupancy。 | [server/context-usage.ts](../../../app/src/server/context-usage.ts)、[shared/context-usage.ts](../../../app/src/shared/context-usage.ts) |
+| U04 | 原生与后台压缩逐请求费用 | 原生存档适配边界 | partial | `usage-ledger` | 失败/取消/未应用也可收费；split摘要逐物理请求定价；内部transport retry等并非已全覆盖/crash-atomic。 | [server/native-compaction-usage.ts](../../../app/src/server/native-compaction-usage.ts)、[server/kiro-compaction-usage.ts](../../../app/src/server/kiro-compaction-usage.ts)、[server/compression-worker.ts](../../../app/src/server/compression-worker.ts) |
+| U05 | 请求开始结束及并发统计 | 独立模型网关边界 | partial | `request-observer` | 现有仅provider级start/end及http/call精度计数，不含完整模型选择、路由或终结原因；结束不证明上游终结，内部重试未全覆盖。 | [server/provider-request-observer.ts](../../../app/src/server/provider-request-observer.ts)、[server/provider-request-statistics.ts](../../../app/src/server/provider-request-statistics.ts)、[shared/provider-requests.ts](../../../app/src/shared/provider-requests.ts) |
+| U06 | 首字和分内容延迟遥测 | 独立模型网关边界 | live | `request-observer` | text/thinking/toolcall首内容时间与总耗时分开；不可观测时未知，遥测失败不阻断推理。 | [server/model-latency.ts](../../../app/src/server/model-latency.ts)、[server/latency.ts](../../../app/src/server/latency.ts) |
+| U07 | 取消后迟到usage和原账本对账 | Axiom宿主保留 | partial | `usage-ledger` | 已有后台unknown占位→同usageId实测upsert及取消后接收billing；跨adapter修订API仍需定义；强杀后远端费用可未知，不重激活run或重复计同消费。 | [server/memory-runner.ts](../../../app/src/server/memory-runner.ts)、[server/costs.ts](../../../app/src/server/costs.ts)、[server/model-usage-ledger.ts](../../../app/src/server/model-usage-ledger.ts) |
+| U08 | 账本汇总、主子隔离及原生扫描 | Axiom宿主保留 | live | `usage-ledger` | 主报告可含family，子报告仅自己；当前账本/sidecar仍解析Pi JSONL/usage，即便没Pi import也需codec抽象。 | [server/costs.ts](../../../app/src/server/costs.ts)、[server/model-usage-ledger.ts](../../../app/src/server/model-usage-ledger.ts)、[server/model-usage-statistics.ts](../../../app/src/server/model-usage-statistics.ts) |
+| U09 | 后台查询sidecar及物化缓存 | Axiom宿主保留 | live | `usage-query-service` | 统计读取与模型执行分离；结果preparing/error不能冒充0，失败不退化主进程同步扫档。 | [server/usage-sidecar.ts](../../../app/src/server/usage-sidecar.ts)、[server/usage-sidecar-engine.ts](../../../app/src/server/usage-sidecar-engine.ts)、[server/usage-materialized-store.ts](../../../app/src/server/usage-materialized-store.ts)、[server/usage-analytics.ts](../../../app/src/server/usage-analytics.ts)、[server/usage-query-cache.ts](../../../app/src/server/usage-query-cache.ts) |
+| U10 | 计费完整性与结算来源声明 | Axiom宿主保留 | partial | `usage-ledger` | request/activity/aggregate和confirmed/unknown需明确；不依据UI累计宣称provider精确总账。 | [server/costs.ts](../../../app/src/server/costs.ts)、[server/request-usage.ts](../../../app/src/server/request-usage.ts)、[server/native-compaction-usage.ts](../../../app/src/server/native-compaction-usage.ts)、[shared/costs.ts](../../../app/src/shared/costs.ts) |
+
+## J. 任务、记忆与标题业务（10）
+
+| ID | 能力 | 主责 | 现状 | 建议接口族 | 关键语义 | 源码证据 |
+| --- | --- | --- | --- | --- | --- | --- |
+| J01 | 委派、持久任务关系和FIFO调度 | Axiom宿主保留 | live | `task-service` | Axiom独立子会话/同一执行池；显式背景而不继承主历史，不切换到runtime原生自主委派。 | [server/tasks.ts](../../../app/src/server/tasks.ts)、[server/tasks/commands.ts](../../../app/src/server/tasks/commands.ts)、[server/tasks/records.ts](../../../app/src/server/tasks/records.ts)、[server/tasks/scheduler.ts](../../../app/src/server/tasks/scheduler.ts) |
+| J02 | 任务追加、取消和精确结果读取 | Axiom宿主保留 | live | `task-service` | 4宿主任务工具语义固定；read_result必须taskId+resultId，不用最新文本或进度轮询替代。 | [server/task-tools.ts](../../../app/src/server/task-tools.ts)、[server/tasks/commands.ts](../../../app/src/server/tasks/commands.ts)、[server/tasks/scheduler.ts](../../../app/src/server/tasks/scheduler.ts) |
+| J03 | 工作预算、摘要期限和恢复时钟 | Axiom宿主保留 | live | `task-service` | 宿主执行预算和工作/摘要转换；原先截止与新要求刷新规则分开，硬期限不能靠模型自觉。 | [server/tasks/scheduler.ts](../../../app/src/server/tasks/scheduler.ts)、[server/task-budget.ts](../../../app/src/server/task-budget.ts) |
+| J04 | 不可变结果和先存后通知 | Axiom宿主保留 | live | `task-service` | 完成/partial/system分开；先持久result再通知；原生最终助手段只作输入证据，不替代任务结果事实源。 | [server/tasks/delivery.ts](../../../app/src/server/tasks/delivery.ts)、[server/tasks/records.ts](../../../app/src/server/tasks/records.ts) |
+| J05 | task/model工具输出与UI详情投影 | Axiom宿主保留 | live | `task-service` | 模型只得短refs/status或read_result报告，宿主details保留完整记录；2000字符是政策不是存储截断。 | [server/task-output.ts](../../../app/src/server/task-output.ts)、[shared/task-output.ts](../../../app/src/shared/task-output.ts)、[server/tasks/delivery.ts](../../../app/src/server/tasks/delivery.ts) |
+| J06 | 受控记忆查询及来源校验 | Axiom宿主保留 | live | `memory-service` | 查询以当前授权目录/引用快照定位并读必要详情；不是任意文件工具或将目录当答案。 | [server/memory-tool.ts](../../../app/src/server/memory-tool.ts)、[server/memory-pipeline.ts](../../../app/src/server/memory-pipeline.ts)、[server/memory-runner.ts](../../../app/src/server/memory-runner.ts) |
+| J07 | 记忆组织及发布revision | Axiom宿主保留 | live | `memory-service` | 组织算法、来源revision/实际路径、claim及发布校验留宿主；不要搬入底层agent loop。 | [server/memory-pipeline.ts](../../../app/src/server/memory-pipeline.ts)、[server/memory-tree.ts](../../../app/src/server/memory-tree.ts)、[server/memory-storage.ts](../../../app/src/server/memory-storage.ts) |
+| J08 | 记忆注入、读取见证和压缩续接 | Axiom宿主保留 | live | `memory-service` | 原生custom元数据由archive adapter编解码；可选资料未读不可冒称恢复，也不自动扩大授权。 | [server/memory-topics.ts](../../../app/src/server/memory-topics.ts)、[server/memory-recovery.ts](../../../app/src/server/memory-recovery.ts)、[server/compression-memory.ts](../../../app/src/server/compression-memory.ts) |
+| J09 | 后台标题作业及显示标题分离 | Axiom宿主保留 | live | `title-service` | best-effort独立模型作业不改主历史；纯显示strip与持久标题策略不同，不依附完整agent会话。 | [server/session-titles.ts](../../../app/src/server/session-titles.ts)、[server/session-title.ts](../../../app/src/server/session-title.ts) |
+| J10 | 停止、冻结及恢复跨作业协调 | Axiom宿主保留 | live | `execution-host` | 主会话stop要封启动epoch、标题/记忆/重载/压缩及通知续跑；显示terminal不代替物理资源关闭。 | [server/agents.ts](../../../app/src/server/agents.ts)、[server/tasks.ts](../../../app/src/server/tasks.ts)、[server/service-recovery.ts](../../../app/src/server/service-recovery.ts) |
+
+## H. 上层API与UI契约（8）
+
+| ID | 能力 | 主责 | 现状 | 建议接口族 | 关键语义 | 源码证据 |
+| --- | --- | --- | --- | --- | --- | --- |
+| H01 | scope授权及幂等命令回执 | Axiom宿主保留 | live | `command-service` | request commit、unknown与request.get分开；断线/超时不自动重发；客户端路径/缓存不授予权限。 | [server/storage.ts](../../../app/src/server/storage.ts)、[server/index.ts](../../../app/src/server/index.ts)、[client/transport.ts](../../../app/src/client/transport.ts) |
+| H02 | 原生档与业务目录归档软删分离 | Axiom宿主保留 | live | `catalog-service` | 工作区archived/会话deletedAt是SQLite业务状态，不删native档；列表恢复不是runtime.resume。 | [server/storage.ts](../../../app/src/server/storage.ts)、[server/session-list.ts](../../../app/src/server/session-list.ts) |
+| H03 | 会话树分页、计数及未读水位 | Axiom宿主保留 | live | `catalog-service` | revision/stream cursor、resultVersion/readVersion/contextRevision不互换；unknown count不为0。 | [server/session-list.ts](../../../app/src/server/session-list.ts)、[shared/session-list.ts](../../../app/src/shared/session-list.ts)、[shared/session-attention.ts](../../../app/src/shared/session-attention.ts) |
+| H04 | 最终交付及显示分组 | Axiom宿主保留 | live | `view-service` | 现有显示交付按final_answer/完成/无工具无错误判定，phase可能由stop兼容推断而非原生事实；中性DTO需标推断来源；工具简称不改路由。 | [server/transcript.ts](../../../app/src/server/transcript.ts)、[shared/thread-layout.ts](../../../app/src/shared/thread-layout.ts)、[shared/history-layout.ts](../../../app/src/shared/history-layout.ts)、[shared/tool-summary.ts](../../../app/src/shared/tool-summary.ts)、[shared/agent.ts](../../../app/src/shared/agent.ts) |
+| H05 | wire订阅权威、重连及快照 | Axiom宿主保留 | live | `view-service` | streamId/wire seq/connection generation/subscription lease与runtime seq不同；旧连接不可授权新操作。 | [client/transport.ts](../../../app/src/client/transport.ts)、[server/index.ts](../../../app/src/server/index.ts)、[server/outgoing.ts](../../../app/src/server/outgoing.ts) |
+| H06 | 读取取消及双层背压 | Axiom宿主保留 | partial | `view-service` | adapter emit与WS背压分别治理；现有大合法帧不是总RSS上限，读取取消路径各异且同步解析不可中断。 | [server/outgoing.ts](../../../app/src/server/outgoing.ts)、[server/index.ts](../../../app/src/server/index.ts)、[client/transport.ts](../../../app/src/client/transport.ts) |
+| H07 | 文件、预览及OS旁路服务 | Axiom宿主保留 | live | `file-service` | 保持独立权限/同源/读准入；替换AgentRuntime不应强制这些服务启动agent或失去只读能力。 | [server/index.ts](../../../app/src/server/index.ts)、[server/files.ts](../../../app/src/server/files.ts)、[server/file-edit.ts](../../../app/src/server/file-edit.ts) |
+| H08 | UI能力门禁和结构化unsupported | Axiom宿主保留 | new | `runtime-registry` | 资源选中不是runtime支持证明；需按能力而非runtimeId特判门禁，失效后拒绝，不返回空成功。 | [server/capabilities.ts](../../../app/src/server/capabilities.ts)、[shared/capabilities.ts](../../../app/src/shared/capabilities.ts)、[client/transport.ts](../../../app/src/client/transport.ts) |

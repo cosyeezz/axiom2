@@ -10,7 +10,8 @@ const usd = (value: number) => value !== 0 && (value < .00005 || value >= 1e6) ?
   : `$${value.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`;
 
 /** Explicitly separate local extrapolation from the read-only official quota and absolute-Token valuation. */
-export function ProviderQuotaEstimate({ usage, reference, revision, enabled = true }: { usage: ProviderUsage; reference: QuotaReference; revision: number; enabled?: boolean }) {
+/** compact: account-card variant. Explanations move into tooltips; numbers and their honest “—” stay visible. */
+export function ProviderQuotaEstimate({ usage, reference, revision, enabled = true, compact = false }: { usage: ProviderUsage; reference: QuotaReference; revision: number; enabled?: boolean; compact?: boolean }) {
   const { connected, generation } = useConnectionState();
   const [visible, setVisible] = useState(() => document.visibilityState === "visible"), [clock, setClock] = useState(Date.now);
   const [result, setResult] = useState<{ key: string; samples: Sample[]; busy: boolean; error?: string }>();
@@ -81,13 +82,19 @@ export function ProviderQuotaEstimate({ usage, reference, revision, enabled = tr
   const current = result?.key === key ? result : undefined;
   const unavailable = reference.limitation ?? (usage.stale || !connected ? "官方额度为旧数据，暂不外推" : usage.status !== "ready" ? "官方额度暂不可用"
     : !windows.length ? "尚无可匹配的额度窗口" : "窗口时间或已用比例不足，暂不能外推");
-  return <section className="provider-quota-estimate" aria-label="额度金额预估" aria-busy={current?.busy || undefined}>
-    <div className="provider-quota-heading"><strong>{reference.title || "预估总可用金额"}</strong><span>USD · 本机样本估算</span></div>
+  const note = reference.scopeNote ?? `按本机 ${reference.label} 记录外推，非官方余额；各窗口不可相加。未核对历史换号及其他设备消费。`;
+  return <section className="provider-quota-estimate" aria-label="额度金额预估" aria-busy={current?.busy || undefined} data-compact={compact || undefined} title={compact ? `USD · 本机样本估算。${note}` : undefined}>
+    <div className="provider-quota-heading"><strong>{reference.title || "预估总可用金额"}</strong>{!compact && <span>USD · 本机样本估算</span>}</div>
     <div className="provider-quota-windows" role="status" aria-live="polite">
       {periods.length ? periods.map(({ window, period }) => {
         const sample = period && connected ? current?.samples.find(sample => sample.id === window.id) : undefined, estimate = sample?.estimate;
         const reason = !period || !connected ? unavailable : sample?.reason ?? current?.error ?? "正在核对本机样本…";
         const title = estimate && period ? `样本：${new Date(period.from).toLocaleString()} — ${new Date(period.to).toLocaleString()}；${estimate.records} 条账务，${usd(estimate.used)}；100% = ${usd(estimate.used)} ÷ ${window.usedPercent}%；剩余 = 总额 × ${100 - window.usedPercent!}%；基于历史已计价费用，含已有参考价估算，不代表官方余额。` : reason;
+        if (compact) return <div className="provider-quota-window" key={window.id} title={estimate ? title : reason}>
+          <span className="provider-quota-label">{window.label.replace(/已用$/, "")}</span>
+          <span>剩余 <strong className="num">{estimate ? `约 ${usd(estimate.remaining)}` : "—"}</strong></span>
+          <span>总额 <strong className="num">{estimate ? `约 ${usd(estimate.total)}` : "—"}</strong></span>
+        </div>;
         return <div className="provider-quota-window" key={window.id} title={title}>
           <span className="provider-quota-label">{window.label.replace(/已用$/, "")}</span>
           <span>100% 总金额 <strong className="num">{estimate ? `约 ${usd(estimate.total)}` : "—"}</strong></span>
@@ -96,6 +103,6 @@ export function ProviderQuotaEstimate({ usage, reference, revision, enabled = tr
         </div>;
       }) : <p className="provider-quota-empty">100% 总金额：— · {unavailable}</p>}
     </div>
-    <p className="provider-quota-note">{reference.scopeNote ?? `按本机 ${reference.label} 记录外推，非官方余额；各窗口不可相加。未核对历史换号及其他设备消费。`}</p>
+    {!compact && <p className="provider-quota-note">{note}</p>}
   </section>;
 }

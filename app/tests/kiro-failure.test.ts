@@ -39,6 +39,36 @@ test("failure categories never infer monthly quota or use arbitrary message/requ
   assert.equal(classifyKiroFailure({ stage: "http", status: 503, body: { state: "invalid" } }).evidence, "http-status");
 });
 
+test("observed Responses validation tokens classify safely without guessing fields or overflow", () => {
+  for (const stage of ["http", "stream"] as const) for (const code of ["invalid_request", "invalid_value"] as const) {
+    const info = classifyKiroFailure({ stage, status: stage === "http" ? 400 : 200,
+      body: { state: "json", data: { error: { code, message: "PRIVATE rate limit 503 context length exceeded", param: "PRIVATE_FIELD" } } } });
+    assert.equal(info.category, "validation"); assert.equal(info.evidence, "code"); assert.equal(info.code, code); assert.equal(info.conflict, false);
+    assert.equal(info.observedValidationReason, undefined);
+    assert.match(kiroFailureMessage(info, false), /请求参数验证失败/);
+    assert.match(kiroFailureMessage(info, false), /未自动重放/);
+    assert.doesNotMatch(JSON.stringify(info) + kiroFailureMessage(info, false), /PRIVATE|503|rate limit|context length exceeded/);
+    assert.equal(kiroFailureMessage(info, true), kiroPartialFailure);
+  }
+  const actualShape = { state: "json" as const, data: { error: { type: "invalid_request", code: "invalid_value", message: "PRIVATE must", param: "PRIVATE_FIELD" } } };
+  const info = classifyKiroFailure({ stage: "http", status: 400, body: actualShape });
+  assert.equal(info.category, "validation"); assert.equal(info.conflict, false); assert.equal(info.evidence, "code");
+  for (const status of [401, 429, 500, 503]) {
+    const conflicting = classifyKiroFailure({ stage: "http", status, body: actualShape });
+    assert.equal(conflicting.category, "unknown"); assert.equal(conflicting.conflict, true);
+  }
+  for (const code of ["ThrottlingException", "ServiceQuotaExceededException", "ContextLengthExceededException", "AccessDeniedException"]) {
+    const conflicting = classifyKiroFailure({ stage: "http", status: 400, codes: [code], body: actualShape });
+    assert.equal(conflicting.category, "unknown"); assert.equal(conflicting.conflict, true);
+  }
+  for (const code of ["invalid_value\n", " invalid_request", "INVALID_REQUEST", "invalid_future", "invalid_request_error"]) {
+    assert.equal(classifyKiroFailure({ stage: "http", status: 400, codes: [code] }).category, "unknown");
+  }
+  for (const body of [{ state: "invalid" as const, data: actualShape.data }, { state: "json" as const, data: { message: "invalid_request invalid_value PRIVATE" } }]) {
+    assert.equal(classifyKiroFailure({ stage: "http", status: 400, body }).category, "unknown");
+  }
+});
+
 test("strict category conflicts survive overflow signature refinement", () => {
   const info = classifyKiroFailure({ stage: "http", status: 400, codes: ["ContextLengthExceededException"], body: errorBody("ValidationException", "Input is too long for requested model.") });
   assert.equal(info.category, "unknown"); assert.equal(info.conflict, true);
@@ -171,6 +201,45 @@ async function fixture(t: TestContext, options: { auto?: boolean; cancelHook?: b
     verifyFresh(invocations = calls) { assert.equal(tickets.length, invocations); assert.equal(new Set(tickets).size, tickets.length); },
     reopened() { return SessionManager.open(manager.getSessionFile()!); } };
 }
+
+test("real AgentSession persists explicit Responses validation without retry, compaction or tool execution", async t => {
+  const f = await fixture(t);
+  f.install(() => new Response(JSON.stringify({ error: { type: "invalid_request", code: "invalid_value", param: "input.0.call_id", message: "PRIVATE must not leak" } }), { status: 400 }));
+  await f.session.prompt("OWNED_REQUEST"); f.verifyFresh(1);
+  assert.equal(f.calls, 1); assert.equal(f.executions, 0);
+  assert.ok(!f.events.includes("compaction_start")); assert.ok(!f.events.includes("auto_retry_start"));
+  const result = f.results.at(-1)!;
+  assert.equal(result.stopReason, "error"); assert.match(result.errorMessage!, /请求参数验证失败/);
+  assert.equal(result.diagnostics?.find(item => item.type === "kiro-failure")?.details?.category, "validation");
+  assert.deepEqual(projectKiroFailure(result), { stage: "http", status: 400, category: "validation", partial: false });
+  const persisted = f.reopened().getEntries().filter(entry => entry.type === "message").map(entry => entry.message as AssistantMessage).find(message => message.stopReason === "error")!;
+  assert.deepEqual(projectKiroFailure(persisted), projectKiroFailure(result));
+  assert.doesNotMatch(JSON.stringify(result.diagnostics) + result.errorMessage, /PRIVATE/);
+  assert.doesNotMatch(result.errorMessage!, /input\.0\.call_id/);
+});
+
+test("real AgentSession persists safe HTTP400 observations without replay, compaction or tool execution", async t => {
+  const f = await fixture(t);
+  f.install(() => new Response(JSON.stringify({ error: { type: "invalid_request_error", param: "tools[9].parameters.anyOf", message: "PRIVATE invalid tool schema anyOf" } }), { status: 400 }));
+  await f.session.prompt("OWNED_REQUEST");
+  assert.equal(f.calls, 1); assert.equal(f.executions, 0);
+  assert.ok(!f.events.includes("compaction_start")); assert.ok(!f.events.includes("auto_retry_start"));
+  const result = f.results.at(-1)!;
+  const observation = result.diagnostics?.find(item => item.type === "kiro-http400-observation");
+  assert.ok(observation); assert.doesNotMatch(JSON.stringify(observation), /PRIVATE/);
+  assert.equal(result.diagnostics?.find(item => item.type === "kiro-failure")?.details?.category, "unknown");
+  const reopened = f.reopened().getEntries().filter(entry => entry.type === "message").map(entry => entry.message as AssistantMessage);
+  const persisted = reopened.flatMap(message => message.diagnostics ?? []).find(item => item.type === "kiro-http400-observation");
+  assert.deepEqual(persisted, observation); assert.doesNotMatch(JSON.stringify(persisted), /PRIVATE/);
+});
+
+test("non-400 JSON failures do not produce HTTP400 observations", async t => {
+  const f = await fixture(t);
+  f.install(() => new Response(JSON.stringify({ message: "Invalid tool schema." }), { status: 422 }));
+  await f.session.prompt("OWNED_REQUEST");
+  assert.equal(f.calls, 1); assert.equal(f.executions, 0);
+  assert.ok(!f.results.at(-1)!.diagnostics?.some(item => item.type === "kiro-http400-observation"));
+});
 
 test("real AgentSession applies the session retry budget to Kiro without provider multiplication", async t => {
   const defaults = SettingsManager.inMemory().getRetrySettings();
@@ -351,7 +420,7 @@ test("real AgentSession persists fixed-token observations without new retry, com
     assert.equal(f.calls, 1); assert.equal(f.executions, 0);
     assert.equal(f.events.includes("auto_retry_start") || f.events.includes("compaction_start"), false);
     const result = f.results[0]; assert.equal(result.stopReason, "error");
-    if (variant === "http") assert.match(result.errorMessage!, /Kiro 请求验证失败/);
+    if (variant === "http") assert.match(result.errorMessage!, /Kiro 请求参数验证失败/);
     else assert.equal(result.errorMessage, kiroPartialFailure);
     assert.doesNotMatch(result.errorMessage!, /PRIVATE|PROMPT_TOO_LONG|rate.?limit|context.length.exceeded/i);
     const expected = { stage: variant === "http" ? "http" : "stream", status: variant === "http" ? 400 : 200,

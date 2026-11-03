@@ -94,6 +94,10 @@ export class Tasks {
     return { revision };
   }
   invalidateWindows(changed: string) { this.windows.changed(changed); }
+  windowNeedsRefresh(key: string, changed: string) {
+    const [, workspaceId, sessionId] = key.split(":");
+    return this.windows.shouldInvalidate({ workspaceId, sessionId }, changed.startsWith("tasks:"));
+  }
   child(scope: Scope) {
     return this.records.child(scope);
   }
@@ -176,7 +180,7 @@ export class Tasks {
     const failed = outcomes.find((o) => o.status === "rejected");
     if (failed?.status === "rejected") throw failed.reason;
   }
-  async stopProviders(providers: string[], confirmed: boolean) {
+  async stopProviders(providers: string[], confirmed: boolean, checkOnly = false) {
     const recoveries = this.store.db.prepare(`SELECT r.sessionId,s.workspaceId,s.title,json_extract(a.selection,'$.provider') AS provider
       FROM service_recoveries r JOIN sessions s ON s.id=r.sessionId
       JOIN agent_sessions a ON a.sessionId=r.sessionId`).all()
@@ -200,6 +204,7 @@ export class Tasks {
         "ACTIVE_RUNS_CONFIRMATION_REQUIRED",
         `需先停止受影响会话／排队子任务：${[...affected.map((s) => s.title), ...queued.map((t) => t.description.slice(0, 120))].join("、")}。确认后才退出登录。`,
       );
+    if (checkOnly) return;
     // A confirmed provider stop also revokes interrupted/non-live intentions.
     // Otherwise logging in again could revive work the user explicitly stopped.
     for (const recovery of recoveries) {

@@ -1,0 +1,42 @@
+# Narrow ClientRequest observation — design01
+
+Design only; no real observation installation or request. Keeps [CONTRACT](CONTRACT.md) and fake-only components unchanged. Aim at the smallest supported send boundary, not an unbounded general HTTP recorder.
+
+## Located shipped call site
+
+Frozen public SDK @kiro/agent0.66.70, acp-server.js15025207B/SHA bf79b2b0fa7ae68653abdf117b4a4dbf064fec6fa7ca49500115f3f2f67581b1. Existing [transport report](../v3-kas-review-01/transport/REPORT.md) and [window01](../v3-kas-review-01/transport/window-01.txt), range3171590..3190521/L2162+, were read, not executed. `M8a(t,e)` dispatches a truthy string to `t.end(e)`; a Buffer goes to end(e) except empty Buffer calls end(); stream pipe and other typed/body forms also exist. `D1n.handle` uses node:https.request or lazily captured node:http.request; user callback/response/error/timeout listeners are already installed by the SDK. This locates a candidate narrow boundary. It does NOT prove runtime branch/body type, catalog path, natural preload, default encoding of the embedded Node, or sent request.
+
+## First wrapper scope decision
+
+Implement only the **single primitive UTF8 end-string** path, plus bounded header-cache shape. Do not implement full body reconstruction yet. Explicitly mark Buffer/Uint8Array/stream/write-before-end/reentrant-same-request/end-repeat/unsupported encoding as unknown rather than copying mutable values or interpreting their getters. Missing end is incomplete, not empty payload. End() without body may be represented as no-string-body/unknown; it must not pass as a captured empty real payload. A supplied primitive empty string remains a provided-value observation, never full request equality.
+
+Use narrowly installed own overrides on ordinary `http.ClientRequest.prototype.write/end`, saving whether each method was originally inherited or own, and original property descriptors. This avoids relying solely on exported request/get factory identities or their previously captured aliases. It does not catch earlier captured end/write functions, own per-instance methods, custom transports, proxies or later prototype replacement. Installation before natural application activity and prototype usage remain separate runtime obligations. No claimed total HTTP coverage merely because observedCount>0.
+
+Default limits fixed by module: at most4 tracked request records; payload<=256KiB per record and aggregate<=512KiB; header cache<=16KiB; bounded call attempts<=128. No unbounded pending list or per-input logging. Request ordinals are observer-owned local numbers only, not remote IDs. No names, lengths, URLs, token values or digests in public snapshot. Use WeakMap association plus bounded array of internal records. Closing/discarding releases references but cannot attest physical heap erasure.
+
+## API transparency control flow
+
+1. Enter with `this` and untouched arguments. Do not access request options, caller getters, callbacks or body objects. Any supported-type tests use primitive type/arity checks only.
+2. In a bounded try/catch, reserve a call and any prospective immutable-string retention before the original call. Reserve aggregate pending+committed capacity. Failure records a fixed sticky evidence fault but cannot prevent the original call.
+3. Invoke the original exactly once via cached Reflect.apply(original,this,arguments). No wrapper callback, extra argument, substitution, Promise, timer or response/error/drain listener. Original synchronous throw is rethrown identically, including undefined/null/primitives; never inspect it. `finally` observation must catch its own errors and cannot replace original throw/return.
+4. After return, observe only a verified own **data descriptor** of `_header` on an ordinary supported request. Do not evaluate a getter or enumerate properties. `Object.getOwnPropertyDescriptor` can invoke a Proxy trap, so arbitrary Proxy receivers are outside the supported HTTP-object contract; a separate generic pass-through barrier can refuse metadata for unknown receiver types. No claim that descriptor access is universally inert.
+5. Preserve identical original return (false backpressure/end receiver), including after observation cap/fault. No abort/destroy/retry/end-after-fault. Committed+pending counters release in finally, including nested calls. Reentrant same-request body observation is unsupported/sticky, not guessed ordering. A write marks that record unsupported for body capture while original write proceeds unchanged.
+6. No raw exception object, message, stack, argument list, raw header cache or payload leaves the private record store. Header projected by the separately tested pure helper only. Async failures are not swallowed: no observer error listener.
+
+Function identity/toString/stack/timing cannot remain identical after wrapping and are explicitly excluded. Preserve configurable/writable/enumerable state and name/length where feasible; failures to install must rollback exactly. Do not replace a property later owned by someone else during restoration: report conflict/unknown and leave it untouched. Restoring inherited methods deletes only the observer's own shadow. Closing is monotonic: late calls through saved wrappers still invoke originals, but permanently invalidate further evidence; no post-close candidate becomes valid.
+
+## Output and memory comparison
+
+Public snapshot contains only closed schema, fixed install/active/closed/conflict state, bounded call/record counts, fixed failure reason and per-record header projection/body status enums. `requestCompletenessProved`, `wireReceiptProved`, `naturalInstallationProved` remain false. Zero records, pending calls, dropped/capped observations, unsupported body and late activity cannot pass. The wrapper does not declare parity.
+
+Do not add raw-data export APIs or user-provided sink callbacks. Future paired comparison must enter through a narrow trusted in-memory channel that checks boundary/version/record pairing; simply comparing two strings supplied by arbitrary callers is not capture completeness. A cross-process channel for independent official and Axiom processes is still missing, so this first wrapper must not claim complete-payload equality. Do not persist HMAC/hash substitutes. A fixed body-present observation without a pairing channel is useful boundary evidence only.
+
+For now retaining real payloads before a channel exists adds risk with no usable comparison. **Implementation phase01 therefore projects supported string/type/cap predicates and immediately releases the end argument; it does not retain raw bodies across calls.** Reserve transient UTF8 sizing work; do not allocate raw-byte copies. Any later memory-store/channel extension needs its own new case/limits and affected revalidation. Auth shape still says scope unknown. Header descriptor snapshot is generated-header-cache evidence, not socket write/server receipt.
+
+## New tests before any real use
+
+A. Generic barrier unit fixtures: originalthis/arity/references/callback identity, returnfalse/receiver/value, original throw identity including primitives, observer before/after exceptions, nested calls and pending cap, no double invocation. This validates the control-flow unit, not HTTP adaptation.
+B. New ordinary HTTP fixture (own loopback only, no auth/model/SDK): control versus observed end-string and unsupported Buffer/write paths, server-received bytes unchanged, callback/return/error/drain counts and no added response listeners, GET alias/prototype route, empty/UTF8/default encoding/explicitutf8/unsupportedencoding, restoration/inherited descriptors/install conflicts. Synthetic canaries only; existing fake02 remains historical, not rerun or retagged.
+C. New output schema/terminal consumer: exact keys/types/enum bounds, duplicate/nonfinite/empty/pending/late/conflict rejection. Owner checks held exit/EOF independently. Same projections never imply same values; mutable body negative remains unknown even if server receives it successfully.
+
+Phase01 is not an excuse to run real auth before API/schema/entry readiness. After synthetic validation, verify embedded runtime/prototype/install applicability and define one natural non-model entry. No credential-store reads, official extracted-code execution, global network/security changes or reopening case02/03/M3. Final official/Axiom real request comparison remains unfulfilled until actual samples and usable comparison channel exist.

@@ -1,0 +1,15 @@
+# Frozen 2.35.1 selector/resource review — incomplete default-path proof
+
+Scope: old thin SHA256 558b27343a899ea123db9f9edb52c6bb2f65d712fe4c137919feab490bf620f7, actually rehashed successfully after reads. Current installed target differs (size 413051920); its 19 constant windows are INVALID for this analysis. constants.json preserves rejected observations; use thin-constants.json only. No claim about current installed version.
+
+One LLDB execution, offline old thin only, no launch/attach. Full argv/exit/SHA in command.json; exit0, 5.828s,138716 stdout bytes. Function range 0x10163a4f0..0x10163be40=6480 bytes. CPU child limit30s. No callee disassembly. 32 total constant windows of128 bytes (19 invalid live +13 old thin),4096 bytes. No further constants permitted this task.
+
+New asm.txt lines22-40: PC0x10163a534 ADRP+ADD=>0x1076761a4, length21, env::_var_os at0x10163a544 => KIRO_TEST_TUI_JS_PATH. Absent sentinel check0x10163a550..554 goes0x10163a580; present value from_utf8 PC0x10163a568, valid branch0x10163a570=>0x10163a934. Invalid UTF8 drops to fallback. This is a TUI JS override, NOT a proved native-server override.
+
+Fallback path joins: PC0x10163a598 bun(length3);0x10163a5e8 bun.sha256(length10);0x10163a64c tui.js(length6);0x10163a6b0 tui.js.sha256(length13);0x10163ae8c bunfig.toml(length11). These show Bun runtime PLUS separate JS asset, not proof __BUN contains KAS sender or proof one default engine.
+
+Resource setup0x10163b0ec: Bun frame VA0x10767623f, slice-relative124215871, length0x12391e8; SHA literal0x1088af427 length64. Helper call0x10163b130=>0x101636c74. Second resource0x10163b398: VA0x1088af467,slice-relative143324263,length0x2270b7; SHA literal0x108ad651e length64; helper call0x10163b3d8=>0x101636c74. Both start zstd by bounded thin-window bytes; second resource was NOT decompressed here. Preserve next hypothesis: separate tui.js compressed resource, not standalone sender identification.
+
+Original frozen v3-resource-disasm-01/lldb-asm.txt:0x101631fe8..0x101632004 node override KIRO_KAS_NODE_PATH length18;0x10163214c..15c server override KIRO_KAS_SERVER_PATH length20. Independent KAS archive and node resource setup previously confirmed. These are resolver paths; neither inspected resolver establishes outer launch default or natural Command args/environment. No native override key proven. Frozen v3-locate-02/locations.json line1122 contains --experimental-wasm-modules,--transport=ws,--auth=acp-callback,ACP_WS_PORT,KIRO_CUSTOM_USER_AGENT,KIRO_TELEMETRY_IS_INTERNAL_AMAZON as literals ONLY, not observed Command configuration.
+
+Conclusion: extracted @kiro/agent server path exists statically; Bun+TUI assets also exist. Default/effective selection and process boundaries remain UNKNOWN. Node preload cannot be assumed appropriate. Next authorized analysis should locate outer caller choosing resolver/Command and inspect narrow static flow, bound to old thin or newly rebound installed artifact, never mix identities. No target/JS execution, network, HOME, secrets, or repo writes.

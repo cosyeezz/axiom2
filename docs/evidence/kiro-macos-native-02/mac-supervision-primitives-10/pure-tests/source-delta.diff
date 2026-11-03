@@ -1,0 +1,17 @@
+--- /Volumes/D_Work/axiom2/docs/evidence/kiro-macos-native-02/mac-supervision-primitives-09/failed-reports/source.py
++++ /Volumes/D_Work/axiom2/docs/evidence/kiro-macos-native-02/mac-supervision-primitives-10/locate_bootout.py
+@@ -155,11 +155,13 @@
+         word = struct.unpack_from('<I', code, off)[0]
+         pc = base + off
+         immediate = signed(((word >> 5) & 0x7ffff) << 2 | (word >> 29) & 3, 21)
++        if word & 31 == 31:
++            continue  # ADR/ADRP discard XZR writes; ADD register31 reads SP, not that result.
+         if word & 0x9f000000 == 0x10000000 and pc + immediate == target:
+             refs.append({'va': pc, 'kind': 'ADR'})
+         elif word & 0x9f000000 == 0x90000000 and off + 8 <= len(code):
+             following = struct.unpack_from('<I', code, off + 4)[0]
+-            if following & 0xff000000 == 0x91000000 and (following >> 5) & 31 == word & 31:
++            if following & 0xff800000 == 0x91000000 and (following >> 5) & 31 == word & 31:
+                 add = ((following >> 10) & 4095) << (12 if following & (1 << 22) else 0)
+                 if (pc & ~4095) + (immediate << 12) + add == target:
+                     refs.append({'va': pc, 'addVA': pc + 4, 'kind': 'adjacent ADRP+ADD'})

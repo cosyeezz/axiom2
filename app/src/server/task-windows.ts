@@ -13,7 +13,7 @@ const scopeKey = (scope: Scope) => JSON.stringify([scope.workspaceId, scope.sess
  * These cursors are refresh hints, NOT task/transcript cut or readiness proofs. */
 export function taskWindowInvalidations(changed: string, observed: () => Iterable<string>): string[] {
   const parts = changed.split(":");
-  if (parts.length === 3 && ["tasks", "agent", "thread", "session"].includes(parts[0]))
+  if (parts.length === 3 && ["tasks", "session"].includes(parts[0]))
     return [taskWindowScope({ workspaceId: parts[1], sessionId: parts[2] })];
   if (changed !== "workspaces" && !(parts.length === 2 && parts[0] === "sessions")) return [];
   const prefix = changed === "workspaces" ? "task-window:" : `task-window:${parts[1]}:`;
@@ -25,7 +25,7 @@ export function taskWindowInvalidations(changed: string, observed: () => Iterabl
  * as transcript windows, never a parallel namespace or a wire-visible secret. */
 export class TaskWindows {
   private closed = false;
-  private readonly entries = new Map<string, { scope: Scope; reader: TaskWindow }>();
+  private readonly entries = new Map<string, { scope: Scope; reader: TaskWindow; refreshState: string }>();
   constructor(private readonly store: TaskStore, private readonly seed: (scope: Scope) => string) {}
   private retire(key: string) { this.entries.get(key)?.reader.close(); this.entries.delete(key); }
   check(scope: Scope) {
@@ -42,6 +42,29 @@ export class TaskWindows {
       if (changed !== "workspaces" && changed !== `sessions:${entry.scope.workspaceId}` && changed !== `session:${entry.scope.workspaceId}:${entry.scope.sessionId}`) continue;
       try { this.check(entry.scope); } catch { this.retire(key); }
     }
+  }
+  /** Parent summaries also change for every streamed message/count. Only the
+   * fields actually included in task-window state require a new task cut.
+   * Task events remain authoritative for task rows, results and input receipts.
+   * Ownership invalidation in changed() must run before this filter. */
+  shouldInvalidate(scope: Scope, taskChanged: boolean): boolean {
+    const entry = this.entries.get(scopeKey(scope));
+    if (!entry) return true;
+    try {
+      const next = this.refreshState(scope), changed = next !== entry.refreshState;
+      entry.refreshState = next;
+      return taskChanged || changed;
+    } catch {
+      // This is only a redundant-refresh optimization. Let the actual window
+      // read expose an error; never interrupt the underlying business publish.
+      return true;
+    }
+  }
+  private refreshState(scope: Scope): string {
+    return JSON.stringify(this.store.db.prepare(`SELECT s.resultVersion,s.readVersion,COALESCE(p.frozen,0) AS frozen,r.id AS runId,r.status AS runStatus
+      FROM sessions s LEFT JOIN task_parents p ON p.sessionId=s.id
+      LEFT JOIN runs r ON r.rowid=(SELECT rowid FROM runs WHERE sessionId=s.id ORDER BY startedAt DESC,rowid DESC LIMIT 1)
+      WHERE s.workspaceId=? AND s.id=? AND s.deletedAt IS NULL`).get(scope.workspaceId, scope.sessionId) ?? null);
   }
   read(scope: Scope, requestId: unknown, query: unknown, signal?: AbortSignal): Reply {
     if (!validRequestId(requestId)) return windowFieldErrorReceipt(requestId, "INVALID_REQUEST_ID").frame;
@@ -64,7 +87,7 @@ export class TaskWindows {
           this.check(owned);
           return { taskId: String(row.id), sessionId: String(row.sessionId), initialInputId: row.initialInputId === null ? null : String(row.initialInputId) };
         }, (task, result) => readTaskWindowReport(this.store, owned, task, result));
-        entry = { scope: owned, reader };
+        entry = { scope: owned, reader, refreshState: this.refreshState(owned) };
       }
       this.entries.delete(key); this.entries.set(key, entry);
       while (this.entries.size > 4) this.retire(this.entries.keys().next().value!);

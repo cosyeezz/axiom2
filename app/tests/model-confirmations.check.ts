@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 import { startServer } from "../src/server/index.js";
+import { ModelAccountService } from "../src/server/model-accounts.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-model-confirm-"));
 const artifacts = resolve(process.env.AXIOM_TEST_ARTIFACTS || "test-results/model-confirmations");
@@ -69,13 +70,20 @@ try {
   await page.locator("#provider-id").fill("confirmation-fixture");
   await page.locator("#provider-name").fill("确认框验收供应商");
   await page.locator("#provider-url").fill("http://127.0.0.1:1/v1");
-  await page.locator("#provider-key").fill("TEST-ONLY-CONFIRMATION-KEY");
   await page.locator("#models-tab").click();
   await page.locator("#add-model").click();
   await page.locator("#new-model-id").fill("confirmation-model");
   await page.locator("#new-model-name").fill("确认框验收模型");
   await page.locator("#save-provider").click();
   await page.locator(".configuration-feedback[data-saved=true]").waitFor();
+  await page.locator("#accounts-tab").click();
+  await page.getByRole("button", { name: "添加账号", exact: true }).click();
+  await page.getByLabel("账号名称", { exact: true }).fill("确认测试账号");
+  await page.getByRole("button", { name: "API Key 登录", exact: true }).click();
+  await page.locator("#auth-answer").fill("TEST-ONLY-CONFIRMATION-KEY");
+  await page.getByRole("button", { name: "提交认证输入", exact: true }).click();
+  await page.getByRole("article", { name: "账号 确认测试账号", exact: true }).waitFor();
+  await page.locator("#models-tab").click();
   const baseline = readFileSync(modelsPath, "utf8");
   const rows = page.locator("#configured-model-table tbody tr");
   const deletion = page.getByRole("dialog", { name: "删除模型草稿？", exact: true });
@@ -120,26 +128,30 @@ try {
   assert.equal(await rows.count(), 1); assert.equal(readFileSync(modelsPath, "utf8"), baseline);
 
   // Start the independent provider-removal scenario with the unchanged saved snapshot.
-  await page.reload(); await readConnectedConfiguration(); await page.locator("#provider-key").waitFor();
+  await page.reload(); await readConnectedConfiguration();
+  await page.getByRole("article", { name: "账号 确认测试账号", exact: true }).getByRole("button", { name: "删除", exact: true }).click();
+  await page.getByRole("dialog", { name: "删除账号", exact: true }).getByRole("button", { name: "确认删除", exact: true }).click();
+  await page.getByText("此连接尚无已保存账号。添加首个账号后会自动设为默认。", { exact: true }).waitFor();
+  assert.equal(readFileSync(modelsPath, "utf8"), baseline, "account removal preserves shared configuration");
   await page.evaluate(() => document.documentElement.dataset.theme = "light");
   // Real asynchronous decision replacement: remove -> stop consent -> remove again.
   await page.locator("#suppliers-tab").click(); requireActiveStop = true;
-  const remove = page.getByRole("button", { name: "删除供应商", exact: true });
-  const providerDialog = page.getByRole("dialog", { name: "删除供应商？", exact: true });
+  const remove = page.getByRole("button", { name: "移除连接", exact: true });
+  const providerDialog = page.getByRole("dialog", { name: "移除连接？", exact: true });
   const stopDialog = page.getByRole("dialog", { name: "停止受影响的执行？", exact: true });
-  await remove.click(); await providerDialog.getByRole("button", { name: "删除供应商", exact: true }).click();
+  await remove.click(); await providerDialog.getByRole("button", { name: "移除连接", exact: true }).click();
   await stopDialog.waitFor(); await safeFocus();
   await stopDialog.getByRole("button", { name: "取消", exact: true }).click();
   assert.equal(readFileSync(modelsPath, "utf8"), baseline, "cancelling the next decision keeps provider and authentication");
-  await remove.click(); await providerDialog.getByRole("button", { name: "删除供应商", exact: true }).click();
+  await remove.click(); await providerDialog.getByRole("button", { name: "移除连接", exact: true }).click();
   await stopDialog.waitFor(); await safeFocus();
   await stopDialog.getByRole("button", { name: "停止并继续删除", exact: true }).click();
   await providerDialog.waitFor(); await safeFocus();
   await capture("provider-chained-confirm-light-390.png");
-  await providerDialog.getByRole("button", { name: "删除供应商", exact: true }).click();
-  await page.locator(".configuration-feedback").filter({ hasText: "已删除供应商" }).waitFor();
+  await providerDialog.getByRole("button", { name: "移除连接", exact: true }).click();
+  await page.locator(".configuration-feedback").filter({ hasText: "已移除连接" }).waitFor();
   assert.equal(JSON.parse(readFileSync(modelsPath, "utf8")).providers["confirmation-fixture"], undefined);
-  assert.equal(JSON.parse(readFileSync(join(root, "shared-pi", "auth.json"), "utf8"))["confirmation-fixture"], undefined);
+  assert.equal((await new ModelAccountService(app.agents.models).list()).accounts.length, 0);
   assert.equal(deleteRequests.length, 3); assert.equal(deleteRequests.at(-1)?.confirmStop, true);
   assert.deepEqual(errors, []);
   writeFileSync(join(artifacts, "result.json"), JSON.stringify({ passed: true, cases: ["saved/unsaved model wording and warning", "dark/light real-page screenshots", "safe focus and restoration", "cancel and draft-only deletion preserve disk", "asynchronous chained provider confirmation and cancellation", "final removal carries explicit stop authorization"], connectionChecks, deleteRequests, errors }, null, 2));

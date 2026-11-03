@@ -1,0 +1,7 @@
+# Metadata03 — corrected literal requirement, same limited current-version scope
+
+This replaces ended metadata02, whose public binder treated a requirement expression as a filename because the leading `=` was missing. `/usr/share/man/man1/codesign.1:599–610` establishes the precise defect; signature display shows Team94KV3E626L on both binaries but is not verification. No official application has run in metadata01/02.
+
+All invocation, privacy, current2.36.0 identity, environment, direct-child limits and stop rules in [metadata02 experiment](../natural-entry-metadata-02/EXPERIMENT.md) apply to this fresh namespace/gate, except `-R` receives **`=anchor apple generic and certificate leaf[subject.OU] = "94KV3E626L"`**. Save fixed per-public-file signature exits before any failure classification; no unknown error text. One public binder run; no old gate/source is modified or rerun. Whole-file SHA still needs publication because metadata02 discarded its unpublished partial hash when the argument failed. No already published successful identity is being regenerated.
+
+Then freeze the limited caller with the resulting public SHA values; at most one successful current help plus one list attempt in this case. Stop on any failure, no login/fallback/prompt, no request capture/parity inference, no new static disassembly. The main fixes this concrete tool-argument defect rather than attributing it to user environment or asking the user to repair the CLI.

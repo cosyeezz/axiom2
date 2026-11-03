@@ -234,4 +234,4 @@
  .component-card .maintenance-task-heading { flex-wrap:wrap; }
  .component-card .maintenance-task-copy { flex-basis:calc(100% - 50px); }
 }
-@media(pointer:coarse) { .maintenance-icon-button,.maintenance-text-button,.maintenance-budget input,.maintenance-budget .select-trigger,.maintenance-budget .btn { min-height:44px; } }
+@media(pointer:coarse) { .component-secondary > summary,.maintenance-icon-button,.maintenance-text-button,.maintenance-budget input,.maintenance-budget .select-trigger,.maintenance-budget .btn { min-height:44px; } }

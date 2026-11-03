@@ -1,0 +1,9 @@
+# Static candidate report — budget failure, not parity
+
+Task t11529/result r11530 completed its static report but **missed wall60**: commands.json records71.825865s. Therefore this bounded assignment is Failed, not a passing investigation; no retry or continuation of that task. Its four original UTF8 artifacts are copied unchanged here for reference. REPORT.md's last resource paragraph does not acknowledge the overrun; this caveat corrects its use without altering the original.
+
+Main read the complete report, command declaration, input hashes and reference index. Shell exits0 are the author's declarations, not separately held raw stdout/stderr/exit evidence; no tests ran. The author explicitly reported truncated transport/evidence.md tool output and reused older official byte references rather than rereading the bundle. The main agent has not rehashed/re-audited every input or verified the entire matrix; it must not be promoted to a new whole-source verification.
+
+Use only as a navigation matrix for request-level observation. Internal callback-vs-browser/token-ticket mechanisms are not themselves a server-visible parity bug; Axiom must remain native/independently authenticated, not implement a CLI/ACP bridge. Machine/API-key support differences are not established differences for this user's personal OAuth account. TokenType is conditional and its complete application predicate remains unknown. Region/catalog/endpoint candidates still need actual sender/inputs before a production change.
+
+Current actual result is only a separate isolated official help capture (request-sender-probe-01). Real model requests0, real request consistency unproved. No CLI secret/authstore/Keychain/config was read by this task; no production/provider files were changed. The next active work is the separate instrumented V3 sender-selection case, not an expansion of this failed report or any abandoned M3 branch.

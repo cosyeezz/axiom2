@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ModelService } from "../src/server/model-service.js";
+import { ModelAccountService } from "../src/server/model-accounts.js";
 import { configuration } from "../src/server/models.js";
 
 test("OAuth imports credentials in default storage and saves mixed native model protocols without endpoint or key fields", async () => {
@@ -84,10 +85,12 @@ test("OAuth imports credentials in default storage and saves mixed native model 
     await service.save(empty);
     const logout = await service.read();
     logout.providers[0].clearKey = true;
-    await assert.rejects(service.save(logout), { code: "LOGOUT_CONFIRMATION_REQUIRED" });
+    await assert.rejects(service.save(logout), { code: "ACCOUNT_AUTH_REQUIRED" });
     assert.equal(readFileSync(authPath, "utf8"), credentials);
     const modelConfig = JSON.parse(readFileSync(join(service.dir, "models.json"), "utf8")).providers[native.id];
-    assert.deepEqual((await service.save({ ...logout, confirmLogout: true })).loggedOut, [native.id]);
+    await assert.rejects(service.save({ ...logout, confirmLogout: true }), { code: "ACCOUNT_AUTH_REQUIRED" });
+    const accounts = new ModelAccountService(service), list = await accounts.list();
+    await accounts.remove(list.accounts.find(account => account.providerId === native.id)!.id, list.revision);
     assert.equal(JSON.parse(readFileSync(authPath, "utf8"))[native.id], undefined);
     const loggedOut = await service.read();
     assert.equal(loggedOut.providers[0].connectionType, "oauth");

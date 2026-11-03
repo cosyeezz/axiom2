@@ -20,6 +20,7 @@ test("task cards and operations share bounded reads, page errors, refresh and re
   f.store.db.prepare("UPDATE task_input_receipts SET error=? WHERE inputId='receipt-0'").run(receiptError);
   const result = { id: "tool-append-op", role: "tool", text: JSON.stringify({ inputId: "receipt-0" }), status: "completed", streaming: false };
   const commands: Command[] = []; let seq = 0;
+  let readGate: Promise<void> | undefined;
   const bundle = await build({
     stdin: { resolveDir: resolve("."), loader: "tsx", contents: `
       import React from 'react';
@@ -60,7 +61,10 @@ test("task cards and operations share bounded reads, page errors, refresh and re
     await page.exposeFunction("hostCommand", (c: Command) => {
       commands.push(c);
       const receipt = { type: "receipt", requestId: c.requestId, ok: true, data: null };
-      if (c.op === "task.window") return [windows.read(f.scope, c.requestId, c.params?.query)];
+      if (c.op === "task.window") {
+        const reply = () => [windows.read(f.scope, c.requestId, c.params?.query)];
+        return readGate ? readGate.then(reply) : reply();
+      }
       if (c.op === "subscribe") {
         const scope = String(c.params?.scope);
         return [{ type: "snapshot", streamId: "fixture", seq: ++seq, scope,
@@ -87,13 +91,24 @@ test("task cards and operations share bounded reads, page errors, refresh and re
     await page.getByRole("button", { name: "加载更早的子任务" }).click();
     await page.waitForFunction(() => document.querySelectorAll('.subagent-card').length === 128);
     await page.getByRole("button", { name: "加载更早的子任务" }).click();
-    await page.waitForFunction(() => document.querySelectorAll('.subagent-card').length === 145);
+    try {
+      await page.waitForFunction(() => document.querySelectorAll('.subagent-card').length === 145);
+    } catch (error) {
+      console.error(JSON.stringify({ errors, commands: commands.slice(-20), cards: await rows.count(), alerts: await page.getByRole('alert').allTextContents() }));
+      throw error;
+    }
     assert.equal(await page.getByRole("button", { name: "加载更早的子任务" }).count(), 0);
     await page.getByRole("button", { name: "打开子会话：task-0", exact: true }).click();
     await page.waitForFunction(() => document.body.dataset.opened === "task-0");
     await page.evaluate(() => { (window as unknown as { savedRow: Element | null }).savedRow = document.querySelector('.subagent-card'); });
     f.store.db.prepare("UPDATE tasks SET title='更新后的任务',status='failed',error='private failure' WHERE id='task-144'").run();
+    let releaseReads!: () => void;
+    readGate = new Promise<void>(resolve => { releaseReads = resolve; });
     await page.evaluate(revision => (window as unknown as { hint: (n: number) => void }).hint(revision), ++seq);
+    await page.waitForFunction(() => !!document.querySelector('.subagent-card[aria-busy="true"]'));
+    assert.equal(await rows.count(), 145, 'background updates retain existing cards');
+    assert.equal(await page.getByText('正在同步任务', { exact: false }).count(), 0);
+    readGate = undefined; releaseReads();
     await page.getByRole("button", { name: "打开子会话：更新后的任务", exact: true }).waitFor();
     assert.equal(await rows.count(), 145);
     assert.equal(await page.evaluate(() => (window as unknown as { savedRow: Element }).savedRow === document.querySelector('.subagent-card')), true);
@@ -121,7 +136,11 @@ test("task cards and operations share bounded reads, page errors, refresh and re
     assert.equal(await operation.getByText('结束后追问', {exact:true}).count(), 1);
     // Receipt updates come from host metadata, not the original tool receipt.
     f.store.db.prepare("UPDATE task_input_receipts SET state='delivered',error=NULL WHERE inputId='receipt-0'").run();
+    readGate = new Promise<void>(resolve => { releaseReads = resolve; });
     await page.evaluate(revision => (window as unknown as {hint:(n:number)=>void}).hint(revision), ++seq);
+    await page.waitForFunction(() => !!document.querySelector('.subagent-card[aria-busy="true"]'));
+    assert.equal(await page.getByText('正在同步任务', { exact: false }).count(), 0, 'expanded operations do not announce background syncing');
+    readGate = undefined; releaseReads();
     await page.waitForFunction(() => document.querySelector('.task-operation .task-operation-status')?.textContent === '已送达');
     assert.equal(await errorText.count(), 0);
     // Reconnect with NO delegate card mounted: the operation must acquire its own

@@ -14,6 +14,10 @@ import { createInstalledResourceLoader } from "../src/server/installed-resource-
 import { discoverCapabilities, capabilityRuntime } from "../src/server/capability-resources.js";
 import { taskTools } from "../src/server/task-tools.js";
 import { memoryQueryTool } from "../src/server/memory-tool.js";
+import { webReadTool } from "../src/server/web-read-tool.js";
+import { webSearchTool } from "../src/server/web-search-tool.js";
+import { kiroNativeChatRequest, kiroWireToolSchema } from "../src/native-providers/kiro/protocol.js";
+import { kiroResponsesRequest } from "../src/native-providers/kiro/responses.js";
 import { ensureTopicSnapshot } from "../src/server/memory-topics.js";
 import { Agents } from "../src/server/agents.js";
 import { Store } from "../src/server/storage.js";
@@ -84,18 +88,34 @@ test("session-free preview uses native prompt generation and identical execution
         () => assert.fail("fixture resources must already be installed"));
       await loader.reload();
       const { session } = await createAgentSession({ cwd: f.cwd, agentDir: f.pi, settingsManager, resourceLoader: loader,
-        sessionManager: SessionManager.inMemory(f.cwd), customTools: [...taskTools(noExecute), memoryQueryTool(noExecute)],
+        sessionManager: SessionManager.inMemory(f.cwd), customTools: [...taskTools(noExecute), memoryQueryTool(noExecute), webReadTool(noExecute), webSearchTool(noExecute)],
         ...(process.platform === "win32" && !settingsManager.getSettings().defaultTools ? { tools: ["-bash", "+powershell"] } : {}) });
       try {
         installSessionRetryPolicy(session);
         installAxiomPrompt(session);
-        session.setActiveToolsByName([...new Set([...session.getActiveToolNames(), ...taskTools(noExecute).map(tool => tool.name), "memory_query", "memory_detail"])]);
+        session.setActiveToolsByName([...new Set([...session.getActiveToolNames(), ...taskTools(noExecute).map(tool => tool.name), "memory_query", "memory_detail", "web_read", "axiom_search"])]);
         ensureTopicSnapshot(session.sessionManager, f.memoryTopics);
         const actual = runtimeEnvironment(session, input);
         assert.equal(preview.systemPrompt, actual.systemPrompt, "preview and SDK runtime prompts are byte-identical for static resources");
         assert.deepEqual(preview.tools, actual.tools);
         const ordered = (value: SessionEnvironment) => value.toolDefinitions!.map(tool => JSON.parse(JSON.stringify(tool))).sort((a, b) => a.name.localeCompare(b.name));
         assert.deepEqual(ordered(preview), ordered(actual), "schema and descriptions match real SDK tools");
+        if (!custom) assert.equal(actual.toolDefinitions!.length, 11, "cover the complete default main-chat tool set");
+        assert.ok(actual.tools.includes("web_read") && actual.tools.includes("axiom_search") && !actual.tools.includes("web_search"));
+        const tools = actual.toolDefinitions!.map(tool => ({ ...tool, parameters: tool.parameters as object }));
+        const originalTools = JSON.stringify(tools);
+        for (const model of ["claude-sonnet-4.5", "claude-sonnet-5.5", "deepseek-3.2"]) {
+          const { payload } = kiroNativeChatRequest(model, { systemPrompt: actual.systemPrompt, tools,
+            messages: [{ role: "user", content: "hello" }] }, {});
+          const response = kiroResponsesRequest(payload);
+          assert.deepEqual(response.tools, tools.map(tool => {
+            const wire = kiroWireToolSchema(tool.parameters, tool.description);
+            return { type: "function", name: tool.name, description: wire.description, parameters: wire.schema };
+          }), "all actual tool schemas and descriptions survive native request conversion (root combinators merged for the wire only)");
+          for (const tool of response.tools) assert.ok(!["anyOf", "oneOf", "allOf"].some(key => key in (tool.parameters as object)));
+          assert.equal(payload.conversationState.currentMessage.userInputMessage.userInputMessageContext!.tools!.length, tools.length);
+        }
+        assert.equal(JSON.stringify(tools), originalTools, "provider conversion must not mutate SDK declarations");
         assert.deepEqual(preview.skillDetails, actual.skillDetails);
         assert.deepEqual(preview.retry, actual.retry, "preview and execution expose the same session retry policy");
         assert.equal(actual.memory?.topics, f.memoryTopics.text);

@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, ModelRuntime, readStoredCredential } from "@earendil-works/pi-coding-agent";
 import { accountRuntimeStores, readModelCredential, selectedCatalogPath } from "./model-account-storage.js";
 import { installModelCopies } from "./model-copies.js";
+import { installAccountHeaders } from "./model-account-headers.js";
 import { openAIProvider, installOpenAITransport } from "./providers/openai.js";
 import { installProviderRequestObserver, recognizeProviderRequestTransport } from "./provider-request-observer.js";
 import { catalogMetadata, credentialMetadata } from "./model-metadata.js";
@@ -41,7 +42,7 @@ async function registerModelProvider(runtime: ModelRuntime, providerId: string) 
   if (!definition || runtime.getRegisteredNativeProvider(providerId)) return;
   const provider = await definition.load();
   if (runtime.getRegisteredNativeProvider(providerId)) return;
-  if (providerId === "kiro") recognizeProviderRequestTransport(provider);
+  if (providerId === "kiro") recognizeProviderRequestTransport(provider, (await import("./providers/kiro-native.js")).kiroNativeFetch);
   else if (providerId === "codebuddy-cn") recognizeProviderRequestTransport(provider, (await import("../native-providers/codebuddy/http.js")).codeBuddyNativeFetch);
   // pi registers synchronously but starts an unawaited refresh afterwards. Keep
   // registration from mutating a worker's captured model files in the background.
@@ -149,6 +150,9 @@ export async function createModelRuntime(options: RuntimeOptions = {}) {
     // their models must not fall through to a generic OpenAI transport.
     if (needed.has(provider.template.id)) await registerModelProvider(runtime, provider.template.id);
   }
+  if (!configurationOnly && !metadataOnly)
+    installAccountHeaders(runtime, options.modelsPath === undefined ? join(getAgentDir(), "models.json") : options.modelsPath,
+      provider => effectiveCredentials ? effectiveCredentials.read(provider) : Promise.resolve(readStoredCredential(provider, authPath)));
   if (configurationOnly) {
     // Parsing/composition only. Availability and credentials belong to a real
     // request; even reading their files here would recreate a model gate.

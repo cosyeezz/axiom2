@@ -70,13 +70,65 @@ test("invalidation subscriptions do not capture tasks or repair aliases and dire
   const before = f.store.db.prepare("SELECT total_changes() AS n").get()!.n;
   windows.check(f.scope); assert.equal(seeds, 0); assert.equal(f.store.db.prepare("SELECT total_changes() AS n").get()!.n, before);
   const own = taskWindowScope(f.scope), other = taskWindowScope({ workspaceId: "other", sessionId: "session" });
-  for (const kind of ["tasks", "agent", "thread", "session"]) assert.deepEqual(taskWindowInvalidations(`${kind}:${f.scope.workspaceId}:${f.scope.sessionId}`, () => { throw new Error("Unexpected scan"); }), [own]);
+  for (const kind of ["tasks", "session"]) assert.deepEqual(taskWindowInvalidations(`${kind}:${f.scope.workspaceId}:${f.scope.sessionId}`, () => { throw new Error("Unexpected scan"); }), [own]);
   const observed = () => [own, own, other, `tasks:${f.scope.workspaceId}:${f.scope.sessionId}`, "task-window:bad:extra:part"];
   assert.deepEqual(taskWindowInvalidations(`sessions:${f.scope.workspaceId}`, observed), [own]);
   assert.deepEqual(taskWindowInvalidations("workspaces", observed), [own, other]);
-  for (const scope of [own, "messages:w:s", "message:w:s:m", "costs:w:s", "configuration"])
+  for (const scope of [own, "agent:w:s", "thread:w:s", "messages:w:s", "message:w:s:m", "costs:w:s", "configuration"])
     assert.deepEqual(taskWindowInvalidations(scope, () => { throw new Error("Unexpected scan"); }), []);
   windows.close();
+});
+
+test("summary-only changes do not refresh task windows but real task and parent state changes do", t => {
+  const f = taskWindowFixture(t), windows = new TaskWindows(f.store, () => "a".repeat(64));
+  t.after(() => windows.close());
+  const task = f.task("a"), own = taskWindowScope(f.scope);
+  read(windows, f.scope, { op: "open" });
+  const hints = (changed: string) => {
+    windows.changed(changed);
+    return taskWindowInvalidations(changed, () => [own]).filter(() => windows.shouldInvalidate(f.scope, changed.startsWith("tasks:")));
+  };
+  const sessions = `sessions:${f.scope.workspaceId}`, tasks = `tasks:${f.scope.workspaceId}:${f.scope.sessionId}`;
+  for (let i = 0; i < 5; i++) {
+    f.store.db.prepare("UPDATE sessions SET title=?,updatedAt=? WHERE id=?").run(`title-${i}`, i, f.scope.sessionId);
+    assert.deepEqual(hints(sessions), []);
+    assert.deepEqual(hints(`session:${f.scope.workspaceId}:${f.scope.sessionId}`), []);
+    assert.deepEqual(hints(`agent:${f.scope.workspaceId}:${f.scope.sessionId}`), []);
+    assert.deepEqual(hints(`thread:${f.scope.workspaceId}:${f.scope.sessionId}`), []);
+  }
+  assert.deepEqual(hints("workspaces"), []);
+  f.store.db.prepare("UPDATE tasks SET status='running' WHERE id=?").run(task.id);
+  assert.deepEqual(hints(tasks), [own]);
+  assert.equal(read(windows, f.scope, { op: "open" }).items[0].status, "running");
+  f.input(task, "input", 1); assert.deepEqual(hints(tasks), [own]);
+  f.result(task, "result"); assert.deepEqual(hints(tasks), [own]);
+  f.store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt) VALUES('parent-run',?,'running','{}',1)").run(f.scope.sessionId);
+  assert.deepEqual(hints(sessions), [own]); assert.deepEqual(hints(sessions), []);
+  f.store.db.prepare("UPDATE runs SET status='completed' WHERE id='parent-run'").run();
+  assert.deepEqual(hints(sessions), [own]);
+  f.store.db.prepare("UPDATE sessions SET resultVersion=1 WHERE id=?").run(f.scope.sessionId);
+  assert.deepEqual(hints(sessions), [own]);
+  f.store.db.prepare("UPDATE sessions SET readVersion=1 WHERE id=?").run(f.scope.sessionId);
+  assert.deepEqual(hints(sessions), [own]);
+  f.store.db.prepare("INSERT INTO task_parents(sessionId,frozen) VALUES(?,1)").run(f.scope.sessionId);
+  assert.deepEqual(hints(sessions), [own]); assert.deepEqual(hints(sessions), []);
+  f.store.db.prepare("UPDATE workspaces SET authorized=0 WHERE id=?").run(f.scope.workspaceId);
+  assert.deepEqual(hints("workspaces"), [own], "authority loss still invalidates existing cards");
+});
+
+test("refresh filtering failures never suppress a task hint or interrupt business publication", t => {
+  const f = taskWindowFixture(t), windows = new TaskWindows(f.store, () => "a".repeat(64));
+  t.after(() => windows.close());
+  read(windows, f.scope, { op: "open" });
+  const original = f.store.db.prepare.bind(f.store.db);
+  const fault = t.mock.method(f.store.db, "prepare", (sql: string) => {
+    if (sql.startsWith("SELECT s.resultVersion")) throw new Error("refresh metadata temporarily unavailable");
+    return original(sql);
+  });
+  assert.equal(windows.shouldInvalidate(f.scope, true), true);
+  assert.equal(windows.shouldInvalidate(f.scope, false), true);
+  fault.mock.restore();
+  assert.equal(windows.shouldInvalidate(f.scope, false), false);
 });
 
 test("production task RPC shares strict IDs, read admission, actual receipts and invalidation-only subscription routing", () => {
@@ -88,6 +140,9 @@ test("production task RPC shares strict IDs, read admission, actual receipts and
   assert.match(index, /const historyRead = \["agent\.window", "task\.window"/);
   assert.match(index, /c\.op === "agent\.window" \|\| c\.op === "task\.window"[\s\S]*?tasks\.window\(c, signal\)[\s\S]*?send\(ws, frame, true, releaseRead\);\s*releaseRead = undefined; return;/);
   assert.match(index, /parts\[0\] === "task-window"\) return tasks\.windowInvalidation\(target, seq\)/);
+  assert.match(index, /taskWindowNeedsRefresh\(key, scope\)\) publish\(key, \{ revision: seq \+ 1 \}\)/);
+  assert.match(index, /taskWindowNeedsRefresh = \(key, changed\) => tasks\.windowNeedsRefresh\(key, changed\)/);
+  assert.match(tasks, /this\.windows\.shouldInvalidate\(\{ workspaceId, sessionId \}, changed\.startsWith\("tasks:"\)\)/);
   assert.match(index, /if \(scope\.startsWith\("task-window:"\)\) \{ publish\(scope, \{ revision: seq \+ 1 \}\); continue; \}/);
   assert.match(tasks, /new TaskWindows\(this\.store, scope => agents\.windowIdentity\(scope\)\)/);
   assert.match(tasks, /windowInvalidation\(scope: Scope, revision: number\) \{\s*this\.windows\.check\(scope\);\s*return \{ revision \};/);

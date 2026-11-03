@@ -1,0 +1,13 @@
+html, body { margin: 0; background: #101214; color: #d5d9d6; }
+#preview-tools { position: relative; z-index: 20; padding: 10px 16px; border-bottom: 1px solid #5c513c; background: #24251f; color: #eee1bd; font: 12px/1.6 system-ui, sans-serif; }
+.preview-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; max-width: 1040px; margin: auto; }
+.preview-bar > span { color: #bcb8a5; }
+.preview-bar label { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.preview-bar select, .preview-bar button { max-width: 100%; min-height: 36px; border: 1px solid #66604b; border-radius: 5px; background: #303027; color: inherit; padding: 4px 8px; font: inherit; }
+#preview-log { flex-basis: 100%; }
+#preview-log summary { cursor: pointer; width: fit-content; }
+#preview-log p { margin: 8px 0; }
+#preview-calls { max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+#preview-notice:not(:empty) { max-width: 1040px; margin: 8px auto 0; overflow-wrap: anywhere; }
+#root .connect-page { min-height: calc(100vh - 94px); }
+@media (max-width: 580px) { .preview-bar label { margin-left: 0; flex-basis: 100%; } .preview-bar select { min-width: 0; } .preview-bar :is(select, button, summary) { min-height: 44px; } }

@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f6f4eb">
+  <title>鹈鹕慢骑俱乐部 · Pelican Pedal Club</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f6f4eb;
+      --ink: #234e46;
+      --muted: #7b8978;
+      --line: #dcded0;
+      --accent: #e77f57;
+      --sky-top: #f0e9d2;
+      --sky-bottom: #fbf3df;
+      --cloud: #fffaf0;
+      --sea: #92bcb0;
+      --sea-line: #cee0c9;
+      --island: #759b8b;
+      --sand: #e4d9b4;
+      --dune: #c1c29a;
+      --road: #f2e7c9;
+      --road-line: #d5cba9;
+      --grass: #698c6a;
+      --card: #f3eddb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0 5.2vw;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      transition: background .7s, color .7s;
+    }
+    button, input { font: inherit; }
+    button { -webkit-tap-highlight-color: transparent; }
+    button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
+    button { color: inherit; }
+    .page { max-width: 1500px; margin: auto; }
+    .masthead {
+      min-height: 112px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
+    .brand { display: flex; align-items: center; gap: 13px; }
+    .brand-icon { width: 43px; height: 49px; }
+    .brand-name { font: 700 20px/.95 Georgia, "Times New Roman", serif; letter-spacing: -.6px; }
+    .brand-name span { display: block; font-size: 12px; letter-spacing: 2.3px; margin-top: 8px; }
+    .masthead-note { font-size: 11px; letter-spacing: 3px; color: var(--muted); }
+    .top-right { display: flex; align-items: center; gap: 23px; }
+    .weather { display: flex; align-items: center; gap: 7px; font-size: 11px; letter-spacing: 1.5px; }
+    .weather svg { width: 19px; height: 19px; }
+    .theme-button {
+      width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 50%;
+      background: transparent; display: grid; place-items: center; cursor: pointer;
+      transition: background .2s, transform .2s;
+    }
+    .theme-button:hover { background: var(--line); transform: rotate(-12deg); }
+    .theme-button svg { width: 17px; height: 17px; }
+    .sun-icon { display: none; }
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 12px;
+      isolation: isolate;
+      background: linear-gradient(180deg, var(--sky-top), var(--sky-bottom));
+      aspect-ratio: 1440 / 820;
+    }
+    .scene { width: 100%; height: 100%; display: block; position: absolute; inset: 0; }
+    .intro { position: absolute; top: 10%; left: 5.2%; z-index: 1; pointer-events: none; }
+    .eyebrow { display: flex; align-items: center; gap: 12px; font-size: 9px; letter-spacing: 3px; font-weight: 600; }
+    .eyebrow::before { content: ""; width: 24px; height: 1px; background: currentColor; }
+    h1 {
+      font-family: "Songti SC", "STSong", "Noto Serif CJK SC", "Noto Serif SC", Georgia, serif;
+      font-size: clamp(35px, 4.1vw, 64px);
+      font-weight: 500;
+      line-height: 1.4;
+      letter-spacing: 2px;
+      margin: 25px 0 17px;
+    }
+    h1 em { font-style: normal; color: #cf704e; }
+    .intro p { font-size: clamp(11px, 1vw, 14px); line-height: 2; letter-spacing: 1.4px; opacity: .75; margin: 0; }
+    .hero-edition { position: absolute; right: 3.4%; top: 5.2%; font: 10px Georgia, serif; letter-spacing: 2px; opacity: .6; }
+    .scene-caption { position: absolute; left: 5.2%; bottom: 5.4%; display: flex; align-items: center; gap: 13px; }
+    .route-icon { width: 30px; height: 30px; border: 1px solid currentColor; border-radius: 50%; display: grid; place-items: center; opacity: .7; }
+    .route-icon svg { width: 16px; height: 16px; }
+    .scene-caption strong { display: block; font-size: 10px; letter-spacing: 2px; font-weight: 500; }
+    .scene-caption small { display: block; font-size: 8px; letter-spacing: 2px; margin-top: 6px; opacity: .6; }
+    .handwritten {
+      position: absolute; bottom: 5.5%; right: 4%;
+      font: italic 15px Georgia, serif; transform: rotate(-5deg); opacity: .6;
+    }
+    .dashboard {
+      display: flex; align-items: center; justify-content: space-between; gap: 24px;
+      min-height: 121px; padding: 25px 5px; border-bottom: 1px solid var(--line);
+    }
+    .ride-info { display: flex; align-items: center; gap: 35px; }
+    .live { display: flex; align-items: center; gap: 9px; font-size: 11px; letter-spacing: 1.5px; white-space: nowrap; }
+    .live-dot { width: 6px; height: 6px; border-radius: 50%; background: #76a184; box-shadow: 0 0 0 4px #76a18415; }
+    .stat { border-left: 1px solid var(--line); padding-left: 30px; white-space: nowrap; }
+    .stat-label { display: block; font-size: 9px; color: var(--muted); letter-spacing: 1.5px; margin-bottom: 8px; }
+    .stat-value { font: 24px/1 Georgia, serif; font-variant-numeric: tabular-nums; }
+    .stat-unit { font-size: 10px; margin-left: 5px; color: var(--muted); }
+    .speed-control { display: flex; align-items: center; gap: 17px; }
+    .speed-control label { font-size: 10px; letter-spacing: 1.5px; white-space: nowrap; }
+    .slider-wrap { display: flex; align-items: center; gap: 9px; }
+    .slider-wrap svg { width: 15px; height: 15px; opacity: .65; flex-shrink: 0; }
+    input[type="range"] {
+      appearance: none; -webkit-appearance: none; width: 115px; height: 3px;
+      border-radius: 4px; cursor: pointer; background: var(--line); accent-color: var(--ink);
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      appearance: none; width: 11px; height: 11px; border-radius: 50%; background: var(--ink); border: 2px solid var(--paper);
+      box-shadow: 0 0 0 1px var(--ink);
+    }
+    input[type="range"]::-moz-range-thumb { width: 9px; height: 9px; border-radius: 50%; background: var(--ink); border: 2px solid var(--paper); box-shadow: 0 0 0 1px var(--ink); }
+    .actions { display: flex; align-items: center; gap: 20px; }
+    .bell-button { display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer; padding: 10px 0; font-size: 11px; letter-spacing: 1px; }
+    .bell-button svg { width: 19px; height: 19px; }
+    .bell-button:hover svg { transform: rotate(-15deg); }
+    .play-button {
+      width: 49px; height: 49px; border: none; border-radius: 50%; background: var(--ink); color: var(--paper);
+      display: grid; place-items: center; cursor: pointer; transition: transform .2s, box-shadow .2s;
+    }
+    .play-button:hover { transform: scale(1.06); box-shadow: 0 4px 15px #234e4620; }
+    .play-button svg { width: 18px; height: 18px; }
+    .play-icon { display: none; }
+    footer { display: flex; align-items: center; justify-content: space-between; min-height: 68px; gap: 20px; color: var(--muted); }
+    .footer-note { font: italic 12px Georgia, serif; letter-spacing: .3px; }
+    .footer-meta { font-size: 8px; letter-spacing: 2px; }
+    .footer-mark { color: var(--accent); font-size: 17px; margin: 0 6px; }
+    .toast {
+      position: fixed; bottom: 28px; left: 50%; transform: translate(-50%, 10px); opacity: 0;
+      padding: 11px 20px; border-radius: 40px; background: var(--ink); color: var(--paper);
+      font-size: 12px; letter-spacing: 1px; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 5;
+    }
+    .toast.visible { opacity: 1; transform: translate(-50%, 0); }
+    .stars { opacity: 0; transition: opacity 1s; }
+    .day-sun { opacity: 1; transition: opacity 1s; }
+    .night-moon { opacity: 0; transition: opacity 1s; }
+    .scene .palette { transition: fill .8s, stroke .8s; }
+    .sky-stop { transition: stop-color .8s; }
+    [data-paused="true"] .pause-icon { display: none; }
+    [data-paused="true"] .play-icon { display: block; }
+    [data-paused="true"] .live-dot { background: var(--accent); }
+    [data-night="true"] {
+      color-scheme: dark;
+      --paper: #182e32; --ink: #e3e6cf; --muted: #91aaa3; --line: #365052;
+      --sky-top: #203d49; --sky-bottom: #537b7b; --cloud: #94b3ae;
+      --sea: #426f74; --sea-line: #70938e; --island: #365e5d;
+      --sand: #778e7c; --dune: #5a7b6b; --road: #a0ae93; --road-line: #83947d; --grass: #365f51; --card: #203d49;
+    }
+    [data-night="true"] h1 em { color: #f4b18a; }
+    [data-night="true"] .moon-icon, [data-night="true"] .day-sun { display: none; }
+    [data-night="true"] .sun-icon { display: block; }
+    [data-night="true"] .night-moon, [data-night="true"] .stars { opacity: 1; }
+    [data-night="true"] .scene-caption, [data-night="true"] .handwritten { color: #203e39; }
+    @media (min-width: 1650px) { h1 { font-size: 68px; } }
+    @media (max-width: 1050px) {
+      .masthead { min-height: 94px; }
+      .masthead-note { display: none; }
+      .ride-info { gap: 21px; }
+      .stat { padding-left: 20px; }
+      .dashboard { gap: 18px; }
+      .speed-control { gap: 10px; }
+      input[type="range"] { width: 85px; }
+      .actions { gap: 15px; }
+      .hero { aspect-ratio: 1.6; }
+      .scene { object-fit: cover; }
+      .intro { top: 9%; }
+      h1 { margin-top: 20px; font-size: 4.4vw; }
+    }
+    @media (max-width: 760px) {
+      body { padding: 0 5vw; }
+      .masthead { min-height: 88px; }
+      .brand-name { font-size: 17px; }
+      .brand-name span { font-size: 10px; letter-spacing: 2px; }
+      .brand-icon { width: 35px; height: 40px; }
+      .top-right { gap: 12px; }
+      .weather { font-size: 9px; letter-spacing: 1px; }
+      .weather-word { display: none; }
+      .hero { aspect-ratio: auto; height: clamp(540px, 130vw, 740px); border-radius: 9px; }
+      .scene { width: 165%; height: 76%; top: 24%; left: -41%; }
+      .sky-background { fill: transparent; }
+      .intro { top: 7%; left: 7%; }
+      .eyebrow { font-size: 8px; letter-spacing: 2px; }
+      h1 { font-size: clamp(34px, 8vw, 49px); margin: 19px 0 14px; line-height: 1.3; }
+      .intro p { font-size: 11px; line-height: 1.9; letter-spacing: 1px; }
+      .hero-edition { top: 5%; right: 6%; font-size: 8px; writing-mode: vertical-rl; }
+      .scene-caption { left: 7%; bottom: 4%; }
+      .handwritten { right: 6%; bottom: 4%; font-size: 11px; }
+      .dashboard { flex-wrap: wrap; padding: 22px 0; gap: 25px 10px; }
+      .ride-info { width: 100%; justify-content: space-between; gap: 10px; }
+      .stat { padding-left: 22px; }
+      .stat-value { font-size: 25px; }
+      .speed-control { gap: 14px; }
+      input[type="range"] { width: min(28vw, 150px); }
+      .actions { gap: 22px; }
+      .play-button { width: 43px; height: 43px; }
+      footer { min-height: 77px; }
+      .footer-meta { font-size: 7px; letter-spacing: 1px; }
+      .footer-note { font-size: 11px; max-width: 175px; line-height: 1.6; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="masthead">
+      <div class="brand" aria-label="Pelican Pedal Club 鹈鹕慢骑俱乐部">
+        <svg class="brand-icon" viewBox="0 0 48 54" fill="none" aria-hidden="true">
+          <path d="M12 37C6 32 7 23 15 23H23V13C23 5 34 5 35 13V18H43L34 24H29V30C29 38 20 43 12 37Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+          <path d="M15 26C13 32 19 35 24 31M29 17H35M19 39L16 47M23 38L26 47M11 48H30" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <circle cx="30" cy="12" r="1.3" fill="currentColor"/>
+        </svg>
+        <div class="brand-name">PELICAN<span>PEDAL CLUB</span></div>
+      </div>
+      <div class="masthead-note">无 所 事 事，也 是 好 日 子</div>
+      <div class="top-right">
+        <div class="weather">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M3 8H15C20 8 20 2 16 3M3 12H20M3 16H12C17 16 17 22 13 21" stroke-linecap="round"/></svg>
+          <span class="weather-word" id="weather-word">海风轻拂</span><span id="temperature">24°</span>
+        </div>
+        <button class="theme-button" id="theme-button" title="切换到月光骑行" aria-label="切换到月光骑行" aria-pressed="false">
+          <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5Z"/></svg>
+          <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2V4M12 20V22M2 12H4M20 12H22M5 5L6.5 6.5M17.5 17.5L19 19M5 19L6.5 17.5M17.5 6.5L19 5"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" aria-label="海边骑行的鹈鹕动画">
+        <svg class="scene" id="scene" viewBox="0 0 1440 820" preserveAspectRatio="xMidYMax slice" role="img" aria-labelledby="scene-title scene-desc">
+          <title id="scene-title">一只正在沿海公路上骑自行车的鹈鹕</title>
+          <desc id="scene-desc">乳白色鹈鹕戴着橙色围巾，骑一辆薄荷绿自行车。它的大嘴迎着海风，双脚交替踩踏，车轮旋转，云朵、海浪、沙丘和路边野草缓缓后退。</desc>
+          <defs>
+            <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+              <stop class="sky-stop" stop-color="var(--sky-top)"/>
+              <stop class="sky-stop" offset="1" stop-color="var(--sky-bottom)"/>
+            </linearGradient>
+            <linearGradient id="feather" x1="0" y1="0" x2=".8" y2="1">
+              <stop stop-color="#fffdf1"/>
+              <stop offset=".62" stop-color="#f6f3e2"/>
+              <stop offset="1" stop-color="#d8dfcc"/>
+            </linearGradient>
+            <linearGradient id="wing-color" x1=".1" y1="0" x2=".8" y2="1">
+              <stop stop-color="#fffdf2"/>
+              <stop offset="1" stop-color="#e8e8d5"/>
+            </linearGradient>
+            <linearGradient id="pouch" x1="0" y1="0" x2="0" y2="1">
+              <stop stop-color="#f5c378"/>
+              <stop offset="1" stop-color="#e79b64"/>
+            </linearGradient>
+            <radialGradient id="sun-halo">
+              <stop stop-color="#f8d68d" stop-opacity=".32"/>
+              <stop offset="1" stop-color="#f8d68d" stop-opacity="0"/>
+            </radialGradient>
+            <pattern id="water-ripples" width="260" height="62" patternUnits="userSpaceOnUse">
+              <path d="M12 10H62M85 42H164M203 17H242M8 60H31" stroke="var(--sea-line)" stroke-width="2" stroke-linecap="round" opacity=".65"/>
+              <path d="M72 12H83M175 44H188M190 18H196" stroke="var(--sea-line)" stroke-width="1.4" stroke-linecap="round" opacity=".45"/>
+            </pattern>
+            <pattern id="road-texture" width="210" height="100" patternUnits="userSpaceOnUse">
+              <path d="M12 46H54M131 16H148M91 78H157M185 49H199" stroke="var(--road-line)" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+              <path d="M70 24H73M166 66H169M34 89H37" stroke="var(--road-line)" stroke-width="3" stroke-linecap="round" opacity=".65"/>
+            </pattern>
+            <filter id="paper-grain" x="0" y="0" width="100%" height="100%">
+              <feTurbulence type="fractalNoise" baseFrequency=".72" numOctaves="3" stitchTiles="stitch"/>
+              <feColorMatrix type="saturate" values="0"/>
+              <feComponentTransfer><feFuncA type="linear" slope=".13"/></feComponentTransfer>
+              <feBlend in="SourceGraphic" mode="multiply"/>
+            </filter>
+            <g id="cloud-span" fill="var(--cloud)">
+              <path d="M67 132C64 119 79 110 95 115C102 93 139 91 151 114C171 106 196 117 194 132Z" opacity=".65"/>
+              <path d="M485 89C480 73 501 66 518 73C528 49 565 54 573 77C590 70 610 78 610 89Z" opacity=".65"/>
+              <path d="M1111 315C1105 300 1121 287 1141 291C1146 270 1181 268 1194 290C1214 279 1243 293 1242 307C1262 302 1277 309 1275 315Z" opacity=".6"/>
+              <path d="M1350 80C1345 63 1364 51 1382 57C1396 29 1438 37 1445 63C1466 54 1497 64 1495 80Z" opacity=".4"/>
+            </g>
+            <g id="island-span">
+              <path d="M0 474C83 466 123 447 174 453C216 456 244 440 280 444C343 449 373 477 447 483L447 506H0ZM1000 487C1072 478 1117 451 1170 457C1228 466 1260 437 1302 448C1367 463 1437 466 1600 481V506H1000Z" fill="var(--island)"/>
+              <g transform="translate(176 398)">
+                <path d="M-12 55L-7 0H7L12 55Z" fill="#f6eed7"/>
+                <path d="M-9 16H9L10 29H-10Z" fill="#d5896e"/>
+                <path d="M-9-2H9V5H-9Z" fill="#46675e"/>
+                <path d="M-13-3L0-13L13-3Z" fill="#cf7d5f"/>
+                <path d="M-3 39H3V53H-3Z" fill="#54766a"/>
+                <path d="M-4-2V-8M4-2V-8" stroke="#46675e" stroke-width="1.5"/>
+              </g>
+            </g>
+            <g id="grass-tuft" fill="none" stroke="var(--grass)" stroke-width="2.2" stroke-linecap="round">
+              <path d="M0 0Q-6-24-18-30M0 0Q4-31 17-46M0 0Q-1-38-5-49M0 0Q12-17 25-20"/>
+              <path d="M13-38L12-46M15-42L23-43M-5-42L-11-47" stroke-width="3"/>
+            </g>
+            <g id="grass-span">
+              <use href="#grass-tuft" transform="translate(90 785) scale(1.3)"/>
+              <use href="#grass-tuft" transform="translate(130 804) scale(.65)"/>
+              <use href="#grass-tuft" transform="translate(506 819) scale(.7)"/>
+              <use href="#grass-tuft" transform="translate(1135 793) scale(1.1)"/>
+              <use href="#grass-tuft" transform="translate(1194 812) scale(.6)"/>
+              <path d="M260 770H270M875 786H889M1338 755H1347" stroke="var(--grass)" opacity=".4" stroke-width="3" stroke-linecap="round"/>
+              <g transform="translate(810 795)">
+                <path d="M0 0Q-2-16 3-26M0-7L-8-14" stroke="var(--grass)" stroke-width="2" fill="none"/>
+                <circle cx="3" cy="-28" r="4" fill="#f3c96e"/><circle cx="-8" cy="-15" r="3" fill="#f3c96e"/>
+              </g>
+            </g>
+            <g id="spokes" stroke="#6e8c7e" stroke-width="1.45" opacity=".85">
+              <path d="M-96 0H96M0-96V96M-67.88-67.88L67.88 67.88M-67.88 67.88L67.88-67.88M-36.74-88.69L36.74 88.69M-88.69-36.74L88.69 36.74M-88.69 36.74L88.69-36.74M-36.74 88.69L36.74-88.69"/>
+              <path d="M5-96L-5 96M-96-5L96 5M-64-71L64 71M-71 64L71-64" opacity=".5"/>
+              <rect x="-4" y="-84" width="8" height="18" rx="3" fill="#edc88a" stroke="#f9efce" stroke-width="1.5"/>
+            </g>
+            <g id="wheel">
+              <circle r="108" fill="#f4edda" fill-opacity=".08" stroke="#2f4e46" stroke-width="11"/>
+              <circle r="102" fill="none" stroke="#d5c7a0" stroke-width="4.5"/>
+              <circle r="97" fill="none" stroke="#7c9782" stroke-width="2"/>
+            </g>
+            <g id="bike-frame" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M600 604L695 454L765 602ZM695 454L915 444L765 602M915 444L934 500L960 604"/>
+            </g>
+          </defs>
+
+          <!-- A quiet coast, painted in independent parallax layers. -->
+          <path class="sky-background" fill="url(#sky)" d="M0 0H1440V820H0Z"/>
+          <g class="stars" fill="#eee8c5">
+            <circle cx="655" cy="94" r="1.7"/><circle cx="764" cy="133" r="1.2"/><circle cx="1030" cy="86" r="2"/>
+            <circle cx="1328" cy="185" r="1.5"/><circle cx="958" cy="45" r="1"/><circle cx="543" cy="185" r="1.3"/>
+            <circle cx="1171" cy="263" r="1.3"/><circle cx="1263" cy="75" r="1.3"/><circle cx="142" cy="68" r="1.2"/>
+            <path d="M690 45V55M685 50H695M1368 317V327M1363 322H1373" stroke="#eee8c5" stroke-width="1.2"/>
+          </g>
+          <g class="day-sun">
+            <circle cx="1183" cy="157" r="124" fill="url(#sun-halo)"/>
+            <circle cx="1183" cy="157" r="51" fill="#ecc888"/>
+            <circle cx="1183" cy="157" r="63" fill="none" stroke="#e4c58d" stroke-opacity=".35"/>
+          </g>
+          <g class="night-moon">
+            <circle cx="1183" cy="157" r="75" fill="#e8eacb" opacity=".05"/>
+            <path d="M1205 112A49 49 0 1 0 1227 187A46 46 0 0 1 1205 112Z" fill="#f4edcb"/>
+          </g>
+          <g id="clouds"><use href="#cloud-span"/><use href="#cloud-span" x="1600"/></g>
+          <g id="gulls" fill="none" stroke="#6b8a7c" stroke-width="2" stroke-linecap="round">
+            <path id="gull-one" d="M1008 127Q1019 119 1030 127Q1041 118 1052 125"/>
+            <path id="gull-two" d="M1068 154Q1077 147 1086 154Q1095 146 1104 151" opacity=".7"/>
+            <path d="M976 159Q982 155 988 160Q994 155 1000 158" opacity=".45"/>
+          </g>
+          <path class="palette" d="M0 475Q350 467 720 476T1440 474V659H0Z" fill="var(--sea)"/>
+          <g id="islands"><use href="#island-span"/><use href="#island-span" x="1600"/></g>
+          <path d="M0 501Q640 490 1440 503" stroke="var(--sea-line)" stroke-width="2" fill="none" opacity=".7"/>
+          <path d="M0 506H1440V663H0Z" fill="url(#water-ripples)"/>
+          <path class="palette" d="M0 601C182 624 257 589 410 603C568 619 644 581 824 596C1036 611 1256 571 1440 585V820H0Z" fill="var(--sand)"/>
+          <path d="M0 599C182 622 257 587 410 601C568 617 644 579 824 594C1036 609 1256 569 1440 583" stroke="#f9f1d7" stroke-width="5" fill="none" opacity=".55"/>
+          <path class="palette" d="M0 637Q99 596 192 630T381 644Q475 621 571 646T786 636Q889 605 989 630T1197 622Q1323 600 1440 631V711H0Z" fill="var(--dune)"/>
+          <g fill="none" stroke="var(--grass)" stroke-linecap="round" opacity=".5">
+            <path d="M63 647L59 633M65 646L70 636M321 656L317 643M325 654L329 639M1094 649L1099 633M1101 649L1106 641M1321 641L1319 627" stroke-width="2"/>
+            <path d="M211 660H228M418 651H430M1227 658H1243" stroke-width="2"/>
+          </g>
+          <path class="palette" d="M0 683Q355 672 720 682T1440 682V820H0Z" fill="var(--road)"/>
+          <path d="M0 694Q355 683 720 693T1440 693" fill="none" stroke="#fff7df" stroke-width="3" opacity=".45"/>
+          <path d="M0 697H1440V820H0Z" fill="url(#road-texture)"/>
+
+          <ellipse id="bike-shadow" cx="780" cy="719" rx="281" ry="17" fill="#50664b" opacity=".12"/>
+          <ellipse cx="600" cy="718" rx="43" ry="6" fill="#50664b" opacity=".12"/>
+          <ellipse cx="960" cy="718" rx="43" ry="6" fill="#50664b" opacity=".12"/>
+
+          <!-- Far leg sits behind the frame. Both legs are solved against the pedals. -->
+          <g id="far-leg" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path id="far-leg-outline" stroke="#9e7547" stroke-width="15"/>
+            <path id="far-leg-fill" stroke="#d7a362" stroke-width="10"/>
+            <path id="far-foot" fill="#d7a362" stroke="#9e7547" stroke-width="2"/>
+          </g>
+
+          <!-- Bicycle: fixed rims and rotating spokes, a genuine diamond frame. -->
+          <g id="bicycle">
+            <g transform="translate(600 604)">
+              <use href="#wheel"/>
+              <g id="rear-spokes"><use href="#spokes"/></g>
+              <circle r="12" fill="#b6bd9c" stroke="#3e5f52" stroke-width="3"/>
+              <circle r="4" fill="#eef0d9"/>
+            </g>
+            <g transform="translate(960 604)">
+              <use href="#wheel"/>
+              <g id="front-spokes"><use href="#spokes"/></g>
+              <circle r="11" fill="#c8d3b6" stroke="#3e5f52" stroke-width="3"/>
+              <circle r="4" fill="#eef0d9"/>
+            </g>
+            <g fill="none" stroke-linecap="round">
+              <path d="M489 579A114 114 0 0 1 704 552M855 558A114 114 0 0 1 1073 592" stroke="#3d6556" stroke-width="8"/>
+              <path d="M489 577A114 114 0 0 1 704 550M855 556A114 114 0 0 1 1073 590" stroke="#c0cfac" stroke-width="4"/>
+              <path d="M512 552L600 604L663 514M874 535L960 604L1044 533" stroke="#718b73" stroke-width="2"/>
+              <path d="M542 471H657M550 472L600 604M648 473L615 579" stroke="#506f5b" stroke-width="4"/>
+            </g>
+            <g transform="rotate(-5 582 492)">
+              <rect x="542" y="470" width="77" height="64" rx="8" fill="#b49b70" stroke="#6b7453" stroke-width="2"/>
+              <path d="M542 481Q578 502 619 481V472H542Z" fill="#cbb786"/>
+              <path d="M558 472V530M601 472V530" stroke="#8c805c" stroke-width="5"/>
+              <rect x="555" y="490" width="7" height="9" rx="1" fill="#ead9a6"/>
+              <rect x="598" y="490" width="7" height="9" rx="1" fill="#ead9a6"/>
+              <path d="M567 470V463Q579 454 590 463V470" fill="none" stroke="#8c805c" stroke-width="4"/>
+            </g>
+            <path d="M695 454L683 415" fill="none" stroke="#5d7a68" stroke-width="9"/>
+            <use href="#bike-frame" stroke="#355e51" stroke-width="13"/>
+            <use href="#bike-frame" stroke="#79aa91" stroke-width="8"/>
+            <path d="M704 451L903 443M608 600L692 468" fill="none" stroke="#b0d0ae" stroke-width="2" stroke-linecap="round"/>
+            <path d="M917 443L900 398Q896 384 915 382H968Q988 382 985 400L981 414" fill="none" stroke="#395e50" stroke-width="8" stroke-linecap="round"/>
+            <path d="M914 382H961" stroke="#a9baa0" stroke-width="4" stroke-linecap="round"/>
+            <path d="M980 401L976 416" stroke="#bb895d" stroke-width="11" stroke-linecap="round"/>
+            <path d="M976 418C1015 443 990 478 938 486" fill="none" stroke="#5e7462" stroke-width="2"/>
+            <path d="M651 411C663 406 678 409 694 411L717 412Q729 416 720 424L663 427Q648 426 651 411Z" fill="#785c45" stroke="#4a5640" stroke-width="2"/>
+            <path d="M658 413Q684 415 715 416" fill="none" stroke="#b6966b" stroke-width="2" stroke-linecap="round"/>
+            <g transform="translate(805 501) rotate(40)">
+              <rect x="-12" y="-24" width="24" height="53" rx="7" fill="#f4eed5" stroke="#5e836a" stroke-width="2"/>
+              <rect x="-12" y="-8" width="24" height="19" fill="#df8b64"/>
+              <path d="M-6-24V-30H6V-24" fill="#3f6756"/>
+              <path d="M-14 3V25H14V3" fill="none" stroke="#436d58" stroke-width="2"/>
+            </g>
+            <g fill="none" stroke-linecap="round">
+              <path d="M600 590L763 574A28 28 0 1 1 765 630L600 618A14 14 0 0 1 600 590Z" stroke="#75806a" stroke-width="4"/>
+              <path d="M600 590L763 574A28 28 0 1 1 765 630L600 618A14 14 0 0 1 600 590Z" stroke="#c2c6a7" stroke-width="1.5"/>
+            </g>
+            <circle cx="765" cy="602" r="29" fill="#d4d7b9" stroke="#426651" stroke-width="3"/>
+            <g id="chainring" transform="translate(765 602)" fill="none" stroke="#7f9576" stroke-width="4">
+              <circle r="21"/><path d="M0-20V20M-20 0H20"/>
+            </g>
+            <g id="far-crank" stroke="#526b53" stroke-width="6" stroke-linecap="round"><path id="far-crank-arm"/></g>
+            <path id="far-pedal" stroke="#485d49" stroke-width="7" stroke-linecap="round"/>
+            <g transform="translate(936 435)">
+              <path d="M0-8L14-5V8L0 10Z" fill="#52745d"/>
+              <ellipse cx="14" cy="1" rx="4" ry="7" fill="#fae2a0" stroke="#7d8964" stroke-width="2"/>
+            </g>
+            <g transform="translate(947 375)">
+              <path d="M-9 3A9 9 0 0 1 9 3Z" fill="#e4bf70" stroke="#7d8157" stroke-width="1.5"/>
+              <path d="M-11 4H11M0-6V-9" stroke="#567458" stroke-width="2" stroke-linecap="round"/>
+            </g>
+          </g>
+
+          <g id="front-crank" fill="none" stroke="#dce0c2" stroke-width="6" stroke-linecap="round"><path id="front-crank-arm"/></g>
+          <g id="near-leg" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path id="near-leg-outline" stroke="#bc8c50" stroke-width="16"/>
+            <path id="near-leg-fill" stroke="#e5b46b" stroke-width="11"/>
+            <circle id="near-knee" r="6" fill="#e5b46b"/>
+            <path id="near-foot" fill="#edbc73" stroke="#bd8d52" stroke-width="2"/>
+          </g>
+          <path id="near-pedal" stroke="#3d5c48" stroke-width="7" stroke-linecap="round"/>
+          <circle cx="765" cy="602" r="7" fill="#eee9cd" stroke="#466650" stroke-width="3"/>
+
+          <!-- The rider: broad pouch, long bill, folded feathers and a wind-tossed scarf. -->
+          <g id="rider">
+            <g id="scarf-tails" stroke="#ba6449" stroke-width="1.5" stroke-linejoin="round">
+              <path id="scarf-tail-back" d="M826 277C775 268 765 224 696 231L706 213C764 209 792 252 829 256Z" fill="#d37550"/>
+              <path id="scarf-tail-front" d="M826 275C783 279 757 244 674 252L685 232C758 221 789 262 821 256Z" fill="#e78c5f"/>
+              <path id="scarf-stripe" d="M693 233L684 250" fill="none" stroke="#f5c28c" stroke-width="5"/>
+            </g>
+            <path d="M587 326Q618 330 643 311C651 278 681 254 723 253C760 251 778 266 794 287C811 285 814 260 809 233C805 200 821 169 850 165C879 161 903 179 906 202C911 221 903 242 891 252C874 267 857 267 850 287C838 311 851 347 829 377C811 402 772 421 732 421C690 423 650 409 635 385L589 365L620 353L570 340Q576 331 587 326Z" fill="url(#feather)" stroke="#667d66" stroke-width="2.5" stroke-linejoin="round"/>
+            <path d="M588 340L642 353M605 360L645 367M648 379Q681 410 730 410" fill="none" stroke="#bbc6ad" stroke-width="2.2" stroke-linecap="round"/>
+            <path d="M835 190C820 214 833 240 830 263C827 290 816 295 813 314C807 343 827 356 807 379C828 361 833 345 832 320C831 291 842 271 858 256C874 241 876 232 866 219C851 234 842 221 843 203Z" fill="#dfe5d2" opacity=".75"/>
+            <path d="M828 174Q835 162 844 160M842 169Q851 156 861 158M852 167Q864 161 872 165" fill="none" stroke="#f9f8e8" stroke-width="4" stroke-linecap="round"/>
+            <path d="M812 263Q827 278 850 276L845 293Q824 291 809 280Z" fill="#e18a5b" stroke="#be7350" stroke-width="1.5"/>
+            <path d="M815 269Q829 281 847 281" fill="none" stroke="#f4b580" stroke-width="3"/>
+            <path d="M812 277Q801 287 807 293Q815 298 822 284" fill="#d57b51" stroke="#be7350" stroke-width="1.5"/>
+
+            <g id="head">
+              <path d="M898 220L1130 217C1091 244 1016 285 955 282C925 281 902 258 898 220Z" fill="url(#pouch)" stroke="#b6814e" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M911 232C923 257 941 270 961 274C1003 278 1065 248 1105 230" fill="none" stroke="#f8d397" stroke-width="3" stroke-linecap="round" opacity=".75"/>
+              <path d="M939 239Q944 260 963 271M963 239Q971 260 985 268M987 237Q996 252 1007 259" fill="none" stroke="#d99860" stroke-width="1.3" opacity=".65"/>
+              <path d="M893 198C945 183 1045 197 1133 216Q1138 218 1130 222L901 231Q891 219 893 198Z" fill="#edb35e" stroke="#af834d" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M907 202C964 196 1047 207 1102 214" fill="none" stroke="#ffdb8b" stroke-width="4" stroke-linecap="round"/>
+              <path d="M903 229L1129 219" fill="none" stroke="#a77445" stroke-width="1.5"/>
+              <ellipse cx="921" cy="207" rx="5" ry="2" fill="#b28447"/>
+              <path d="M893 203Q887 208 891 225" fill="none" stroke="#f8edd0" stroke-width="5" stroke-linecap="round"/>
+              <circle cx="875" cy="198" r="13" fill="#e5e7cc"/>
+              <g id="eye" transform="translate(875 198)">
+                <circle r="7" fill="#304b40"/>
+                <circle cx="2" cy="-2.5" r="2.2" fill="#fffdf0"/>
+              </g>
+              <path d="M863 181Q874 176 883 182" fill="none" stroke="#6a7d61" stroke-width="2.5" stroke-linecap="round"/>
+              <ellipse cx="870" cy="225" rx="10" ry="6" fill="#efc4a0" opacity=".6" transform="rotate(-18 870 225)"/>
+            </g>
+
+            <path d="M677 300C710 277 750 281 778 303C793 315 798 330 813 340L933 366C949 367 963 368 973 379Q978 389 965 392L934 387C878 380 837 373 793 364C783 387 753 403 714 398C676 395 661 364 664 336C664 320 670 309 677 300Z" fill="url(#wing-color)" stroke="#839176" stroke-width="2" stroke-linejoin="round"/>
+            <path d="M680 318Q712 296 741 308M680 335Q716 316 757 334M683 351Q721 341 769 352M692 369Q728 365 766 366M708 384Q736 382 753 377" fill="none" stroke="#d0d6bd" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M797 348Q864 370 939 378M936 372L965 381M935 382L958 386" fill="none" stroke="#c1cab0" stroke-width="2" stroke-linecap="round"/>
+            <path d="M671 319Q675 303 690 299" fill="none" stroke="#fffef5" stroke-width="4" stroke-linecap="round"/>
+          </g>
+
+          <g id="bell-arcs" fill="none" stroke="#a7874c" stroke-width="2.5" stroke-linecap="round" opacity="0">
+            <path d="M941 353L937 343M954 353L959 343M964 362L975 358M927 363L918 359"/>
+            <path d="M939 333L936 327M968 340L973 333" opacity=".6"/>
+          </g>
+          <g id="wind-strokes" fill="none" stroke="#fff9e6" stroke-width="2" stroke-linecap="round" opacity=".55">
+            <path d="M524 258H574M505 266H532M477 397H536M466 405H492"/>
+          </g>
+          <g id="grasses"><use href="#grass-span"/><use href="#grass-span" x="1440"/></g>
+          <path d="M0 0H1440V820H0Z" fill="#7b775a" opacity=".15" filter="url(#paper-grain)" style="mix-blend-mode:soft-light;pointer-events:none"/>
+        </svg>
+
+        <div class="intro">
+          <div class="eyebrow">THE ART OF GOING SLOW</div>
+          <h1>把日子，<br>骑成<em>一阵风。</em></h1>
+          <p>不赶路，去感受路。<br>和一只鹈鹕，把海风骑进今天。</p>
+        </div>
+        <div class="hero-edition">EST. 2026 &nbsp; / &nbsp; VOL. 001</div>
+        <div class="scene-caption">
+          <span class="route-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M4 18L10 12L7 8L17 4M14 4H17V7M13 13L20 20M15 19L20 20L19 15"/></svg></span>
+          <div><strong>01 / 沿着海岸线</strong><small>THE COASTAL ROUTE</small></div>
+        </div>
+        <div class="handwritten">A little less hurry, a little more sea.</div>
+      </section>
+
+      <section class="dashboard" aria-label="骑行控制">
+        <div class="ride-info">
+          <div class="live"><span class="live-dot" aria-hidden="true"></span><span id="ride-status" role="status">自在骑行中</span></div>
+          <div class="stat"><span class="stat-label">此刻的速度</span><span class="stat-value" id="speed-value">16</span><span class="stat-unit">km/h</span></div>
+          <div class="stat"><span class="stat-label">把时光骑远</span><span class="stat-value" id="distance-value">0.00</span><span class="stat-unit">km</span></div>
+        </div>
+        <div class="speed-control">
+          <label for="speed">骑行节奏</label>
+          <div class="slider-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M3 14H14Q20 14 20 9Q20 4 16 6M3 18H10" stroke-linecap="round"/></svg>
+            <input id="speed" type="range" min="0.55" max="1.65" step="0.05" value="1" aria-label="骑行节奏" aria-valuetext="16 公里每小时">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 7H14Q19 7 18 3M2 12H21M2 17H13Q19 17 17 22" stroke-linecap="round"/></svg>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="bell-button" id="bell-button" title="按响车铃（B）" aria-label="按响车铃（B）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M5 17V12A7 7 0 0 1 19 12V17M3 18H21M9 21H15M12 3V1M19 4L21 2" stroke-linecap="round"/></svg><span>叮铃</span></button>
+          <button class="play-button" id="play-button" title="暂停骑行（空格）" aria-label="暂停骑行（空格）">
+            <svg class="pause-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="5" y="4" width="3" height="12" rx="1"/><rect x="12" y="4" width="3" height="12" rx="1"/></svg>
+            <svg class="play-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6 3.7Q6 2.7 7 3.3L16 9Q17.5 10 16 11L7 16.7Q6 17.3 6 16.3Z"/></svg>
+          </button>
+        </div>
+      </section>
+    </main>
+    <footer>
+      <div class="footer-note">Nowhere to rush. Somewhere to be.</div>
+      <div class="footer-meta">纯 SVG 绘制 <span class="footer-mark">✳</span> 为好心情而骑</div>
+    </footer>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      'use strict';
+      const $ = id => document.getElementById(id);
+      const root = document.documentElement;
+      const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+      const el = Object.fromEntries([
+        'rear-spokes', 'front-spokes', 'chainring', 'clouds', 'islands',
+        'water-ripples', 'road-texture', 'grasses', 'rider', 'eye',
+        'gull-one', 'gull-two', 'gulls', 'wind-strokes', 'bike-shadow',
+        'scarf-tail-back', 'scarf-tail-front', 'scarf-stripe',
+        'far-leg-outline', 'far-leg-fill', 'far-foot', 'far-crank-arm', 'far-pedal',
+        'near-leg-outline', 'near-leg-fill', 'near-foot', 'near-knee', 'front-crank-arm', 'near-pedal',
+        'speed-value', 'distance-value', 'ride-status', 'play-button', 'speed'
+      ].map(id => [id, $(id)]));
+
+      let paused = motionPreference.matches;
+      let speed = 1;
+      let night = false;
+      let time = 0;
+      let travel = 0;
+      let distance = 0;
+      let phase = .45;
+      let lastTime = null;
+      let raf = null;
+      let lastDistanceText = '';
+      let audioContext;
+      let toastTimer;
+      let bellAnimation;
+      let lastBell = -Infinity;
+      const TAU = Math.PI * 2;
+      const transform = (id, value) => el[id].setAttribute('transform', value);
+      const path = (id, value) => el[id].setAttribute('d', value);
+      const n = value => value.toFixed(2);
+
+      // Two-bone inverse kinematics keeps each webbed foot on its own pedal.
+      function drawLeg(side, angle, bob) {
+        const near = side === 'near';
+        const hip = { x: near ? 730 : 708, y: (near ? 402 : 398) + bob };
+        const foot = { x: 765 + Math.cos(angle) * 44, y: 602 + Math.sin(angle) * 44 };
+        const ankle = { x: foot.x - 10, y: foot.y - 12 };
+        const upper = 126;
+        const lower = 143;
+        const dx = ankle.x - hip.x;
+        const dy = ankle.y - hip.y;
+        const d = Math.max(1, Math.hypot(dx, dy));
+        const along = (upper * upper - lower * lower + d * d) / (2 * d);
+        const height = Math.sqrt(Math.max(0, upper * upper - along * along));
+        const knee = { x: hip.x + dx * along / d + dy * height / d, y: hip.y + dy * along / d - dx * height / d };
+        const legPath = `M${n(hip.x)} ${n(hip.y)}L${n(knee.x)} ${n(knee.y)}L${n(ankle.x)} ${n(ankle.y)}`;
+        path(`${side}-leg-outline`, legPath);
+        path(`${side}-leg-fill`, legPath);
+        const x = ankle.x, y = ankle.y;
+        path(`${side}-foot`, `M${n(x-5)} ${n(y-4)}Q${n(x+1)} ${n(y-6)} ${n(x+7)} ${n(y+1)}L${n(x+31)} ${n(y+8)}Q${n(x+38)} ${n(y+13)} ${n(x+29)} ${n(y+14)}L${n(x-4)} ${n(y+12)}Q${n(x-9)} ${n(y+8)} ${n(x-5)} ${n(y-4)}Z`);
+        path(near ? 'front-crank-arm' : 'far-crank-arm', `M765 602L${n(foot.x)} ${n(foot.y)}`);
+        path(`${side}-pedal`, `M${n(foot.x-15)} ${n(foot.y+3)}H${n(foot.x+17)}`);
+        if (near) {
+          el['near-knee'].setAttribute('cx', n(knee.x));
+          el['near-knee'].setAttribute('cy', n(knee.y));
+        }
+      }
+
+      function drawScene(dt) {
+        time += dt;
+        phase = (phase + dt * 2.4 * speed) % TAU;
+        // Wheel rotation and the road share one distance, avoiding skating tires.
+        travel += dt * 2.4 * speed * 1.65 * 108;
+        distance += dt * (16 * speed) / 3600;
+        const wheelAngle = (travel / 108 * 180 / Math.PI) % 360;
+        const crankAngle = phase * 180 / Math.PI;
+        const bob = Math.sin(phase * 2) * 2.1;
+        transform('rear-spokes', `rotate(${n(wheelAngle)})`);
+        transform('front-spokes', `rotate(${n(wheelAngle)})`);
+        transform('chainring', `translate(765 602) rotate(${n(crankAngle)})`);
+        transform('rider', `translate(0 ${n(bob)})`);
+        drawLeg('far', phase + Math.PI, bob);
+        drawLeg('near', phase, bob);
+        transform('clouds', `translate(${n(-(travel * .018) % 1600)} 0)`);
+        transform('islands', `translate(${n(-(travel * .033) % 1600)} 0)`);
+        transform('grasses', `translate(${n(-travel % 1440)} 0)`);
+        el['water-ripples'].setAttribute('patternTransform', `translate(${n(-(travel * .12) % 260)} 0)`);
+        el['road-texture'].setAttribute('patternTransform', `translate(${n(-travel % 210)} 0)`);
+        transform('gulls', `translate(${n(Math.sin(time * .13) * 25)} ${n(Math.sin(time * .4) * 5)})`);
+        const flap = Math.sin(time * 2) * 5;
+        path('gull-one', `M1008 ${n(125+flap)}Q1019 119 1030 127Q1041 118 1052 ${n(123+flap)}`);
+        path('gull-two', `M1068 ${n(151-flap*.6)}Q1077 147 1086 154Q1095 146 1104 ${n(149-flap*.6)}`);
+        const blinkPhase = time % 6.3;
+        const blink = blinkPhase > 5.95 && blinkPhase < 6.13 ? Math.max(.08, Math.abs(blinkPhase - 6.04) / .09) : 1;
+        transform('eye', `translate(875 198) scale(1 ${n(blink)})`);
+        const flutter = Math.sin(time * 7 * speed) * 7;
+        const flutter2 = Math.sin(time * 7 * speed - 1.3) * 5;
+        path('scarf-tail-back', `M826 277C775 268 765 ${224+flutter2} 696 ${231+flutter}L706 ${213+flutter}C764 ${209+flutter2} 792 252 829 256Z`);
+        path('scarf-tail-front', `M826 275C783 ${279+flutter2} 757 ${244+flutter} 674 ${252+flutter2}L685 ${232+flutter2}C758 ${221+flutter} 789 262 821 256Z`);
+        path('scarf-stripe', `M693 ${233+flutter2}L684 ${250+flutter2}`);
+        el['wind-strokes'].setAttribute('opacity', n(.3 + Math.sin(time * 2.5) * .15));
+        transform('wind-strokes', `translate(${n(-((time * 30) % 35))} 0)`);
+        el['bike-shadow'].setAttribute('rx', n(281 - bob * 2));
+        const distanceText = distance.toFixed(2);
+        if (distanceText !== lastDistanceText) {
+          el['distance-value'].textContent = distanceText;
+          lastDistanceText = distanceText;
+        }
+      }
+
+      function frame(timestamp) {
+        if (paused || document.hidden) { raf = null; return; }
+        const dt = lastTime === null ? 0 : Math.min((timestamp - lastTime) / 1000, .05);
+        lastTime = timestamp;
+        drawScene(dt);
+        raf = requestAnimationFrame(frame);
+      }
+      function syncPlayback() {
+        root.dataset.paused = String(paused);
+        const label = paused ? '继续骑行（空格）' : '暂停骑行（空格）';
+        el['play-button'].setAttribute('aria-label', label);
+        el['play-button'].title = label;
+        el['ride-status'].textContent = paused ? '停下来，看看海' : '自在骑行中';
+        el['speed-value'].textContent = paused ? '0' : String(Math.round(16 * speed));
+        if (raf !== null) cancelAnimationFrame(raf);
+        raf = null;
+        lastTime = null;
+        if (!paused && !document.hidden) raf = requestAnimationFrame(frame);
+      }
+      function togglePlayback() { paused = !paused; syncPlayback(); }
+      el['play-button'].addEventListener('click', togglePlayback);
+      el.speed.addEventListener('input', event => {
+        speed = Number(event.target.value);
+        el['speed-value'].textContent = paused ? '0' : String(Math.round(16 * speed));
+        el.speed.setAttribute('aria-valuetext', `${Math.round(16 * speed)} 公里每小时`);
+      });
+      document.addEventListener('visibilitychange', syncPlayback);
+      motionPreference.addEventListener('change', event => {
+        if (event.matches) { paused = true; syncPlayback(); }
+      });
+
+      $('theme-button').addEventListener('click', () => {
+        night = !night;
+        root.dataset.night = String(night);
+        $('theme-button').setAttribute('aria-pressed', String(night));
+        const label = night ? '切换到日光骑行' : '切换到月光骑行';
+        $('theme-button').setAttribute('aria-label', label);
+        $('theme-button').title = label;
+        $('weather-word').textContent = night ? '月色正好' : '海风轻拂';
+        $('temperature').textContent = night ? '19°' : '24°';
+        document.querySelector('meta[name="theme-color"]').content = night ? '#182e32' : '#f6f4eb';
+      });
+
+      function showToast(message) {
+        const toast = $('toast');
+        clearTimeout(toastTimer);
+        toast.textContent = message;
+        toast.classList.add('visible');
+        toastTimer = setTimeout(() => toast.classList.remove('visible'), 1900);
+      }
+      async function ringBell() {
+        if (performance.now() - lastBell < 350) return;
+        lastBell = performance.now();
+        showToast(night ? '叮铃，把晚风叫醒。' : '叮铃，借过一小片好心情。');
+        if (bellAnimation) bellAnimation.cancel();
+        bellAnimation = $('bell-arcs').animate([
+          { opacity: 0 }, { opacity: 1, offset: .12 },
+          { opacity: .35, offset: .35 }, { opacity: 1, offset: .5 }, { opacity: 0 }
+        ], { duration: 1100, easing: 'ease-out' });
+        // Sound is generated locally, and only after an explicit bell gesture.
+        try {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContextClass) return;
+          audioContext ||= new AudioContextClass();
+          if (audioContext.state === 'suspended') await audioContext.resume();
+          const now = audioContext.currentTime;
+          [0, .17].forEach((delay, strike) => {
+            [1, 2.76, 4.07].forEach((harmonic, index) => {
+              const oscillator = audioContext.createOscillator();
+              const gain = audioContext.createGain();
+              const start = now + delay;
+              oscillator.type = 'sine';
+              oscillator.frequency.value = (strike ? 1397 : 1568) * harmonic;
+              gain.gain.setValueAtTime(0, start);
+              gain.gain.linearRampToValueAtTime(.07 / (index + 1), start + .006);
+              gain.gain.exponentialRampToValueAtTime(.0001, start + .85 - index * .12);
+              oscillator.connect(gain);
+              gain.connect(audioContext.destination);
+              oscillator.start(start);
+              oscillator.stop(start + .9);
+              oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+            });
+          });
+        } catch { /* Visual feedback remains available if the browser blocks audio. */ }
+      }
+      $('bell-button').addEventListener('click', ringBell);
+      document.addEventListener('keydown', event => {
+        if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+        const target = event.target;
+        if (target instanceof Element && target.closest('button, input, textarea, select, [contenteditable="true"]')) return;
+        if (event.code === 'Space') { event.preventDefault(); togglePlayback(); }
+        if (event.key.toLowerCase() === 'b') ringBell();
+      });
+      drawScene(0);
+      syncPlayback();
+    })();
+  </script>
+</body>
+</html>

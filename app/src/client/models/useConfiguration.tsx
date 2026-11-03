@@ -42,8 +42,10 @@ export function useConfiguration() {
   const [busy, setBusy] = useState(false);
   const [savedProviders, setSavedProviders] = useState<Provider[]>([]);
   const initializedGeneration = useRef(0);
-  const logoutInFlight = useRef(false);
+  const readSequence = useRef(0);
+  const currentConnection = useRef(connectionState); currentConnection.current = connectionState;
   const [needsReconcile, setNeedsReconcile] = useState(false);
+  const [confirmedGeneration, setConfirmedGeneration] = useState(-1);
   const [login, setLogin] = useState<{
     providerId: string;
     type: "api_key" | "oauth";
@@ -53,9 +55,8 @@ export function useConfiguration() {
     [selected, setSelected] = useState("");
   const [query, setQuery] = useState(""),
     [filter, setFilter] = useState(""),
-    [tab, setTab] = useState("suppliers");
-  const [editor, setEditor] = useState<Model | null>(null),
-    [showKey, setShowKey] = useState(false);
+    [tab, setTab] = useState("accounts");
+  const [editor, setEditor] = useState<Model | null>(null);
   const [notice, setNotice] = useState({ message: "", error: false });
   const feedback = notice.message, feedbackError = notice.error;
   const setFeedback = useCallback((message: string, error = false) => setNotice({ message, error }), []);
@@ -119,33 +120,34 @@ export function useConfiguration() {
     return next;
   };
   const load = async (preferredProvider?: string) => {
+    const sequence = ++readSequence.current, generation = currentConnection.current.generation;
     setFeedback("正在读取本地配置…");
     setBusy(true);
     try {
       const data = await command<ModelConfiguration>("configuration.get");
+      if (sequence !== readSequence.current || generation !== currentConnection.current.generation || !currentConnection.current.connected) return null;
       setProviders(data.providers);
       setSavedProviders(data.providers);
       setRevision(data.revision);
       setTemplates(data.templates);
       setStorage(data.storage);
       setSaved(false);
-      setSelected((old) =>
-        preferredProvider && data.providers.some((p) => p.id === preferredProvider)
-          ? preferredProvider
-          : data.providers.some((p) => p.id === old)
-            ? old
-            : (data.providers[0]?.id ?? ""),
-      );
+      const preferred = preferredProvider || (!revision ? new URLSearchParams(location.search).get("provider") : undefined);
+      setSelected(old => data.providers.find(p => p.providerId === preferred)?.id
+        ?? (data.providers.some(p => p.id === old) ? old : data.providers[0]?.id ?? ""));
       setEditor(null);
       setNeedsReconcile(false);
-      setShowKey(false);
+      setConfirmedGeneration(generation);
       setFeedback("已读取已发布配置；已保存密钥和请求头值不回传。");
       return data;
     } catch (error) {
-      setFeedback(`读取配置失败：${(error as Error).message}`, true);
+      if (sequence === readSequence.current && generation === currentConnection.current.generation) {
+        setNeedsReconcile(true);
+        setFeedback(`读取配置失败：${(error as Error).message}`, true);
+      }
       return null;
     } finally {
-      setBusy(false);
+      if (sequence === readSequence.current) setBusy(false);
     }
   };
   const refreshAuthentication = async (providerId?: string) => {
@@ -168,7 +170,7 @@ export function useConfiguration() {
     const next = stageEditor();
     if (!next) return;
     setSaved(false);
-    setFeedback("正在保存配置和密钥…");
+    setFeedback("正在保存连接和模型配置…");
     setBusy(true);
     try {
       await command("configuration.save", {
@@ -181,11 +183,7 @@ export function useConfiguration() {
       setNeedsReconcile(true);
       if (await load(next.find(provider => provider.id === selected)?.providerId)) {
         setSaved(true);
-        setFeedback(
-          next.some((provider) => provider.key.trim())
-            ? "保存成功：配置和 API 密钥已写入本地文件。密钥不回显，留空可保留已保存的密钥。"
-            : "保存成功：配置已写入本地文件，模型目录已刷新。",
-        );
+        setFeedback("保存成功：连接与模型配置已写入本地文件，账号认证保持不变。");
       }
     } catch (error) {
       const e = error as Error & { code?: string };
@@ -264,71 +262,22 @@ export function useConfiguration() {
       setSelected(id);
       setTab("suppliers");
       setEditor(null);
-      setShowKey(false);
       setFeedback("供应商为本页未保存草稿，尚未发布到 pi。");
     });
   const select = (id: string) => {
     if (id === selected) return;
     if (!stageEditor()) return;
     setSelected(id);
-    setShowKey(false);
     setFeedback("已保留其他供应商的草稿；下方保存才会发布配置。");
-  };
-  const logoutProvider = async (provider: Provider, confirmStop = false) => {
-    if (logoutInFlight.current || busy || dirty || editor || needsReconcile || login || !provider.originalId) return;
-    logoutInFlight.current = true;
-    setBusy(true);
-    setSaved(false);
-    setFeedback("正在退出认证…");
-    try {
-      const current = await command<ModelConfiguration>("configuration.get");
-      if (!current.providers.some((item) => item.providerId === provider.providerId))
-        throw Error("供应商配置已变化，请重新读取后重试。");
-      await command("configuration.save", {
-        revision,
-        providers: current.providers.map((item) => item.providerId === provider.providerId
-          ? { ...item, key: "", clearKey: true }
-          : item),
-        confirmLogout: true,
-        confirmStop,
-      });
-      setNeedsReconcile(true);
-      const refreshed = await load(provider.providerId);
-      if (refreshed) {
-        const remaining = refreshed.providers.find((item) => item.providerId === provider.providerId);
-        setFeedback(remaining?.auth?.configured
-          ? "已清除受管理认证；供应商和模型已保留。当前仍有环境变量等其他来源提供认证。"
-          : provider.connectionType === "oauth"
-            ? "已退出授权；供应商和模型已保留，可重新进行 OAuth 登录。"
-            : "已退出认证；供应商和模型已保留，可填写新密钥后保存。");
-        requestAnimationFrame(() => document.getElementById(provider.connectionType === "oauth" ? "oauth-login-provider" : "provider-key")?.focus());
-      }
-    } catch (error) {
-      const e = error as Error & { code?: string };
-      setFeedback(`退出认证失败：${e.message}`, true);
-      if (["PARTIAL_CONFIG_FAILURE", "UNCERTAIN", "REVISION_CONFLICT"].includes(e.code ?? ""))
-        setNeedsReconcile(true);
-      if (e.code === "ACTIVE_RUNS_CONFIRMATION_REQUIRED")
-        setDecision({
-          title: "停止受影响的执行并退出认证？",
-          confirmLabel: "停止并退出认证",
-          danger: true,
-          text: e.message + "停止不回滚项目文件；供应商和模型配置保留。",
-          proceed: () => void logoutProvider(provider, true),
-        });
-    } finally {
-      logoutInFlight.current = false;
-      setBusy(false);
-    }
   };
   const removeProvider = (provider: Provider, stopConfirmed = false) => {
     setDecision({
-      title: "删除供应商？",
-      confirmLabel: provider.originalId ? "删除供应商" : "移除草稿",
+      title: "移除连接？",
+      confirmLabel: provider.originalId ? "移除连接" : "移除草稿",
       danger: true,
       subject: provider.name || provider.providerId,
       text: provider.originalId
-        ? "立即退出该供应商，删除其模型与受管理认证；同供应商会话将需要重新选择模型。未保存的其他修改不会一并提交。"
+        ? "移除此连接及其模型配置；请先在账号页删除关联账号，否则操作会被拒绝。同连接会话需要重新选择模型，其他连接不受影响。"
         : "仅移除尚未发布的供应商草稿。",
       proceed: async () => {
         if (!provider.originalId) {
@@ -352,7 +301,7 @@ export function useConfiguration() {
           setNeedsReconcile(true);
           if (await load())
             setFeedback(
-              "已删除供应商并退出 pi 登录；项目文件与会话索引保持不变。",
+              "已移除连接及其模型配置；其他连接、项目文件与会话索引保持不变。",
             );
         } catch (error) {
           const e = error as Error & { code?: string };
@@ -412,7 +361,7 @@ export function useConfiguration() {
     editorDirty,
     stageEditor,
     busy,
-    needsReconcile,
+    needsReconcile: needsReconcile || !connectionState.connected || confirmedGeneration !== connectionState.generation,
     login,
     setLogin,
     providers,
@@ -424,8 +373,6 @@ export function useConfiguration() {
     tab,
     editor,
     setEditor,
-    showKey,
-    setShowKey,
     feedback,
     feedbackError,
     copyFeedback,
@@ -439,7 +386,6 @@ export function useConfiguration() {
     discardEditor,
     add,
     select,
-    logoutProvider,
     removeProvider,
     changeTab,
     copyButton,

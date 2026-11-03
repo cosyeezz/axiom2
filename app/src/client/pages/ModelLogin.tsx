@@ -100,7 +100,7 @@ export function ModelLogin({
     }
   };
   useEffect(() => {
-    if (type !== "oauth" || !state?.url || state.status !== "running" || disconnected || closing) return;
+    if (type !== "oauth" || !state?.url || state.status !== "running" || disconnected || closing || cancelling.current) return;
     if (opened.current.has(state.url)) return;
     opened.current.add(state.url);
     void openBrowser();
@@ -134,7 +134,7 @@ export function ModelLogin({
     }
   };
   const authFailed = !!error || disconnected || state?.status === "failed";
-  const canInteract = state?.status === "running" && !disconnected && !closing;
+  const canInteract = state?.status === "running" && !disconnected && !closing && !cancelling.current;
   const title = `${account ? "添加账号 · " : ""}${type === "oauth" ? "OAuth" : "API Key"} 登录 · ${providerDisplayName(providerId)}`;
   const content = (
     <>

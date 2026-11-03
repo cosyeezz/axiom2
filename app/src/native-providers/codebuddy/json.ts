@@ -6,12 +6,12 @@ export const validCodeBuddyToken = (value: unknown): value is string => typeof v
   && value.length <= 32768 && !/[\r\n\0]/.test(value);
 
 /** Bounded fixed-origin JSON requests, shared by auth and catalog. Never redirects or retries. */
-export function createCodeBuddyJsonRequest(options: { fetch?: typeof fetch; requestTimeoutMs?: number }, label: "认证" | "目录") {
+export function createCodeBuddyJsonRequest(options: { fetch?: typeof fetch; requestTimeoutMs?: number }, label: "认证" | "目录" | "账号") {
   const timeoutMs = options.requestTimeoutMs ?? 30_000;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 2_147_483_647) throw new Error("CodeBuddy 请求超时配置无效。");
   return async (path: string, init: RequestInit, callerSignal: AbortSignal, pendingCode?: number): Promise<CodeBuddyEnvelope> => {
     callerSignal.throwIfAborted();
-    if (!/^\/v(?:2\/plugin\/auth\/(?:state\?platform=CLI|token(?:\?state=[^#]*|\/refresh))|3\/config)$/.test(path))
+    if (!/^\/v(?:2\/plugin\/(?:auth\/(?:state\?platform=CLI|token(?:\?state=[^#]*|\/refresh))|accounts)|3\/config)$/.test(path))
       throw new Error("CodeBuddy 请求目标无效。");
     const timeout = new AbortController();
     const timer = setTimeout(() => timeout.abort(), timeoutMs);
@@ -32,7 +32,7 @@ export function createCodeBuddyJsonRequest(options: { fetch?: typeof fetch; requ
         throw new Error(`CodeBuddy ${label}网络请求失败，请稍后重试。`);
       }
       signal.throwIfAborted();
-      const httpFailure = () => new Error(`CodeBuddy ${label}请求失败（HTTP ${response!.status}），请检查账号。`);
+      const httpFailure = () => Object.assign(new Error(`CodeBuddy ${label}请求失败（HTTP ${response!.status}），请检查账号。`), { status: response!.status });
       let body: CodeBuddyEnvelope;
       try {
         if (!response.body) throw new Error();

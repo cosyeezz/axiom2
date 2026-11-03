@@ -36,7 +36,7 @@ export interface MemoryExecution {
   revision?: (sessionId: string, path: string) => string;
   kind: "query" | "organize" | "title";
 }
-export interface MemoryRunner { configurationKey?(selection?: Selection): string; execute(input: MemoryExecution): Promise<MemoryExecutionResult>; stopProviders?(providers: string[], confirmed: boolean): Promise<void>; close(): Promise<void> }
+export interface MemoryRunner { configurationKey?(selection?: Selection): string; execute(input: MemoryExecution): Promise<MemoryExecutionResult>; checkProviders?(providers: string[], confirmed: boolean): void; stopProviders?(providers: string[], confirmed: boolean): Promise<void>; close(): Promise<void> }
 /** Query-local authority receipt; never published in model input or client results. */
 export interface MemoryReadAccess { actual: string; external: boolean }
 /** 持久目录的内部字段不属于前端目录协议。 */
@@ -66,7 +66,6 @@ export class Memories {
   private scanWaiters = new Map<string, Map<number, Set<{ resolve: () => void; reject: (error: Error) => void }>>>();
   private scannerRetry?: ReturnType<typeof setTimeout>;
   private organizationWork?: OrganizationWork;
-  private organizerScheduled?: ReturnType<typeof setImmediate>;
   private closed = false;
   private controller = new AbortController();
   runner?: MemoryRunner;
@@ -133,9 +132,7 @@ export class Memories {
         this.lastSafetySweep = Date.now();
         this.scheduleScan();
       }
-      // Fallback for runner availability and bounded failure retries, not a
-      // waiting period for newly completed or revised sources.
-      this.scheduleOrganization();
+      // 自动整理已停用：不再由定时器、扫描或整理完成触发 organize()。
     }, 1500);
     this.timer.unref();
   }
@@ -485,7 +482,6 @@ export class Memories {
       const documentsChanged = this.pipeline.tree.syncDocuments(scope, view.entry, view.files);
       if (reconciled || enqueued || documentsChanged) this.publishTree(scope.workspaceId);
     }
-    this.scheduleOrganization();
     const sourceTitle = view.progress.title || String(this.owner(scope).title);
     const old = this.store.db.prepare("SELECT revision,body FROM memory_sources WHERE sessionId=?").get(scope.sessionId);
     const previous = old ? JSON.parse(String(old.body)) as StoredMemoryCatalogEntry : undefined;
@@ -814,14 +810,6 @@ export class Memories {
     if (!row?.selection) throw new AppError("MODEL_REQUIRED", "请先选择记忆模型或来源会话模型");
     return JSON.parse(String(row.selection));
   }
-  private scheduleOrganization() {
-    if (this.closed || this.organizationWork || this.organizerScheduled || !this.runner) return;
-    this.organizerScheduled = setImmediate(() => {
-      this.organizerScheduled = undefined;
-      void this.organize().catch(() => {});
-    });
-    this.organizerScheduled.unref();
-  }
   async organize() {
     if (this.closed || this.organizationWork || !this.runner) return;
     // Count and timer triggers share this slot, reserved synchronously before
@@ -859,9 +847,6 @@ export class Memories {
       }
     })().finally(() => {
       if (this.organizationWork === work) this.organizationWork = undefined;
-      // Never drain a sub-threshold fresh queue immediately: its oldest enqueue
-      // time (persisted across restart), not last edit or last model call, is the clock.
-      if (!this.closed && this.store.workspaces().some(workspace => workspace.authorized && this.pipeline.tree.batch(workspace.id).length)) this.scheduleOrganization();
     });
     await work.done;
   }
@@ -919,7 +904,6 @@ export class Memories {
     this.closed = true;
     this.stopRecordObservation();
     clearInterval(this.timer);
-    if (this.organizerScheduled) clearImmediate(this.organizerScheduled);
     if (this.scanDelay) clearTimeout(this.scanDelay);
     if (this.scannerRetry) clearTimeout(this.scannerRetry);
     this.watcher?.close();

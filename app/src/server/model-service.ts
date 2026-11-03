@@ -624,6 +624,15 @@ export class ModelService {
         config,
         runtime,
       );
+      // A connection is shared by all its accounts. Removing it must never log out
+      // just the currently selected slot and leave the other cards orphaned.
+      if (logout.size) {
+        const accounts = readAccountIndex(this.dir).accounts;
+        const stored = await runtime.listCredentials();
+        for (const providerId of logout)
+          if (accounts.some(row => row.providerId === providerId) || stored.some(row => row.providerId === providerId))
+            throw new AppError("ACCOUNT_CONNECTION_IN_USE", "此连接仍有关联账号，请先在账号与认证中删除账号，再移除连接。");
+      }
       const raw = JSON.stringify(candidate, null, 2) + "\n";
       if (Buffer.byteLength(raw) > 1_000_000) invalid("配置超过 1 MB 上限");
       const path = join(this.dir, `models-${randomUUID()}.tmp`);

@@ -8,7 +8,8 @@ import { ModelService } from "../src/server/model-service.js";
 import { configuration } from "../src/server/models.js";
 import { Store } from "../src/server/storage.js";
 import { Logins } from "../src/server/auth.js";
-import { fixtureLoginNetwork } from "./model-network-fixture.js";
+import { fixtureAccount, fixtureLoginNetwork } from "./model-network-fixture.js";
+import { ModelAccountService } from "../src/server/model-accounts.js";
 import { setTimeout as delay } from "node:timers/promises";
 import type { AuthState } from "../src/shared/models.js";
 import type { ProviderDraft, ModelDraft } from "../src/shared/models.js";
@@ -125,8 +126,9 @@ test("shared pi directory: provider-only save survives restart and native creden
   try {
     const service = new ModelService(root);
     const draft = await service.read();
-    draft.providers = [{ ...provider(), providerId: "openai", models: [], key: "TEST-ONLY" }];
+    draft.providers = [{ ...provider(), providerId: "openai", models: [] }];
     await service.save(draft);
+    await fixtureAccount(service, "openai", { type: "api_key", key: "TEST-ONLY" });
     const reloaded = await new ModelService(root).read();
     assert.equal(reloaded.providers[0].providerId, "openai");
     assert.equal(reloaded.providers[0].auth?.configured, true);
@@ -145,22 +147,25 @@ test("shared pi directory: provider-only save survives restart and native creden
   }
 });
 
-test("API key save rejects a login that did not persist a credential", async () => {
+test("account login rejects returned credentials that were not persisted", async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-missing-credential-"));
   const previous = process.env.AXIOM_PI_DIR;
   process.env.AXIOM_PI_DIR = join(root, "pi");
   try {
     const service = new ModelService(root, null);
-    const createRuntime = service.runtime.bind(service);
-    service.runtime = async (path) => {
-      const runtime = await createRuntime(path);
-      runtime.login = async () => ({ type: "api_key", key: "TEST-ONLY-NOT-PERSISTED" });
-      return runtime;
-    };
     const draft = await service.read();
-    draft.providers = [{ ...provider(), key: "TEST-ONLY-NOT-PERSISTED" }];
-    await assert.rejects(service.save(draft), { code: "PARTIAL_CONFIG_FAILURE" });
-    assert.deepEqual(await (await createRuntime()).listCredentials(), []);
+    draft.providers = [provider()];
+    await service.save(draft);
+    const logins = new Logins(service, () => {}, async () => {}, async () => {}, async () => ({ type: "api_key", key: "TEST-ONLY-NOT-PERSISTED" }) as any);
+    const owner = {};
+    try {
+      const flow = await logins.start(owner, "axiom-config-test", "api_key", (await service.read()).revision);
+      for (let n = 0; service.authActive && n < 100; n++) await delay(10);
+      assert.equal(service.authActive, false);
+      assert.equal(logins.get(owner, flow.id).state.status, "failed");
+      assert.deepEqual((await new ModelAccountService(service).list()).accounts, []);
+      assert.deepEqual(await (await service.runtime()).listCredentials(), []);
+    } finally { await logins.close(); }
   } finally {
     if (previous === undefined) delete process.env.AXIOM_PI_DIR;
     else process.env.AXIOM_PI_DIR = previous;
@@ -200,13 +205,14 @@ test("Model configuration: validation, atomic publish, pi credentials, redaction
   try {
     let draft = await service.read();
     draft.providers = [provider()];
-    draft.providers[0].key = key;
     draft.providers[0].headers = [{ id: "h", key: "X-Test", value: header }];
     draft.providers[0].body = [{ id: "b", key: "temperature", value: "0.2" }];
     draft.providers[0].models[0].body = [
       { id: "b", key: "temperature", value: "0.7" },
     ];
     await service.save(draft);
+    // Existing legacy credentials remain usable; configuration never supplies the key.
+    writeFileSync(join(service.dir, "auth.json"), JSON.stringify({ "axiom-config-test": { type: "api_key", key } }));
     assert.equal((await configuration(root)).available.length, 2);
     const saved = JSON.parse(readFileSync(path, "utf8"));
     assert.ok(
@@ -235,13 +241,13 @@ test("Model configuration: validation, atomic publish, pi credentials, redaction
     const persistedKey = () => JSON.parse(readFileSync(join(root, "pi", "auth.json"), "utf8"))["axiom-config-test"]?.key;
     assert.ok(persistedKey() === key, "API key must be written to auth.json");
     draft.providers[0].key = "TEST-ONLY-REPLACEMENT";
-    await service.save(draft);
-    assert.ok(persistedKey() === "TEST-ONLY-REPLACEMENT", "replacement key must reach disk");
+    await assert.rejects(service.save(draft), { code: "ACCOUNT_AUTH_REQUIRED" });
+    assert.ok(persistedKey() === key, "configuration must not replace the selected credential");
     draft = await new ModelService(root).read();
     assert.equal(draft.providers[0].key, "");
     assert.equal(draft.providers[0].auth?.configured, true);
     await service.save(draft);
-    assert.ok(persistedKey() === "TEST-ONLY-REPLACEMENT", "blank input must preserve the saved key");
+    assert.ok(persistedKey() === key, "configuration saves must preserve the saved key");
     assert.equal(
       JSON.parse(readFileSync(path, "utf8")).providers["axiom-config-test"]
         .headers["X-Test"],
@@ -300,9 +306,6 @@ test("Model configuration: validation, atomic publish, pi credentials, redaction
       (p: ProviderDraft) => {
         p.api = "anthropic-messages";
       },
-      (p: ProviderDraft) => {
-        p.key = "••••••";
-      },
     ]) {
       const invalid = await service.read();
       alter(invalid.providers[0]);
@@ -316,11 +319,11 @@ test("Model configuration: validation, atomic publish, pi credentials, redaction
     await assert.rejects(service.save(command), {
       code: "COMMAND_AUTHORIZATION_REQUIRED",
     });
-    const commandKey = await service.read();
-    commandKey.providers[0].key = "!this-command-must-not-run";
-    await assert.rejects(service.save(commandKey), {
-      code: "COMMAND_AUTHORIZATION_REQUIRED",
-    });
+    for (const key of ["!this-command-must-not-run", "••••••"]) {
+      const commandKey = await service.read();
+      commandKey.providers[0].key = key;
+      await assert.rejects(service.save(commandKey), { code: "ACCOUNT_AUTH_REQUIRED" });
+    }
     const concurrent = await service.read();
     const results = await Promise.allSettled([
       service.save({
@@ -351,7 +354,7 @@ test("Model configuration: validation, atomic publish, pi credentials, redaction
 
     // Configuration responses and hashes are persisted, never submitted secrets.
     draft = await service.read();
-    draft.providers[0].key = key;
+    draft.providers[0].headers.push({ id: "private", key: "X-Private", value: key });
     const request = {
       requestId: randomUUID(),
       op: "configuration.save",
@@ -376,11 +379,10 @@ test("Model configuration: validation, atomic publish, pi credentials, redaction
     const badAuth = readFileSync(join(root, "pi", "auth.json"), "utf8");
     writeFileSync(join(root, "pi", "auth.json"), "{invalid");
     draft.providers[0].name = "partial";
-    draft.providers[0].key = key;
     draft.revision = (await service.load()).revision;
-    await assert.rejects(service.save(draft), {
-      code: "PARTIAL_CONFIG_FAILURE",
-    });
+    // Connection-only edits must not rewrite or repair an unrelated broken auth file.
+    await service.save(draft);
+    assert.equal(readFileSync(join(root, "pi", "auth.json"), "utf8"), "{invalid");
     assert.equal(
       JSON.parse(readFileSync(path, "utf8")).providers["axiom-config-test"]
         .name,
@@ -543,9 +545,10 @@ test("pi auth bridge: owner-bound prompts, OAuth interactions, abort and secret-
         !service.authActive,
     );
     assert.throws(() => logins.open(owner, id), { code: "AUTH_EXPIRED" });
-    assert.deepEqual(await runtime.listCredentials(), [
-      { providerId: "axiom-config-test", type: "oauth" },
-    ]);
+    const accounts = new ModelAccountService(service), committed = await accounts.list();
+    assert.equal(committed.accounts.length, 1);
+    assert.equal(committed.accounts[0].type, "oauth");
+    assert.equal(committed.accounts[0].active, true);
     assert.ok(states.every((event) => event.owner === owner));
     assert.ok(!JSON.stringify(states).includes("SECRET"));
     assert.ok(!JSON.stringify(states).includes("FIXTURE-CODE"));
@@ -565,8 +568,8 @@ test("pi auth bridge: owner-bound prompts, OAuth interactions, abort and secret-
       code: "AUTH_SCOPE_MISMATCH",
     });
     assert.deepEqual(
-      await runtime.listCredentials(),
-      [{ providerId: "axiom-config-test", type: "oauth" }],
+      (await accounts.list()).accounts,
+      committed.accounts,
       "cancelling login must not delete previous credentials",
     );
     // Disconnect while start is queued: no late prompt, callback server, or credential write.

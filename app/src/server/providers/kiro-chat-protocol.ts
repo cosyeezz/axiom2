@@ -1,5 +1,7 @@
 import { collapseSystemMessages, getCurrentSystemPrompt, getCurrentTools, type Api, type Model, type TranscriptContext } from "@earendil-works/pi-ai";
 import type { KiroCredential } from "./kiro-auth.js";
+import type { NativeContext } from "../../native-providers/contracts.js";
+import { normalizeKiroToolIds } from "./kiro-tool-ids.js";
 import { KiroChatError, kiroText, kiroNativeChatRequest, kiroNativeEndpoint } from "./kiro-native-protocol.js";
 export { KiroChatError, kiroObject, kiroText, type KiroJson } from "./kiro-native-protocol.js";
 
@@ -14,12 +16,13 @@ export function assertKiroChatModel(model: Model<Api>) {
 /** Pi boundary only: resolve transcript system/tool updates before entering the native core. */
 export function kiroChatRequest(model: Model<Api>, context: TranscriptContext, account: KiroCredential, sessionId?: string) {
   assertKiroChatModel(model);
+  return kiroNativeChatRequest(model.id, normalizeKiroContext(context), account, sessionId);
+}
+
+export function normalizeKiroContext(context: TranscriptContext): NativeContext {
   const collapsed = collapseSystemMessages(context);
-  return kiroNativeChatRequest(model.id, {
-    systemPrompt: getCurrentSystemPrompt(collapsed.messages),
-    tools: getCurrentTools(collapsed.messages),
-    messages: collapsed.messages.filter(message => message.role !== "system"),
-  }, account, sessionId);
+  return { systemPrompt: getCurrentSystemPrompt(collapsed.messages), tools: getCurrentTools(collapsed.messages),
+    messages: normalizeKiroToolIds(collapsed.messages).filter(message => message.role !== "system") };
 }
 
 export const kiroChatEndpoint = kiroNativeEndpoint;

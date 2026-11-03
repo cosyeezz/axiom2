@@ -28,7 +28,7 @@ test("Kiro native chat sends selected model and full system prompt, uses fixed A
     assert.equal(String(input), "https://runtime.us-east-1.kiro.dev/"); assert.equal(init?.method, "POST"); assert.equal(init?.redirect, "error");
     const headers = new Headers(init?.headers);
     assert.equal(headers.get("Authorization"), "Bearer PRIVATE-ACCESS");
-    assert.equal(headers.get("x-amz-target"), "AmazonCodeWhispererStreamingService.GenerateAssistantResponse");
+    assert.equal(headers.get("x-amz-target"), "KiroRuntimeService.GenerateAssistantResponse");
     assert.equal(headers.get("x-amzn-codewhisperer-optout"), "true"); assert.equal(headers.get("x-fixture"), "safe");
     assert.equal(headers.get("Content-Type"), "application/x-amz-json-1.0"); assert.equal(headers.get("User-Agent"), null);
     const body = JSON.parse(String(init?.body));

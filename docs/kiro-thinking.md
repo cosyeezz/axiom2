@@ -20,7 +20,8 @@
 | 预算模式：精确 `claude-sonnet-3.7`、`claude-sonnet-4`、`claude-opus-4`、`claude-opus-4.1`、`claude-sonnet-4.5`、`claude-haiku-4.5`、`claude-opus-4.5`、`claude-sonnet-4.8` | off / minimal / low / medium / high | 首条 wire 用户消息文本增加 enabled 及 token 预算标签；不发原生 effort |
 | `claude-sonnet-4.6` | off / low / medium / high | adaptive 标签及 `additionalModelRequestFields.output_config.effort` |
 | `claude-opus-4.6` | off / low / medium / high / max | 同上；不把 xhigh 静默降成 high |
-| 精确 `claude-opus-4.7`、`claude-opus-4.8`、`claude-sonnet-5`、`claude-sonnet-5.5`、`claude-opus-5`、`claude-opus-5.5`、`claude-fable-5`、`claude-mythos-5` | off / low / medium / high / xhigh / max | 同上 |
+| 精确 `claude-opus-4.7`、`claude-opus-4.8`、`claude-sonnet-5`、`claude-opus-5`、`claude-opus-5.5`、`claude-fable-5`、`claude-mythos-5` | off / low / medium / high / xhigh / max | 同上 |
+| 精确 `claude-sonnet-5.5` | low / medium / high / xhigh / max；SDK off 仅兼容入口，不表示关闭 | Responses `reasoning.effort`；默认及兼容 off 为 high；不发 type、不注入 XML |
 | 精确 `gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` | off / low / medium / high / xhigh / max | `additionalModelRequestFields.reasoning.effort`，不注入 Claude 标签 |
 | 未识别 ID | 默认仅 off | 不声称上游不支持；用户明确启用后可走预算标签，不猜原生 effort |
 
@@ -58,18 +59,24 @@ GPT 示例：
 {"additionalModelRequestFields":{"reasoning":{"effort":"high"}}}
 ```
 
-外层字段为 camelCase，Claude 内层是 `output_config`，不是顶层 OpenAI `reasoning_effort`。Opus 4.6 使用 adaptive 条件，不只孤立发送 effort。原生 effort 模式拒绝显式 token 预算覆盖，避免把抽象 effort 宣称为精确 token 上限。无效、不支持等级/映射/预算在 fetch 前报错，不当作忽略参数，不静默回退 high。响应的 `providerThinkingLevel` 记录实际发送的 effort 或预算字符串。
+外层字段为 camelCase，Claude 内层是 `output_config`，不是顶层 OpenAI `reasoning_effort`。Opus 4.6 使用 adaptive 条件，不只孤立发送 effort。原生 effort 模式拒绝显式 token 预算覆盖，避免把抽象 effort 宣称为精确 token 上限。无效、不支持等级/映射/预算在模型推理发送前报错（企业 profile 发现可能先发生），不当作忽略参数，不静默回退 high。响应的 `providerThinkingLevel` 记录实际发送的 effort 或预算字符串。
+
+### Sonnet 5.5 的目录证据与限定例外
+
+[实际目录投影](evidence/kiro-enterprise-validation-01/catalog-metadata-01.json)确认其 thinking.type 枚举不含 disabled，output_config.effort 默认 high；[官方 KAS 构造](evidence/kiro-enterprise-validation-01/sonnet-routing-static/responses-off-source.txt)仅在同时包含 disabled/adaptive 时允许切换。故精确 Sonnet 5.5 始终省略 thinking.type，默认与 SDK off 都发送 `reasoning:{effort:"high"}`，显式五档保真。不因 adaptive 在枚举内就主动发送 type，也不套用可切换模型的 off effort 封顶。
+
+Agent 初始默认也传 own undefined，不能把它一律当作用户主动要求关闭。适配器保留该兼容入口，记录 `kiro-thinking-off-unavailable`，实际 `providerThinkingLevel` 为 high，而非 none；现有 UI/SDK off 等级兼容声明未在本次做全局迁移。**不承诺关闭思考，也不把已知构造差异称为旧400的唯一原因或新实发成功。** 默认路径同样拒绝非空 token 预算覆盖。此处是有实际目录证据的精确模型兼容配置，尚未实现全模型动态 schema 同步。
 
 ### off 的边界
 
-Pi Agent 将 off 传为自有属性 `reasoning:undefined`。Claude off 不新增标签或原生 effort，不从 ID 的 thinking 后缀强制开启，也不删除用户原文中引用的标签；这表示**没有请求额外思考控制**，不保证服务默认永不自行推理。GPT 显式 off 发送原生 `reasoning.effort:"none"`；裸 SDK 请求完全不提供 reasoning 属性时保留服务默认。服务主动发送的原生思考事件仍正常显示。
+除上述 Sonnet 5.5 例外外，Pi Agent 将 off 传为自有属性 `reasoning:undefined`。Claude off 不新增标签或原生 effort，不从 ID 的 thinking 后缀强制开启，也不删除用户原文中引用的标签；这表示**没有请求额外思考控制**，不保证服务默认永不自行推理。GPT 显式 off 发送原生 `reasoning.effort:"none"`；裸 SDK 请求完全不提供 reasoning 属性时保留服务默认。服务主动发送的原生思考事件仍正常显示。
 
 控制只注入新建 wire payload 的首条 `userInputMessage`：即使系统提示缺失或空也生效。这里指协议结构，不验证消息是否来自真人。保留完整 `<axiom_system>`；按下述思考省略、失败 assistant 跳过及未配对调用清理规则构造 wire 历史，保留其余正文、图片和已配对工具的顺序。不伪造助手确认、不植入第三方身份提示、不修改宿主 transcript；下一轮不会累计注入。
 
 ## 响应思考处理
 
 - 继续支持原生 `reasoningContentEvent` 的 text、signature、redactedContent。
-- 本次主动请求思考时，兼容 `assistantResponseEvent.content` 回复起始的 `<thinking>…</thinking>` 控制块。标签、换行和 Unicode 可任意跨帧；解析器暂存尾部高代理项，确实不完整的代理项在边界明确失败，不发损坏的标签解析 delta；尾部缓冲有界，不整段等待思考结束。
+- GAR 路径主动请求思考时，兼容 `assistantResponseEvent.content` 回复起始的 `<thinking>…</thinking>` 控制块。标签、换行和 Unicode 可任意跨帧；解析器暂存尾部高代理项，确实不完整的代理项在边界明确失败，不发损坏的标签解析 delta；尾部缓冲有界，不整段等待思考结束。
 - 仅解释起始控制块（可有最多 1024 个前导空白 UTF-16 单元）；正文内标签、引号、代码示例不按思考误切。这个保守策略不同于 H 扫描正文的宽松方式，不声称兼容所有任意位置标签。
 - 常规闭标签要求双 LF 或双 CRLF，避免把内文结束标记当控制；被紧邻引号/反引号引用的闭标签不生效。工具/流尾允许闭标签后仅为空白；待确认尾白最多 1024 单元，超过本地上限明确报错而非无界缓存或偷偷输出半个标签。
 - 未闭合块在工具或正常流尾保留为 thinking 并记诊断，不捏造正文空格、签名或 `max_tokens` 原因。只有思考而无有效正文/完整工具的回复仍按原空回复保护失败。

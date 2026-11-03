@@ -95,6 +95,17 @@ export function accountBindings(dir: string): Record<string, string> {
     return account.legacy ? [] : [[provider, account.id]];
   }));
 }
+/** Capture managed-account intent separately: legacy slots still use root auth.json. */
+export function managedAccountProviders(dir: string): string[] {
+  if (process.env.AXIOM_EXECUTION_PROFILE && process.env.AXIOM_MODEL_MANAGED_ACCOUNTS) {
+    try {
+      const value: unknown = JSON.parse(process.env.AXIOM_MODEL_MANAGED_ACCOUNTS);
+      if (!Array.isArray(value) || value.some(provider => typeof provider !== "string" || !provider || provider.length > 160)) throw invalid();
+      return value;
+    } catch { throw invalid(); }
+  }
+  return [...new Set([...readAccountIndex(dir).accounts.map(row => row.providerId), ...Object.keys(accountBindings(dir))])];
+}
 export function selectedAuthPath(providerId: string, authPath: string, bindings = accountBindings(dirname(authPath))) {
   const id = Object.hasOwn(bindings, providerId) ? bindings[providerId] : undefined;
   return id ? join(accountDirectory(dirname(authPath), id), "auth.json") : authPath;
@@ -115,9 +126,16 @@ export const accountBindingRevision = (dir: string) => createHash("sha256").upda
 const piEntry = import.meta.resolve("@earendil-works/pi-coding-agent");
 const authModule = import(new URL("./core/auth-storage.js", piEntry).href) as Promise<{ AuthStorage: { create(path: string): CredentialStore } }>;
 const catalogModule = import(new URL("./core/models-store.js", piEntry).href) as Promise<{ FileModelsStore: new (path: string) => ModelsStore }>;
+/** Explicit slot access for lifecycle operations; never follows the selected account. */
+export async function directCredentialStore(authPath: string): Promise<CredentialStore> {
+  safeAccountFile(authPath);
+  const { AuthStorage } = await authModule;
+  return AuthStorage.create(authPath);
+}
 export async function accountRuntimeStores(authPath: string, catalogPath: string) {
   const bindings = accountBindings(dirname(authPath));
-  if (!Object.keys(bindings).length) return undefined;
+  const managed = new Set(managedAccountProviders(dirname(authPath)));
+  if (!Object.keys(bindings).length && !managed.size) return undefined;
   const [{ AuthStorage }, { FileModelsStore }] = await Promise.all([authModule, catalogModule]);
   const auth = new Map<string, CredentialStore>(), catalogs = new Map<string, ModelsStore>();
   const credentialStore = (provider: string) => {
@@ -130,9 +148,13 @@ export async function accountRuntimeStores(authPath: string, catalogPath: string
     if (!catalogs.has(path)) catalogs.set(path, new FileModelsStore(path));
     return catalogs.get(path)!;
   };
+  const requireCredential = (provider: string, value: Credential | undefined) => {
+    if (!value && managed.has(provider)) throw new AppError("ACCOUNT_AUTH_MISSING", "所选账号的认证已缺失；请新增登录并设为默认，不会使用环境变量或其他账号替代。");
+    return value;
+  };
   const credentials: CredentialStore = {
-    read: (provider, options) => credentialStore(provider).read(provider, options),
-    modify: (provider, fn, options) => credentialStore(provider).modify(provider, fn, options),
+    read: async (provider, options) => requireCredential(provider, await credentialStore(provider).read(provider, options)),
+    modify: (provider, fn, options) => credentialStore(provider).modify(provider, value => fn(requireCredential(provider, value)), options),
     delete: (provider, options) => credentialStore(provider).delete(provider, options),
     async list(options) {
       const base = await credentialStore("").list(options);

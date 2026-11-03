@@ -50,12 +50,19 @@ test("Qoder preserves system/tools and projects dynamic model_config, signs enco
     const { models, model } = await fixture(region);
     let payloads = 0, responses = 0, events = 0;
     const result = await models.completeSimple(model, context, { apiKey: "pt-FIXTURE", maxTokens: 512,
+      sessionId: "PRIVATE-HOST-SESSION", headers: { "User-Agent": "Axiom/Pi injected", "X-Axiom-Session": "PRIVATE", "x-fixture": "not-cli", "Cosy-Version": "bad", "Authorization": "bad" },
       onPayload(payload) { payloads++; return payload; }, onResponse() { responses++; }, onProviderStreamEvent() { events++; },
       fetch: async (input, init) => {
         const url = new URL(String(input)); assert.equal(url.origin, region === "cn" ? "https://gateway.qoder.com.cn" : "https://api1.qoder.sh");
         assert.equal(url.pathname, "/algo/api/v2/service/pro/sse/agent_chat_generation"); assert.equal(url.searchParams.get("Encode"), "1");
         assert.equal(init?.redirect, "error"); assert.match(new Headers(init?.headers).get("authorization")!, /^Bearer COSY\./);
+        const headers = new Headers(init?.headers);
+        assert.equal(headers.get("User-Agent"), "undici");
+        assert.equal(headers.get("X-Axiom-Session"), null); assert.equal(headers.get("x-fixture"), null);
+        assert.equal(headers.get("Cosy-Version"), "1.1.81"); assert.equal(headers.get("Cosy-MachineHostname"), null);
         const body = decode(String(init?.body));
+        assert.match(body.session_id, /^[0-9a-f-]{36}$/); assert.notEqual(body.session_id, "PRIVATE-HOST-SESSION");
+        assert.equal(body.business.version, "1.1.81"); assert.equal(body.business.model_key, model.id);
         assert.equal(body.system, context.systemPrompt); assert.equal(body.messages.find((message: any) => message.role === "system").content, context.systemPrompt);
         assert.equal(body.tools[0].function.name, "read"); assert.equal(body.model_config.key, modelConfig.key); assert.equal(body.model_config.is_reasoning, modelConfig.is_reasoning);
         assert.equal(body.model_config.unknown_field, undefined); assert.equal(body.model_config.url, "");
@@ -84,6 +91,25 @@ test("Qoder SSE accepts bounded auxiliary metadata and wrapped controls without 
     assert.doesNotMatch(output, /NOTIFICATIONS|EXCEED_QUOTA|"id":"aux"/);
   }
 });
+test("Qoder live qoder-cn tail: usage, wrapped DONE and bare event:finish timing frame complete the response", async () => {
+  // Shape captured 2026-11-01 from gateway.qoder.com.cn (dfmodel); CLI 1.1.81 skips firstTokenDuration frames.
+  const wrapped = (body: unknown) => `data: ${JSON.stringify({ headers: { "Content-Type": ["text/event-stream"] }, body: typeof body === "string" ? body : JSON.stringify(body), statusCodeValue: 200, statusCode: "OK" })}\n\n`;
+  const base = { id: "chatcmpl-fixture", object: "chat.completion.chunk", created: 1, model: "dfmodel" };
+  const text = wrapped({ ...base, choices: [{ index: 0, delta: { role: "assistant", content: "", reasoning_content: "" } }] })
+    + wrapped({ ...base, choices: [{ index: 0, delta: { content: "", reasoning_content: "think" } }] })
+    + wrapped({ ...base, choices: [{ index: 0, delta: { content: "AXIOM_QODER_OK", reasoning_content: "" } }] })
+    + wrapped({ ...base, choices: [{ index: 0, delta: { content: "", reasoning_content: "" }, finish_reason: "stop" }] })
+    + wrapped({ ...base, choices: [], usage: { billable: true, prompt_tokens: 119, completion_tokens: 31, total_tokens: 150, credits: 0, original_credits: 0, completion_tokens_details: { reasoning_tokens: 20 }, prompt_tokens_details: { cacheable_tokens: 0, cached_tokens: 0 } } })
+    + wrapped("[DONE]")
+    + "event:finish\ndata:" + JSON.stringify({ firstTokenDuration: 300, totalDuration: 900, serverDuration: 850 }) + "\n\n";
+  const output = await unwrapQoderSse(new Response(text, { headers: { "content-type": "text/event-stream" } }), undefined, { finishIdleMs: Infinity }).text();
+  assert.match(output, /AXIOM_QODER_OK/); assert.match(output, /"total_tokens":150/); assert.match(output, /\[DONE\]/);
+  assert.doesNotMatch(output, /firstTokenDuration/);
+  for (const bad of [{ firstTokenDuration: 1, content: "SECRET" }, { firstTokenDuration: "1" }, { notifications: "SECRET" }]) {
+    const tail = wrapped({ ...base, choices: [{ index: 0, delta: { content: "x" } }] }) + "event:finish\ndata:" + JSON.stringify(bad) + "\n\n" + wrapped({ ...base, choices: [{ index: 0, delta: {}, finish_reason: "stop" }] });
+    await assert.rejects(unwrapQoderSse(new Response(tail, { headers: { "content-type": "text/event-stream" } })).text(), error => error instanceof Error && error.message.includes("缺少 choices") && !error.message.includes("SECRET"));
+  }
+});
 test("Qoder auxiliary frames cannot hide errors, malformed choices, unknown content or missing finish", async () => {
   const usage = { prompt_tokens: 1, completion_tokens: 1 };
   const invalid = [{ error: { code: 112, message: "SECRET" } }, { code: 112 }, { queue: { isQueued: true } }, { content: "SECRET" }, { status: "error" }, { choices: {} }, { choices: "SECRET", usage },
@@ -103,6 +129,35 @@ test("Qoder auxiliary frames cannot hide errors, malformed choices, unknown cont
     const text = "event: SECRET\n" + envelope(body, 403);
     await assert.rejects(unwrapQoderSse(new Response(text, { headers: { "content-type": "text/event-stream" } })).text(), error => error instanceof Error && error.message.includes("[sse_wrapper status=403 event=other body=") && error.message.includes(`code=${body === "SECRET" ? "none" : "105"}]`) && !error.message.includes("SECRET"));
   }
+});
+test("Qoder CLI tool continuations may carry empty or null IDs without replacing the initial call", async () => {
+  const { models, model } = await fixture();
+  for (const id of ["", null, undefined]) {
+    const result = await models.completeSimple(model, context, { apiKey: "pt-FIXTURE", fetch: async () => sse([
+      // Live dfmodel: the named announcement has an ID; argument deltas repeat id:"".
+      // CLI 1.1.81 sRe resolves continuations by index and keeps the announcement ID.
+      chunk({ tool_calls: [{ index: 0, id: "live-read", type: "function", function: { name: "read", arguments: "" } }] }),
+      chunk({ tool_calls: [{ index: 0, id, function: { arguments: '{"path":' } }] }),
+      chunk({ tool_calls: [{ index: 0, id, function: { arguments: '"fixture.json"}' } }] }),
+      chunk({}, "tool_calls"),
+      { choices: [], usage: { prompt_tokens: 5, completion_tokens: 3 } },
+    ]) });
+    assert.equal(result.stopReason, "toolUse", result.errorMessage);
+    const calls = result.content.filter(block => block.type === "toolCall");
+    assert.equal(calls.length, 1); assert.equal(calls[0].id, "live-read");
+    assert.equal(calls[0].name, "read"); assert.deepEqual(calls[0].arguments, { path: "fixture.json" });
+    assert.equal(result.usage.totalTokens, 8);
+  }
+  for (const continuation of [
+    { index: 0, id: "replacement", function: { arguments: "{}" } },
+    { index: 0, id: "", function: { arguments: '{"path":' } },
+  ]) await assert.rejects(unwrapQoderSse(sse([
+    chunk({ tool_calls: [{ index: 0, id: "original", function: { name: "read", arguments: "" } }] }),
+    chunk({ tool_calls: [continuation] }, "tool_calls"),
+  ])).text(), /MALFORMED_TOOL_CALL_STREAM/);
+  for (const id of ["", null]) await assert.rejects(unwrapQoderSse(sse([
+    chunk({ tool_calls: [{ index: 0, id, function: { name: "read", arguments: "{}" } }] }, "tool_calls"),
+  ])).text(), /MALFORMED_TOOL_CALL_STREAM/);
 });
 test("Qoder fragmented parallel tools and tool results survive round-trip", async () => {
   const { models, model } = await fixture();
@@ -153,6 +208,7 @@ test("Qoder catalog vision capability preserves ordered multi-turn images and of
     ] }] };
     let payloads = 0;
     const first = await models.completeSimple(model, initial, { apiKey: "pt-FIXTURE", onPayload() { payloads++; }, fetch: async (_input, init) => {
+      if (String(_input).includes("/image/upload")) return new Response(null, { status: 503 });
       const body = decode(String(init?.body)), user = body.messages.find((message: any) => message.role === "user");
       assert.deepEqual(user.content, [{ type: "text", text: "before" }, { type: "image_url", image_url: { url: pngUrl } },
         { type: "text", text: "between" }, { type: "image_url", image_url: { url: pngUrl } }, { type: "text", text: "after" }]);
@@ -164,6 +220,7 @@ test("Qoder catalog vision capability preserves ordered multi-turn images and of
     assert.equal(first.stopReason, "stop", first.errorMessage); assert.equal(payloads, 1);
     const next: Context = { ...initial, messages: [...initial.messages, first, { role: "user", content: [{ type: "text", text: "recall" }, png], timestamp: 2 }] };
     const result = await models.complete(model, next, { apiKey: "pt-FIXTURE", fetch: async (_input, init) => {
+      if (String(_input).includes("/image/upload")) return new Response(null, { status: 503 });
       const body = decode(String(init?.body));
       const messages = body.messages.filter((message: any) => message.role !== "system");
       assert.equal(messages.length, 3); assert.deepEqual(messages[0].contents, messages[0].content);
@@ -187,6 +244,7 @@ test("Qoder native tool-result image projection preserves tool IDs, images and f
     { role: "user", timestamp: 3, content: [{ type: "text", text: "Attached image(s) from tool result:" }, png] },
   ] };
   const result = await models.completeSimple(model, next, { apiKey: "pt-FIXTURE", fetch: async (_input, init) => {
+    if (String(_input).includes("/image/upload")) return new Response(null, { status: 503 });
     const body = decode(String(init?.body)), tool = body.messages.findIndex((message: any) => message.role === "tool");
     assert.equal(body.messages[tool].tool_call_id, "image-read");
     assert.deepEqual(body.messages[tool].content, [{ type: "text", text: "image from read" }, { type: "image_url", image_url: { url: pngUrl } }]);
@@ -239,6 +297,7 @@ test("Qoder explicit BYOK vision overrides work through provider option paths wi
       ...(path === "direct" ? { customModelOverride } : path === "metadata" ? { metadata: { qoder: { customModelOverride } } }
         : path === "sampling" ? { samplingParams: { qoder: { customModelOverride } } } : {}),
       fetch: async (_input, init) => {
+        if (String(_input).includes("/image/upload")) return new Response(null, { status: 503 });
         calls++;
         const body = decode(String(init?.body));
         assert.equal(body.model_config.is_vl, true); assert.equal(body.model_config.key, "custom_model");
@@ -267,6 +326,7 @@ test("Qoder accepts supported MIME headers and preserves image-only input withou
     { type: "image", mimeType: "image/webp", data: Buffer.from("RIFF0000WEBP").toString("base64") }] as const;
   const result = await models.completeSimple(model, { messages: [{ role: "user", timestamp: 1, content: [...images] }] }, {
     apiKey: "pt-FIXTURE", fetch: async (_input, init) => {
+      if (String(_input).includes("/image/upload")) return new Response(null, { status: 503 });
       const body = decode(String(init?.body));
       assert.deepEqual(body.messages[0].content, images.map(image => ({ type: "image_url", image_url: { url: `data:${image.mimeType};base64,${image.data}` } })));
       assert.deepEqual(body.messages[0].contents, body.messages[0].content); assert.equal(body.chat_context.text, "");
@@ -287,6 +347,7 @@ test("Qoder preserves adjacent tool-result IDs and ordered grouped images", asyn
     { role: "toolResult", toolCallId: "right", toolName: "read", isError: false, timestamp: 2, content: [{ type: "text", text: "right" }, gif] },
   ] };
   const result = await models.completeSimple(model, next, { apiKey: "pt-FIXTURE", fetch: async (_input, init) => {
+    if (String(_input).includes("/image/upload")) return new Response(null, { status: 503 });
     const body = decode(String(init?.body)), tools = body.messages.filter((message: any) => message.role === "tool");
     assert.deepEqual(tools.map((message: any) => message.tool_call_id), ["left", "right"]);
     assert.deepEqual(tools[0].content, [{ type: "image_url", image_url: { url: pngUrl } }]);
@@ -374,7 +435,7 @@ test("Qoder keeps sanitized auth, catalog and network diagnostics without replay
     apiKey: JSON.stringify({ region: "cn", token: "dt-FIXTURE", userId: "fixture-user", machineId: "fixture-machine" }),
     fetch: async input => { calls++; return String(input).includes("endpoints") ? json({ inferNodes: ["https://gateway.qoder.com.cn"] }) : json({ chat: [] }); },
   });
-  assert.equal(catalog.stopReason, "error"); assert.match(catalog.errorMessage!, /账号没有可用模型/); assert.equal(calls, 4);
+  assert.equal(catalog.stopReason, "error"); assert.match(catalog.errorMessage!, /账号没有可用模型/); assert.equal(calls, 5); // election + server data policy + catalog
   for (const result of [network, invalid, exchange, catalog]) assert.doesNotMatch(result.errorMessage!, /SECRET|Connection error/);
   const controller = new AbortController(); let inference = 0;
   const cancelled = await models.completeSimple(model, context, { apiKey: "pt-FIXTURE", signal: controller.signal, fetch: async (_input, init) => {

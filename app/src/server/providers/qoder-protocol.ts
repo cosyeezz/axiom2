@@ -25,8 +25,6 @@
  * SOFTWARE.
  */
 import { constants, createCipheriv, createHash, publicEncrypt, randomUUID } from "node:crypto";
-import { hostname } from "node:os";
-import { domainToASCII } from "node:url";
 
 export type QoderRegion = "intl" | "cn";
 export const qoderSites = {
@@ -34,6 +32,10 @@ export const qoderSites = {
   cn: { id: "qoder-cn", name: "Qoder 国内版", login: "https://qoder.com.cn/device/selectAccounts", open: "https://openapi.qoder.com.cn", center: "https://gateway.qoder.com.cn", device: "https://gateway.qoder.com.cn" },
 } as const;
 export const qoderChatPath = "/algo/api/v2/service/pro/sse/agent_chat_generation";
+// Wire identity of the official CLI 1.1.81 (lKt/yu(): client_type 5, cli/agent/assistant).
+export const qoderVersion = "1.1.81";
+export const qoderMachineOS = `${process.arch === "arm64" ? "aarch64" : process.arch === "x64" ? "x86_64" : process.arch}_${process.platform}`;
+export const qoderClientHeaders = () => ({ "Cosy-Version": qoderVersion, "Cosy-ClientType": "5", "Cosy-MachineOS": qoderMachineOS });
 export type QoderIdentity = { token: string; userId: string; machineId: string };
 export class QoderError extends Error {}
 const publicKey = `-----BEGIN PUBLIC KEY-----
@@ -144,8 +146,9 @@ export function decodeQoderBody(text: string): string {
 // Never send bearer/COSY credentials to arbitrary election URLs, across regions or redirects.
 export async function qoderInference(region: QoderRegion, identity: QoderIdentity, transport: typeof fetch, signal?: AbortSignal): Promise<string> {
   const data = await qoderJson(transport, `${qoderSites[region].center}/algo/api/v5/service/region/endpoints`, {
-    signal, headers: { Accept: "application/json", Authorization: `Bearer ${identity.token}`, "x-gw-user-id": identity.userId,
-      "Cosy-MachineId": identity.machineId, "Cosy-MachineToken": identity.machineId },
+    // CLI Oll(): without a UMID the machine token falls back to the machine ID; Hc adds client headers.
+    signal, headers: { Authorization: `Bearer ${identity.token}`, "Cosy-MachineId": identity.machineId, "Cosy-MachineToken": identity.machineId,
+      "x-gw-user-id": identity.userId, ...qoderClientHeaders() },
   }, true);
   if (!Array.isArray(data.inferNodes) || !data.inferNodes.length) throw new QoderError("Qoder 未返回可用推理端点；当前不支持私有或匿名 V3 端点选举。");
   const allowed: readonly string[] = region === "cn" ? ["https://gateway.qoder.com.cn"] : ["https://api1.qoder.sh", "https://api2.qoder.sh", "https://api3.qoder.sh"];
@@ -163,28 +166,46 @@ export async function qoderInference(region: QoderRegion, identity: QoderIdentit
 }
 
 const md5 = (value: string | Buffer) => createHash("md5").update(value).digest("hex");
-export function qoderHeaders(body: string, url: string, identity: QoderIdentity): Record<string, string> {
+export type QoderDataPolicy = "agree" | "disagree";
+// Mirrors WASM prepareRequest("auth") / prepareInferRequest header sets observed from CLI 1.1.81.
+// Data policy must come from the account (getDataPolicy); never assume consent.
+export function qoderHeaders(body: string, url: string, identity: QoderIdentity, dataPolicy: QoderDataPolicy = "disagree"): Record<string, string> {
   if (!identity.userId || !identity.token || !identity.machineId) throw new QoderError("Qoder 凭据不完整，请重新登录。");
   const key = Buffer.from(randomUUID().slice(0, 16));
   const cipher = createCipheriv("aes-128-cbc", key, key);
   const info = Buffer.concat([cipher.update(JSON.stringify({ uid: identity.userId, security_oauth_token: identity.token, name: "", aid: "", email: "" }), "utf8"), cipher.final()]).toString("base64");
   const cosyKey = publicEncrypt({ key: publicKey, padding: constants.RSA_PKCS1_PADDING }, key).toString("base64");
-  const payload = Buffer.from(JSON.stringify({ version: "v1", requestId: randomUUID(), info, cosyVersion: "1.0.0", ideVersion: "" })).toString("base64");
+  const payload = Buffer.from(JSON.stringify({ version: "v1", requestId: randomUUID(), info, cosyVersion: qoderVersion, ideVersion: "" })).toString("base64");
   const timestamp = String(Math.floor(Date.now() / 1000)), path = new URL(url).pathname.replace(/^\/algo(?=\/)/, "");
   const bytes = Buffer.from(body, "utf8");
   const signature = md5(Buffer.concat([Buffer.from(`${payload}\n${cosyKey}\n${timestamp}\n`), bytes, Buffer.from(`\n${path}`)]));
-  const rawHostname = hostname().trim();
-  const safeHostname = (domainToASCII(rawHostname) || rawHostname).replace(/[^A-Za-z0-9._-]/g, "_");
-  const machineHostname = rawHostname ? `${safeHostname.slice(0, 87)}-${md5(rawHostname).slice(0, 8)}` : "";
+  const infer = new URL(url).pathname.includes("/sse/");
   return {
-    Authorization: `Bearer COSY.${payload}.${signature}`, "Cosy-Key": cosyKey, "Cosy-User": identity.userId,
-    "Cosy-Date": timestamp, "Cosy-Version": "1.1.78", "Cosy-Machineid": identity.machineId,
-    "Cosy-Machineos": `${process.arch === "arm64" ? "aarch64" : process.arch === "x64" ? "x86_64" : process.arch}_${process.platform}`,
-    ...(new URL(url).pathname.includes("/sse/") && machineHostname ? { "Cosy-MachineHostname": machineHostname } : {}),
-    "Cosy-Clienttype": "5", "Cosy-Clientip": "127.0.0.1", "Cosy-Bodyhash": md5(bytes),
-    "Cosy-Bodylength": String(bytes.length), "Cosy-Sigpath": path, "Cosy-Data-Policy": "disagree",
-    "Cosy-Organization-Id": "", "Cosy-Organization-Tags": "", "Login-Version": "v2", "X-Request-Id": randomUUID(),
+    ...(infer ? {} : { Accept: "application/json", "Accept-Encoding": "identity" }),
+    Authorization: `Bearer COSY.${payload}.${signature}`, "Content-Type": "application/json",
+    "Cosy-Business-Product": "cli", "Cosy-Business-Type": "agent",
+    // Non-stream auth requests carry the machine ID as client IP/token with machine type 5 (no UMID).
+    ...(infer ? {} : { "Cosy-ClientIp": identity.machineId }),
+    "Cosy-ClientType": "5", "Cosy-Data-Policy": dataPolicy, "Cosy-Date": timestamp, "Cosy-Key": cosyKey,
+    "Cosy-MachineId": identity.machineId,
+    ...(infer ? {} : { "Cosy-MachineToken": identity.machineId, "Cosy-MachineType": "5" }),
+    "Cosy-Scene": "assistant", "Cosy-User": identity.userId, "Cosy-Version": qoderVersion, "Login-Version": "v2",
+    // Do not disclose the local hostname or fabricate the CLI fingerprint SDK's UMID.
+    "Cosy-MachineOS": qoderMachineOS, "User-Agent": "undici",
   };
+}
+
+// CLI ohA(): server-owned consent, including its NO_RECORD default; never update consent here.
+export async function qoderDataPolicy(region: QoderRegion, identity: QoderIdentity, transport: typeof fetch, signal?: AbortSignal, fallback: QoderDataPolicy = "disagree"): Promise<QoderDataPolicy> {
+  const url = `${qoderSites[region].center}/algo/api/v2/config/getDataPolicy?requestId=${randomUUID()}&version=2&Encode=1`;
+  try {
+    const data = await qoderJson(transport, url, { signal, headers: qoderHeaders("", url, identity) }, true);
+    const status = data.result && typeof data.result === "object" ? (data.result as Record<string, unknown>).status : undefined;
+    return status === "AGREE" || status === "NO_RECORD" ? "agree" : "disagree";
+  } catch {
+    signal?.throwIfAborted();
+    return fallback; // Keep a prior server result on refresh failure; unknown accounts remain disagree.
+  }
 }
 
 // Error envelopes may JSON-encode another error in body/message (e.g. 403 → 10605).
@@ -199,10 +220,10 @@ function qoderBusinessCode(value: unknown, depth = 0): number | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
   const error = value as Record<string, unknown>, ownCode = qoderBusinessCode(error.code, depth + 1);
   // Recognized business errors take precedence over their outer HTTP-style wrapper.
-  if ([103, 105, 110, 112, 114, 115, 116, 117, 122, 10605].includes(ownCode ?? -1)) return ownCode;
+  if ([103, 105, 110, 112, 114, 115, 116, 117, 122, 406, 10605].includes(ownCode ?? -1)) return ownCode;
   for (const field of ["body", "message", "error"] as const) {
     const code = qoderBusinessCode(error[field], depth + 1);
-    if ([103, 105, 110, 112, 114, 115, 116, 117, 122, 10605].includes(code ?? -1)) return code;
+    if ([103, 105, 110, 112, 114, 115, 116, 117, 122, 406, 10605].includes(code ?? -1)) return code;
   }
   return ownCode;
 }
@@ -211,6 +232,8 @@ export function qoderFailure(status: number, detail?: unknown, source: "http" | 
   if (numericCode === 103 && status === 403) return new QoderError("Qoder 检测到重复请求（code 103）；未自动重放，请检查会话状态后重试。");
   if (numericCode === 105) return new QoderError(`Qoder 认证或权限失败（${label}），请检查账号地区并重新登录。`);
   if (numericCode === 10605) return new QoderError("Qoder 当前模型资源繁忙（code 10605），请稍后重试；本次请求未自动重放。");
+  // Official CLI 1.1.81 maps business code 406 to sensitiveContent, not an image decoder error.
+  if (numericCode === 406) return new QoderError("Qoder 服务端内容安全检查拒绝了本次会话（code 406）；本次请求未自动重放。");
   if (status === 429 || [110, 112, 114, 115, 116, 117, 122].includes(numericCode ?? -1)) return new QoderError("Qoder 额度不足或请求过于频繁，请检查账号额度后重试。");
   if (status === 401 || status === 403) return new QoderError(`Qoder 请求被拒绝（${label}），可能涉及认证、权限或服务端限制；请检查账号状态及地区。`);
   return new QoderError(`Qoder 请求失败（${label}${numericCode === undefined ? "" : `，code ${numericCode}`}）。`);
@@ -248,7 +271,9 @@ export async function qoderReadJson(response: Response, encoded = false, signal?
 export async function qoderJson(transport: typeof fetch, url: string, init: RequestInit, encoded = false): Promise<Record<string, unknown>> {
   const signal = qoderSignal(init.signal);
   try {
-    const response = await transport(url, { ...init, redirect: "error", signal });
+    const headers = new Headers(init.headers);
+    if (!headers.has("User-Agent")) headers.set("User-Agent", "undici");
+    const response = await transport(url, { ...init, headers, redirect: "error", signal });
     if (!response.ok) { void response.body?.cancel().catch(() => {}); throw qoderFailure(response.status); }
     return await qoderReadJson(response, encoded, signal);
   } catch (error) {

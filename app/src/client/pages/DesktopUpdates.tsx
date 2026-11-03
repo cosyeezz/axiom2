@@ -8,6 +8,7 @@ import { LocalPath } from "../LocalPath.js";
 import { desktopInvoke, DesktopResponsePendingError, isDesktopResponsePending } from "./desktop-bridge.js";
 import { isSubmissionRefused, observesSubmission, validOperationJob } from "./desktop-operation.js";
 import InstallProgress from "./InstallProgress.js";
+import type { PreparationDetection } from "./SetupWizard.js";
 
 type UpdateAction = "status" | "check" | "pi-check" | "pi-refresh" | "pi" | "service" | "client" | "recover" | "installer" | "cancel" | "extend" | "defaults" | "reconcile";
 type Update = {
@@ -18,6 +19,8 @@ type Update = {
     release: { version: string; checkedAt: number; token: string | null } | null;
   };
   clientInstaller?: { version: string; readyAt: number } | null;
+  clientDownloadSupported?: boolean;
+  clientDownload?: { version: string; name: string; readyAt: number; path: string } | null;
   clientVersion: string; serviceVersion: string | null; managed: boolean; clientSupported: boolean;
   clientPlatform?: string; clientAsset?: string | null; clientCheckedAt?: number | null; clientReleaseError?: string | null;
   clientRelease?: { version: string; checkedAt: number; assets: Record<string, { url: string }> } | null;
@@ -41,8 +44,9 @@ async function invoke(action: UpdateAction, version?: string): Promise<Update> {
   return result;
 }
 export type DesktopUpdateControls = { checkAndUpdate: (version: string, runningVersion: string | null) => Promise<void> };
-export default function DesktopUpdates({ controls, service, serviceBusy, onBusyChange, onAvailableChange, onServiceChange, onInstallService, onMaintainService }: {
+export default function DesktopUpdates({ controls, service, serviceBusy, onBusyChange, onAvailableChange, onServiceChange, onInstallService, onMaintainService, detection, onPrepare }: {
   controls?: Ref<DesktopUpdateControls>;
+  detection?: PreparationDetection; onPrepare?: (target: "node" | "tailscale") => void;
   service: { state: string; active: string[] } | null; serviceBusy: boolean; onInstallService?: () => void; onMaintainService?: (version: string, requireLatest: boolean) => void;
   onBusyChange: (busy: boolean) => void; onAvailableChange: (available: boolean) => void; onServiceChange: () => void;
 }) {
@@ -74,8 +78,11 @@ export default function DesktopUpdates({ controls, service, serviceBusy, onBusyC
   const serviceMissing = update?.serviceInstallation === "absent" && !serviceVersion;
   const foregroundMaintenance = !!update?.foregroundSupported && !!onMaintainService;
   const serviceVersionLabel = serviceVersion ? `v${serviceVersion}` : serviceMissing ? "未安装" : !update && !error ? "正在读取…" : "版本未能读取";
-  const installerVersion = update?.clientInstaller?.version ?? (update?.job?.kind === "client" && update.job.phase === "ready" ? update.job.version : undefined);
-  const installerReady = newer(installerVersion, update?.clientVersion);
+  const canDownloadClient = update?.clientDownloadSupported ?? !!update?.clientSupported;
+  const installerVersion = update?.clientSupported ? update.clientInstaller?.version ?? (update.job?.kind === "client" && update.job.phase === "ready" ? update.job.version : undefined) : undefined;
+  const installerReady = newer(installerVersion, update?.clientVersion) && !newer(clientLatest, installerVersion);
+  const downloadedClient = update?.clientDownload?.name === clientAsset ? update.clientDownload : null;
+  const downloadReady = !!downloadedClient && newer(downloadedClient.version, update?.clientVersion) && !newer(clientLatest, downloadedClient.version);
   const running = !!update?.job?.running;
   const needsReconciliation = !update?.job?.reconciled && (update?.job?.task?.status === "unknown" || update?.job?.task?.status === "interrupted" || update?.job?.phase === "interrupted");
   const backendBusy = uncertain || (running && update?.job?.kind !== "client") || busy === "service" || busy === "recover" || busy === "pi";
@@ -225,52 +232,67 @@ export default function DesktopUpdates({ controls, service, serviceBusy, onBusyC
       {confirm !== "installer" && confirm !== "pi" && !!service?.active.length && <details><summary>受影响的会话 · {service.active.length}</summary><ul>{service.active.map((title, index) => <li key={index}>{title || "未命名会话"}</li>)}</ul></details>}
     </ConfirmDialog>}
   </>;
+  const environment = detection?.environment;
+  const environmentKnown = !!environment && !detection?.checking && !detection?.failed;
+  const runtimeReady = environmentKnown && environment.nodeReady && environment.writable && !!pi?.runtimeVersion;
+  const runtimeStatus = detection?.checking ? "检查中" : !environmentKnown ? "待核实" : !environment.nodeReady || !environment.writable ? "需要准备环境" : !pi?.runtimeVersion ? "Pi 随后台安装" : "已就绪";
   return (
-    <section ref={section} tabIndex={-1} className="connect-updates updates-simple" aria-label="版本与更新">
-      <div className="updates-section-heading"><div><h2>版本与更新</h2><p>后台、应用内 Pi、终端 Pi 与客户端</p></div><ComponentAction className="updates-check-button" icon="refresh-cw" label="检查更新" title="检查后台与本平台客户端版本" aria-busy={busy === "check"} disabled={ordinaryDisabled} disabledReason={serviceBlockedReason} onClick={() => void act("check")} /></div>
+    <section ref={section} tabIndex={-1} className="connect-updates updates-simple startup-components-overview" aria-label="版本与更新">
+      <div className="updates-section-heading"><div><h2>组件与运行环境</h2></div><ComponentAction className="updates-check-button" icon="refresh-cw" label="检查更新" title="检查后台与本平台客户端版本" aria-busy={busy === "check"} disabled={ordinaryDisabled} disabledReason={serviceBlockedReason} onClick={() => void act("check")} /></div>
       {history.error && <p className="maintenance-warning" role="status">{history.error}<button className="maintenance-text-button" onClick={() => void history.refresh()}>重新读取维护证据</button></p>}
-      <ComponentCard className="update-component" regionLabel="后台服务更新" label="后台服务" version={serviceVersionLabel} description="运行应用内会话与工具"
-        environment={[{ id: "application-pi", kind: "dependency", label: "应用内 Pi", regionLabel: "后台服务的应用内 Pi 环境", version: installedPiVersionLabel, description: "后台服务的安装依赖，与后台服务一同维护。", details: <p className="maintenance-note">此为应用内实际引擎版本，不是终端 Pi；安装、更新与卸载交回后台服务的原安装器。</p> }]}
-        availableVersion={latest ? `v${latest}` : "尚未检查"} availableVersionLabel="最新" summary={summary("service")} details={details("service")} secondaryLabel="应用内 Pi 与安装设置"
-        actions={<>
-          <ComponentAction icon="refresh-cw" label="检查更新" aria-busy={busy === "check"} disabled={ordinaryDisabled} onClick={() => void act("check")} />
-          {serviceMissing ? <ComponentAction icon="download" label="安装" primary disabled={ordinaryDisabled || !onInstallService} onClick={onInstallService} /> : <ComponentAction icon="arrow-up-to-line" label="更新后台服务" title={serviceBlockedReason} primary disabled={actionDisabled.service} onClick={() => void ask("service")} />}
-          <ComponentAction icon="rotate-cw" label="重新安装" disabled={ordinaryDisabled || !!update?.recovery || !foregroundMaintenance} onClick={() => void ask("service-reinstall")} />
-          {update?.recovery && <ComponentAction icon="history" label="恢复旧版本" disabled={actionDisabled.recover} onClick={() => ask("recover")} />}
+      <div className="startup-components">
+      <ComponentCard regionLabel="后台服务更新" label="后台服务" kind="component" version={serviceVersionLabel}
+        availableVersion={latest ? `v${latest}` : undefined} availableVersionLabel="最新" secondaryLabel="说明与维护设置"
+        status={serviceMissing ? "需要安装" : newer(latest, serviceVersion) ? `v${latest} 可更新` : update?.releaseError ? "检查失败" : latest && serviceVersion ? "已是最新版本" : "尚未检查更新"}
+        actions={serviceMissing ? <ComponentAction icon="download" label="安装" primary disabled={ordinaryDisabled || !onInstallService} onClick={onInstallService} /> : newer(latest, serviceVersion) ? <ComponentAction icon="arrow-up-to-line" label="更新后台服务" primary disabled={actionDisabled.service} disabledReason={serviceBlockedReason} onClick={() => void ask("service")} /> : undefined}
+        details={<>
+          <div className="tools-actions"><ComponentAction icon="refresh-cw" label="检查更新" disabled={ordinaryDisabled} onClick={() => void act("check")} /><ComponentAction icon="rotate-cw" label="重新安装" disabled={ordinaryDisabled || !!update?.recovery || !foregroundMaintenance} onClick={() => void ask("service-reinstall")} /></div>
+          {details("service")}
+          {actionDisabled.service && serviceBlockedReason && <p className="connect-update-detail">{serviceBlockedReason}</p>}
+          {update && !foregroundMaintenance && (!update.managed || service?.state === "unmanaged") && <a className="connect-update-detail" href="https://github.com/cosyeezz/axiom2#一行安装与客户端下载" target="_blank" rel="noreferrer">查看安装与更新方式</a>}
         </>}>
+        {update?.recovery && <ComponentAction icon="history" label="恢复旧版本" disabled={actionDisabled.recover} onClick={() => ask("recover")} />}
         {update?.releaseError && <p className="connect-update-detail" role="status">后台版本检查失败：{update.releaseError}</p>}
         {update?.serviceError && <p className="connect-message">{update.serviceError}</p>}
-        {actionDisabled.service && serviceBlockedReason && <p className="connect-update-detail" role="status">{serviceBlockedReason}</p>}
-        {update && !foregroundMaintenance && (!update.managed || service?.state === "unmanaged") && <a className="connect-update-detail" href="https://github.com/cosyeezz/axiom2#一行安装与客户端下载" target="_blank" rel="noreferrer">查看安装与更新方式</a>}
         {extras("service")}
       </ComponentCard>
-      <ComponentCard className="update-component" headingId="pi-heading" regionLabel="终端 Pi" label="终端 Pi" busy={busy?.startsWith("pi") || (running && update?.job?.kind === "pi")}
-        version={pi?.cli?.error ? "状态读取失败" : pi?.cli?.legacy ? "需要迁移" : pi?.cli?.version ? `v${pi.cli.version}` : pi?.cli ? "未安装" : "正在读取…"} description="独立使用的 Pi 命令行程序"
-        availableVersion={pi?.release?.version ? `v${pi.release.version}` : "尚未检查"} availableVersionLabel="最新"
-        location={pi?.cli?.packageRoot && <LocalPath path={pi.cli.packageRoot} onOpen={() => desktopInvoke("axiom_reveal_path", { path: pi.cli!.packageRoot })} />}
-        summary={summary("pi")} details={details("pi")} secondaryLabel="说明与安装设置"
-        actions={<>
-          <ComponentAction icon="refresh-cw" label="检查终端 Pi 更新" aria-busy={busy === "pi-check"} disabled={ordinaryDisabled} onClick={() => void act("pi-check")} />
-          <ComponentAction icon={piRetry ? "rotate-cw" : pi?.cli?.version ? "arrow-up-to-line" : "download"} label={piRetry ? "重新安装终端 Pi" : pi?.cli?.version ? "更新终端 Pi" : "安装终端 Pi"} primary disabled={ordinaryDisabled} onClick={() => void ask("pi")} />
-        </>}>
-        {pi?.cli?.error && <p className="connect-error" role="alert">{pi.cli.error}<button className="maintenance-text-button" disabled={ordinaryDisabled} onClick={() => void act("pi-refresh")}>重试</button></p>}
-        {pi?.cli?.repairRequired && <p className="connect-message">{pi.cli.repairReason || "请检查更新后重新安装。"}</p>}
-        {pi?.cli?.legacy && <p className="connect-message">请先通过原安装方式迁移旧版 Pi。</p>}
-        {piReady && pi?.release && !pi.release.token && (!pi.cli?.version || piNewer || piRetry) && <p className="connect-update-detail">安装状态已变化，请重新检查更新。</p>}
-        {extras("pi")}
-      </ComponentCard>
-      <ComponentCard className="update-component" regionLabel="客户端更新" label={clientName} version={update?.clientVersion ? `v${update.clientVersion}` : "正在读取…"} description="Axiom 桌面应用"
-        availableVersion={clientLatest ? `v${clientLatest}` : "尚未检查"} availableVersionLabel="最新"
-        summary={summary("client")} details={details("client")} secondaryLabel="说明与安装设置"
-        actions={<>
-          {update?.clientSupported && clientRelease?.assets?.["Axiom2.msi"] && <ComponentAction icon="download" label="下载客户端更新" primary disabled={ordinaryDisabled || !newer(clientLatest, update.clientVersion)} onClick={() => void act("client")} />}
-          {!update?.clientSupported && trustedClientDownload && newer(clientLatest, update?.clientVersion) && <a className="maintenance-icon-button component-action" aria-label="下载本平台更新" data-tooltip="下载本平台更新" href={trustedClientDownload} target="_blank" rel="noreferrer"><Icon name="download" /><span className="component-action-label">下载本平台更新</span></a>}
-          {installerReady && <ComponentAction icon="package" label="安装更新" primary disabled={actionDisabled.installer} onClick={() => ask("installer")} />}
-        </>}>
+      <ComponentCard regionLabel="客户端更新" label="桌面客户端" kind="component" version={update?.clientVersion ? `v${update.clientVersion}` : "正在读取…"}
+        availableVersion={clientLatest ? `v${clientLatest}` : undefined} availableVersionLabel="最新" secondaryLabel="说明与下载设置"
+        status={installerReady ? `v${installerVersion} 待安装` : downloadReady ? `v${downloadedClient!.version} 已下载 · 待手动安装` : update?.clientReleaseError ? "检查失败" : newer(clientLatest, update?.clientVersion) ? `v${clientLatest} 可更新` : clientLatest ? "已是最新版本" : update?.clientCheckedAt ? "暂无本平台安装包" : "尚未检查更新"}
+        actions={installerReady ? <ComponentAction icon="package" label="安装更新" primary disabled={actionDisabled.installer} onClick={() => ask("installer")} /> : downloadReady ? <ComponentAction icon="folder-open" label="打开下载位置" primary disabled={ordinaryDisabled} onClick={() => void desktopInvoke("axiom_reveal_path", { path: downloadedClient!.path }).catch(cause => { manualError.current = true; setError({ action: "client", message: `无法打开下载位置：${cause instanceof Error ? cause.message : String(cause)}` }); })} /> : canDownloadClient && trustedClientDownload && newer(clientLatest, update?.clientVersion) ? <ComponentAction icon="download" label="下载客户端更新" primary disabled={ordinaryDisabled} onClick={() => void act("client")} /> : !canDownloadClient && trustedClientDownload && newer(clientLatest, update?.clientVersion) ? <a className="maintenance-icon-button component-action" aria-label="下载本平台更新" href={trustedClientDownload} target="_blank" rel="noreferrer"><Icon name="download" /><span className="component-action-label">下载更新</span></a> : undefined}
+        details={<><p className="maintenance-note">{clientName}。{update?.clientSupported ? "下载并校验后，确认退出客户端并打开安装向导；后台服务继续运行。" : canDownloadClient ? "通过内置更新器下载并校验；完成后请手动安装，不会自动退出客户端或后台。" : "下载本平台安装包，退出客户端后替换安装。"}不是无需退出的热更新。</p>{downloadedClient && <p className="maintenance-note">已下载 v{downloadedClient.version}：<LocalPath path={downloadedClient.path} onOpen={() => desktopInvoke("axiom_reveal_path", { path: downloadedClient.path })} /></p>}{details("client")}</>}>
         {update?.clientReleaseError && <p className="connect-update-detail" role="status">{update.clientReleaseError} 请重新检查更新；未将后台版本作为客户端版本。</p>}
-        {update && !clientLatest && !update.clientCheckedAt && !update.clientReleaseError && <p className="connect-update-detail">尚未检查本平台客户端版本，请点击“检查更新”。</p>}
         {extras("client")}
       </ComponentCard>
+      <ComponentCard regionLabel="运行时与 SDK" label="运行时与 SDK" kind="environment" location="Node.js · npm · Pi" status={runtimeStatus} secondaryLabel="环境版本与可选工具"
+        actions={!runtimeReady && onPrepare ? <ComponentAction icon="package" label="准备环境" disabled={!!detection?.job?.running} onClick={() => onPrepare("node")} /> : undefined}
+        details={<>
+          <p className="maintenance-note">Pi 引擎随后台服务更新；显示的是登记安装依赖版本。npm 随 Node.js 一起准备，不单独安装。</p>
+          {onPrepare && <button className="maintenance-text-button" onClick={() => onPrepare("node")}>环境检测与安装</button>}
+        </>}
+        environment={[
+          { id: "node", kind: "environment", label: "Node.js", regionLabel: "Node.js 运行环境", version: environmentKnown ? environment.nodeVersion || "未安装" : "待核实" },
+          { id: "npm", kind: "environment", label: "npm", regionLabel: "npm 运行环境", status: environmentKnown && environment.nodeReady ? "可用" : "待核实", description: "随 Node.js 一起准备，不单独安装。" },
+          { id: "runtime-pi", kind: "environment", label: "应用内 Pi", regionLabel: "应用内 Pi 运行环境", version: installedPiVersionLabel, description: "登记的后台安装依赖版本，随后台服务更新。" },
+        ]}
+        environmentContent={<details className="maintenance-details"><summary>可选工具 · 终端 Pi</summary>
+          <ComponentCard className="update-component" headingId="pi-heading" regionLabel="终端 Pi" label="终端 Pi" busy={busy?.startsWith("pi") || (running && update?.job?.kind === "pi")}
+            version={pi?.cli?.error ? "状态读取失败" : pi?.cli?.legacy ? "需要迁移" : pi?.cli?.version ? `v${pi.cli.version}` : pi?.cli ? "未安装" : "正在读取…"} description="独立命令行工具，不影响应用内 Pi 引擎。"
+            availableVersion={pi?.release?.version ? `v${pi.release.version}` : "尚未检查"} availableVersionLabel="最新"
+            location={pi?.cli?.packageRoot && <LocalPath path={pi.cli.packageRoot} onOpen={() => desktopInvoke("axiom_reveal_path", { path: pi.cli!.packageRoot })} />}
+            summary={summary("pi")} details={details("pi")} secondaryLabel="说明与安装设置"
+            actions={<><ComponentAction icon="refresh-cw" label="检查终端 Pi 更新" disabled={ordinaryDisabled} onClick={() => void act("pi-check")} /><ComponentAction icon={piRetry ? "rotate-cw" : pi?.cli?.version ? "arrow-up-to-line" : "download"} label={piRetry ? "重新安装终端 Pi" : pi?.cli?.version ? "更新终端 Pi" : "安装终端 Pi"} primary disabled={ordinaryDisabled} onClick={() => void ask("pi")} /></>} />
+          </details>}>
+        {pi?.cli?.error && <p className="connect-error" role="alert">终端 Pi：{pi.cli.error}<button className="maintenance-text-button" disabled={ordinaryDisabled} onClick={() => void act("pi-refresh")}>重试</button></p>}
+        {pi?.cli?.repairRequired && <p className="connect-message">{pi.cli.repairReason || "终端 Pi 需要检查后重新安装。"}</p>}
+        {pi?.cli?.legacy && <p className="connect-message">请先通过原安装方式迁移旧版终端 Pi。</p>}
+        {piReady && pi?.release && !pi.release.token && (!pi.cli?.version || piNewer || piRetry) && <p className="connect-update-detail">终端 Pi 安装状态已变化，请重新检查更新。</p>}
+        {extras("pi")}
+      </ComponentCard>
+      <ComponentCard regionLabel="远程连接环境" label="远程连接" kind="environment" location="Tailscale" secondaryLabel="说明与连接设置" status={!environmentKnown ? "待检测" : environment.tailscale ? "已安装 · 在线状态另行确认" : "远程连接可选"}
+        actions={onPrepare && <ComponentAction icon={environmentKnown && environment.tailscale ? "settings" : "package"} label={environmentKnown && environment.tailscale ? "管理" : "准备"} onClick={() => onPrepare("tailscale")} />}
+        details={<><p className="maintenance-note">仅使用本机无需 Tailscale。安装不等于已登录、设备在线或服务已就绪；连接请使用上方设备选择器。</p>{onPrepare && <button className="maintenance-text-button" onClick={() => onPrepare("tailscale")}>安装与连接环境</button>}</>} />
+      </div>
     </section>
   );
 }

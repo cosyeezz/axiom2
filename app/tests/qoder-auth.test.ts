@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
 import { QoderCredentials, packQoderCredential, qoderExpiry, qoderOAuth } from "../src/server/providers/qoder-auth.js";
-import { assertQoderBodyBudget, decodeQoderBody, encodeQoderBody, qoderBodyLimit, qoderHeaders, qoderInference, qoderJson, qoderSites, type QoderRegion } from "../src/server/providers/qoder-protocol.js";
+import { assertQoderBodyBudget, decodeQoderBody, encodeQoderBody, qoderBodyLimit, qoderDataPolicy, qoderHeaders, qoderVersion, qoderInference, qoderJson, qoderSites, type QoderRegion } from "../src/server/providers/qoder-protocol.js";
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
 test("Qoder regional PKCE login handles pending responses, validates expiry and never fakes refresh", async () => {
@@ -168,6 +168,23 @@ test("Qoder JSON budget matches UTF8/escapes, counts duplicate references, rejec
   assert.equal(encodeQoderBody("x".repeat(jsonLimit)).length, qoderBodyLimit);
   assert.throws(() => encodeQoderBody("x".repeat(jsonLimit + 1)), /6 MiB/);
 });
+test("Qoder policy reflects server AGREE and NO_RECORD, never invented consent, and respects cancellation", async () => {
+  const identity = { userId: "fixture-user", token: "dt-SECRET", machineId: "fixture-machine" };
+  for (const status of ["AGREE", "NO_RECORD", "DISAGREE", "UNKNOWN", undefined]) {
+    const policy = await qoderDataPolicy("cn", identity, async (input, init) => {
+      const url = new URL(String(input));
+      assert.equal(url.origin, qoderSites.cn.center); assert.equal(url.pathname, "/algo/api/v2/config/getDataPolicy");
+      assert.equal(url.searchParams.get("version"), "2"); assert.equal(url.searchParams.get("Encode"), "1");
+      const headers = new Headers(init?.headers); assert.equal(headers.get("Cosy-Data-Policy"), "disagree");
+      return new Response(encodeQoderBody(JSON.stringify({ result: { status } })));
+    });
+    assert.equal(policy, status === "AGREE" || status === "NO_RECORD" ? "agree" : "disagree");
+  }
+  assert.equal(await qoderDataPolicy("cn", identity, async () => new Response("SECRET", { status: 503 })), "disagree");
+  assert.equal(await qoderDataPolicy("cn", identity, async () => { throw Error("SECRET"); }, undefined, "agree"), "agree");
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(qoderDataPolicy("cn", identity, async () => { throw Error("SECRET"); }, controller.signal), { name: "AbortError" });
+});
 test("Qoder encoding and COSY signatures cover exact UTF8 wire bytes without exposing the token", () => {
   assert.equal(encodeQoderBody(""), "");
   const identity = { userId: "fixture-user", token: "dt-SECRET", machineId: "fixture-machine" };
@@ -177,8 +194,11 @@ test("Qoder encoding and COSY signatures cover exact UTF8 wire bytes without exp
     const headers = qoderHeaders(body, "https://gateway.qoder.com.cn/algo/api/v2/test?Encode=1", identity);
     const [, payload, signature] = headers.Authorization.split(".");
     assert.equal(signature, createHash("md5").update(`${payload}\n${headers["Cosy-Key"]}\n${headers["Cosy-Date"]}\n${body}\n/api/v2/test`).digest("hex"));
-    assert.equal(headers["Cosy-Bodylength"], String(Buffer.byteLength(body)));
-    assert.equal(headers["Cosy-Bodyhash"], createHash("md5").update(body).digest("hex"));
+    assert.equal(headers["Cosy-Bodylength"], undefined);
+    assert.equal(headers["Cosy-Bodyhash"], undefined);
+    assert.equal(headers["Cosy-Sigpath"], undefined);
+    assert.equal(headers["Cosy-Version"], qoderVersion);
+    assert.equal(JSON.parse(Buffer.from(payload, "base64").toString()).cosyVersion, qoderVersion);
     assert.equal(JSON.stringify(headers).includes("dt-SECRET"), false);
     assert.notEqual(qoderHeaders(body, "https://gateway.qoder.com.cn/algo/api/v2/test", identity).Authorization, headers.Authorization);
   }

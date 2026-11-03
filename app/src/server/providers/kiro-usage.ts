@@ -1,6 +1,7 @@
 import { calculateCost, type Api, type AssistantMessage, type Model, type Usage } from "@earendil-works/pi-ai";
 import { kiroUsageInfo, validKiroPriceSnapshot, type KiroPriceSnapshot, type KiroRequestUsageInfo, type KiroSummaryUsageInfo } from "../../shared/kiro-usage.js";
-import { KiroChatError, kiroObject } from "./kiro-chat-protocol.js";
+import { readKiroTokenUsage } from "../../native-providers/kiro/usage.js";
+import type { NativeTokenUsage } from "../../native-providers/contracts.js";
 
 const parts = ["input", "output", "cacheRead", "cacheWrite"] as const;
 const emptyCost = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 });
@@ -17,25 +18,10 @@ export function kiroRequestUsage(model: Model<Api>) {
   const info = (state: KiroRequestUsageInfo["state"]): KiroRequestUsageInfo =>
     ({ version: 1, scope: "request", state, pricing: structuredClone(pricing) });
   const usage: KiroUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: emptyCost(), axiomKiro: info("unknown") };
-  return { usage, accept(value: unknown): boolean {
-    // Mark first, so invalid/partial snapshots and error/abort exits cannot leave
-    // earlier complete numbers falsely labelled as the latest exact measurement.
+  function acceptNative(snapshot: NativeTokenUsage | undefined): boolean {
     usage.axiomKiro = info("partial");
-    const source = kiroObject(value);
-    const keys = { input: "uncachedInputTokens", output: "outputTokens", cacheRead: "cacheReadInputTokens", cacheWrite: "cacheWriteInputTokens" } as const;
-    const count = (key: string) => {
-      const value = source[key];
-      if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || value > 1_000_000_000)
-        throw new KiroChatError("Kiro token 用量格式无效。");
-      return value;
-    };
-    for (const key of [...Object.values(keys), "totalTokens"]) if (source[key] != null) count(key);
-    if (Object.values(keys).some(key => source[key] == null)) return false;
-    const snapshot = { input: count(keys.input), output: count(keys.output), cacheRead: count(keys.cacheRead), cacheWrite: count(keys.cacheWrite) };
-    const totalTokens = parts.reduce((sum, key) => sum + snapshot[key], 0);
-    if (source.totalTokens != null && count("totalTokens") !== totalTokens)
-      throw new KiroChatError("Kiro token 用量总计与分项不一致。");
-    const candidate: Usage = { ...snapshot, totalTokens, cost: emptyCost() };
+    if (!snapshot) return false;
+    const candidate: Usage = { ...snapshot, cost: emptyCost() };
     pricing = { kind: "unknown", ...(rates ? { rates } : {}) };
     if (rates) {
       const inputTokens = snapshot.input + snapshot.cacheRead + snapshot.cacheWrite;
@@ -53,6 +39,11 @@ export function kiroRequestUsage(model: Model<Api>) {
     // Commit atomically only after every service counter and total was validated.
     Object.assign(usage, candidate, { axiomKiro: info("complete") });
     return true;
+  }
+  return { usage, acceptNative, accept(value: unknown): boolean {
+    // Invalidate BEFORE parsing, including invalid snapshots that throw.
+    usage.axiomKiro = info("partial");
+    return acceptNative(readKiroTokenUsage(value));
   } };
 }
 

@@ -1,0 +1,9 @@
+# Current shipped launchd: locate supervision candidates, static only
+
+Current public-source coalition path has no proven host binding; zero-target control calls remain disallowed. Independent new hypothesis: the **already privileged OS service owner** may expose stronger cleanup semantics for a caller-owned service than direct UID501 APIs. Before any owned-service experiment, locate relevant imports/strings in this host's shipped `/sbin/launchd`. Previous installed docs only establish process-group cleanup, not non-escapable coalition kill/drain.
+
+Only that exact system artifact: open regular/no-final-symlink, <=16MiB, freeze same-FD bytes/stat/hash into new ownTEMP, readback mode0400, source path/stat check. Static file/lipo or otool metadata/UUID, undefined imports, codesign display metadata, and one bounded printable-string scan for coalition/AbandonProcessGroup/bootout/kill/termination/jetsam. <=256matched strings/32KiB selected output; preserve cap flag; whole strings aren’t policy. Commands each<=5s, total<=25s/CPU15, stdoutstderr each<=2MiB, <=24MiB outputs. No global analysis/decompile, dyld-cache extraction, other binaries or dependency closure.
+
+Independent researcher writes only ownTEMP reports/tools/snapshot; main alone changes repository. Snapshot artifact identity is not proof of loaded PID1 image or any behavior. Imports/strings are candidate locators, not evidence bootout invokes them or full descendant cleanup. Deliver exact commands/exits/SHA/UUID/architecture and a single narrowly bounded next static-xref question, explicitly note unavailable symbols/limits.
+
+**No execution of launchd, launchctl, bootstrap/XPC/coalition/Security API, no process scan/attach, no service creation/bootout, no privilege escalation or global changes, no official/KAS/model or credential inspection.** A possible future service test is not authorized by this case. No fallback to older source/Windows fixtures; no retry of ended cases.

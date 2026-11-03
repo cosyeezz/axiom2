@@ -150,7 +150,7 @@ fn run_updater(action: &str, version: Option<&str>) -> Result<Value, String> {
     let node = if root.join("installation.json").exists() {
         match installation_paths(false) {
             Ok(value) => value.0,
-            Err(_) if ["archive-preview", "archive-remove", "status", "check", "pi-check", "pi-refresh", "reconcile", "history"].contains(&action) => crate::axiom_setup::runtime_node()?,
+            Err(_) if ["archive-preview", "archive-remove", "status", "check", "pi-check", "pi-refresh", "reconcile", "history", "client", "cancel", "extend", "defaults"].contains(&action) => crate::axiom_setup::runtime_node()?,
             Err(error) => return Err(error),
         }
     } else { crate::axiom_setup::runtime_node()? };
@@ -214,7 +214,7 @@ pub async fn axiom_cleanup(window: Webview, request: Value) -> Result<Value, Str
     let encoded = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
     if encoded.len() > 16384 { return Err("清理请求过大".into()); }
     // The helper enforces parameter-level validation; the host never accepts a URL.
-    if !["resources.get", "resources.remove", "rea.get", "rea.uninstall", "rea.engine-uninstall", "rea.clearDownloads", "rea.uninstallSkill", "rea.uninstallMcp", "rtk.get", "rtk.uninstall", "rtk.cleanupStats", "rtk.cleanupOriginals", "opencli.get", "opencli.uninstall", "modelProxy.get", "maintenance.get", "modelProxy.uninstall"].contains(&request["op"].as_str().unwrap_or("")) {
+    if !["resources.get", "resources.remove", "rea.get", "rea.uninstall", "rea.engine-uninstall", "rea.clearDownloads", "rea.uninstallSkill", "rea.uninstallMcp", "ffmpeg.get", "ffmpeg.uninstall", "rtk.get", "rtk.uninstall", "rtk.cleanupStats", "rtk.cleanupOriginals", "opencli.get", "opencli.uninstall", "modelProxy.get", "maintenance.get", "modelProxy.uninstall"].contains(&request["op"].as_str().unwrap_or("")) {
         return Err("不支持的清理操作".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
@@ -307,7 +307,9 @@ pub async fn axiom_reveal_path(window: Webview, path: String) -> Result<(), Stri
 pub async fn axiom_update(window: Webview, action: String, version: Option<String>) -> Result<Value, String> {
     axiom_views::authorize(&window)?;
     if !["archive-preview", "archive-remove", "status", "history", "check", "pi-check", "pi-refresh", "pi-remove-preview", "pi-uninstall", "service-remove-preview", "service-uninstall", "pi", "service", "client", "recover", "installer", "cancel", "extend", "defaults", "reconcile"].contains(&action.as_str()) { return Err("不支持的更新操作".into()); }
-    if ["client", "installer"].contains(&action.as_str()) && !cfg!(windows) { return Err("本机平台尚未提供客户端安装包，请从发布页下载。".into()); }
+    // Download capability comes from the updater's platform asset mapping.
+    // Only Windows may launch an installer and exit this client.
+    if action == "installer" && !cfg!(windows) { return Err("本平台请从已下载的安装包手动安装；不会自动退出客户端。".into()); }
     if !["status", "history", "check"].contains(&action.as_str()) { crate::axiom_setup::ensure_idle()?; }
     let install = action == "installer";
     let backend = ["service", "recover", "service-uninstall"].contains(&action.as_str());

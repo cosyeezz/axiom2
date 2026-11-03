@@ -15,8 +15,7 @@ export function modelAccountAuthCounts(accounts: readonly ModelAccount[]) {
   for (const account of accounts) if (account.type) counts.set(account.providerId, (counts.get(account.providerId) ?? 0) + 1);
   return counts;
 }
-/** Apply eligibility to the complete account set before any search/provider filtering. */
+/** Keep single, expired and missing-credential slots visible for account management. */
 export function displayModelAccounts(accounts: readonly ModelAccount[]) {
-  const counts = modelAccountAuthCounts(accounts);
-  return accounts.filter(account => account.type && (modelAccountPresentation(account).kind !== "generic" || (counts.get(account.providerId) ?? 0) >= 2));
+  return [...accounts];
 }

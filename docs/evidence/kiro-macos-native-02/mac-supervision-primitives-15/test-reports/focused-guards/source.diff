@@ -1,0 +1,24 @@
+--- old14
++++ new15
+@@ -43,6 +43,9 @@
+         if command == 0x19:
+             if size < 72:
+                 raise ValueError('segment command')
++            nsects = unpack_at(data, '<I', cursor + 64)[0]
++            if nsects > 128 or 72 + 80 * nsects > size:
++                raise ValueError('section table storage')
+             name, va, vsize, off, fsize = unpack_at(data, '<16sQQQQ', cursor + 8)
+             if off + fsize > len(data) or fsize > vsize or va + vsize >= 1 << 64:
+                 raise ValueError('segment range')
+@@ -73,7 +76,10 @@
+         raise ValueError('fixups segment count')
+     offsets = unpack_at(payload, '<%dI' % seg_count, starts + 4)
+     records = []
+-    occupied = []
++    occupied = [(0, 28), (starts, starts + 4 + 4 * seg_count), (imports, imports + imports_count * import_width), (symbols, len(payload))]
++    occupied = sorted((a, b) for a, b in occupied if a < b)
++    if any(a[1] > b[0] for a, b in zip(occupied, occupied[1:])):
++        raise ValueError('overlapping payload regions outside supported contract')
+     for index, relative in enumerate(offsets):
+         if relative == 0:
+             continue

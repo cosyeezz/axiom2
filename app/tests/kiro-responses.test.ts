@@ -77,6 +77,25 @@ test("captured Responses shape routes deepseek with native auth, full context, p
   assert.ok(result.diagnostics?.some(d => d.type === "kiro-responses-completed"));
 });
 
+test("Responses parameter failures are explicit across HTTP and SSE while partial replies stay non-replayable", async () => {
+  const error = { type: "invalid_request", code: "invalid_value", param: "input.0.call_id", message: "PRIVATE must not leak" };
+  for (const variant of ["http", "response.failed", "error", "partial"] as const) {
+    let calls = 0;
+    const { result, events } = await run(async url => {
+      calls++; assert.equal(String(url), "https://runtime.us-east-1.kiro.dev/v1/responses");
+      if (variant === "http") return new Response(JSON.stringify({ error }), { status: 400 });
+      const failure = variant === "error" ? { ...error, type: "error" } : { type: "response.failed", response: { error } };
+      return response([...(variant === "partial" ? textEvents().slice(0, 5) : []), failure]);
+    });
+    assert.equal(calls, 1); assert.equal(result.stopReason, "error");
+    assert.equal(events.filter(event => event.type === "error").length, 1); assert.ok(!events.some(event => event.type === "done"));
+    assert.equal(result.diagnostics?.find(item => item.type === "kiro-failure")?.details?.category, "validation");
+    assert.match(result.errorMessage!, variant === "partial" ? /已收到部分内容.*未重放请求/ : /请求参数验证失败/);
+    assert.doesNotMatch(JSON.stringify(result.diagnostics) + result.errorMessage, /PRIVATE/);
+    assert.doesNotMatch(result.errorMessage!, /input\.0\.call_id/);
+  }
+});
+
 test("Responses validates separate text content parts without dropping either", async () => {
   const item = { ...textItem(), content: [{ type: "output_text", text: "first" }, { type: "output_text", text: "second" }] };
   const events: Json[] = [{ type: "response.output_item.added", output_index: 0, item: { ...item, content: [] } }];
@@ -87,6 +106,35 @@ test("Responses validates separate text content parts without dropping either", 
   events.push({ type: "response.output_item.done", output_index: 0, item }, completed([item]));
   const { result } = await run(async () => response(events));
   assert.equal(result.stopReason, "stop"); assert.deepEqual(result.content, [{ type: "text", text: "firstsecond" }]);
+});
+
+// Event name captured live on claude-opus-5.5 high (chat-live-10). KAS 0.66.70 JOo ignores reasoning_part.* entirely
+// and reads reasoning text only from reasoning_text.delta / reasoning.delta; part payload shape is not captured.
+function reasoningEvents(partAdded: Json = { type: "reasoning_text", text: "" }, target = 0, delta = "response.reasoning_text.delta"): Json[] {
+  const reasoning = { type: "reasoning", id: "rs-1", summary: [] }, item = { ...textItem(), id: "msg-2" };
+  const text = textEvents().filter(e => e.output_index === 0 && e.type !== "response.completed").map(e => ({ ...e, output_index: 1, ...(e.item_id ? { item_id: item.id } : {}), ...(e.item ? { item: { ...e.item, id: item.id } } : {}) }));
+  return [
+    { type: "response.created", response: { id: "resp-1", model: model.id } },
+    { type: "kiro:keep_alive" },
+    { type: "response.output_item.added", output_index: 0, item: reasoning },
+    ...text.slice(0, 1),
+    { type: "response.reasoning_part.added", output_index: target, item_id: target ? item.id : reasoning.id, content_index: 0, part: partAdded },
+    { type: delta, output_index: 0, item_id: reasoning.id, content_index: 0, delta: "思考" },
+    { type: "response.reasoning_text.done", output_index: 0, item_id: reasoning.id, content_index: 0, text: "思考" },
+    { type: "response.reasoning_part.done", output_index: 0, item_id: reasoning.id, content_index: 0, part: { type: "reasoning_text", text: "思考" } },
+    { type: "response.output_item.done", output_index: 0, item: reasoning },
+    ...text.slice(1), completed([reasoning, item]),
+  ];
+}
+
+test("Responses ignores reasoning part boundaries like KAS and keeps reasoning and text", async () => {
+  for (const fixture of [reasoningEvents(), reasoningEvents({ type: "reasoning_text", text: "part-only" }), reasoningEvents(undefined, 1), reasoningEvents(undefined, 0, "response.reasoning.delta")]) {
+    const { result } = await run(async () => response(fixture));
+    assert.equal(result.stopReason, "stop");
+    assert.equal(result.content.filter(c => c.type === "text").map(c => (c as { text: string }).text).join(""), "你好🌏");
+    const thinking = result.content.filter(c => c.type === "thinking").map(c => (c as { thinking: string }).thinking).join("");
+    assert.equal(thinking, "思考");
+  }
 });
 
 test("Responses tools preserve aliases, schema, call IDs and error results across turns", async () => {
@@ -141,12 +189,80 @@ test("Responses accepts requires_action only for tool turns, and completed tool 
 test("Responses failures carry a fixed local protocol code without provider text", async () => {
   const ctx = { ...context(), tools: [tool] }, name = [...kiroChatRequest(model, normalizeContext(ctx), account).names.keys()][0];
   const mismatch = toolEvents(name); mismatch.at(-1)!.response.output = [];
-  for (const [fixture, code] of [[toolEvents(name).slice(0, -1), "missing-completed"], [mismatch, "response-terminal-mismatch"],
-    [[{ type: "response.surprise", detail: "FIXTURE-SECRET" }], "unknown-event"]] as const) {
+  for (const [fixture, code] of [[toolEvents(name).slice(0, -1), "missing-completed"], [mismatch, "response-terminal-mismatch"]] as const) {
     const { result } = await run(async () => response(fixture as Json[]), ctx);
     const details = result.diagnostics?.find(d => d.type === "kiro-failure")?.details as Json;
     assert.equal(result.stopReason, "error"); assert.equal(details.protocolCode, code);
     assert.ok(!JSON.stringify(result).includes("FIXTURE-SECRET"));
+  }
+});
+
+// KAS 0.66.70 JOo returns early for every event it does not handle; we ignore too but record the filtered type name.
+test("Responses ignores unknown events like KAS and reports only filtered type names", async () => {
+  const events = textEvents();
+  events.splice(2, 0, { type: "response.surprise", detail: "FIXTURE-SECRET" }, { type: "response.SECRET text" }, { type: "x".repeat(81) }, { type: "response.surprise" });
+  const { result } = await run(async () => response(events));
+  assert.equal(result.stopReason, "stop"); assert.deepEqual(result.content, [{ type: "text", text: "你好🌏" }]);
+  const details = result.diagnostics?.find(d => d.type === "kiro-responses-completed")?.details as Json;
+  assert.deepEqual(details.ignoredEventTypes, { "response.surprise": 2, unsafe: 2 });
+  assert.ok(!JSON.stringify(result).includes("SECRET"));
+  const many = textEvents(); many.splice(2, 0, ...Array.from({ length: 20 }, (_, i) => ({ type: `response.extra_${i}` })));
+  const capped = (await run(async () => response(many))).result.diagnostics?.find(d => d.type === "kiro-responses-completed")?.details as Json;
+  assert.equal(Object.keys(capped.ignoredEventTypes).length, 16);
+  assert.equal((await run(async () => response([{ type: "response.surprise" }]))).result.stopReason, "error");
+});
+
+const incomplete = (reason?: string, output: Json[] = []): Json => ({ type: "response.incomplete", response: { id: "resp-1", status: "incomplete", model: model.id, output, ...(reason ? { incomplete_details: { reason } } : {}) } });
+test("Responses maps incomplete reasons like KAS T2u and never executes held tools", async () => {
+  const text = textEvents().slice(0, -1), item = textItem();
+  for (const [fixture, stop, reason] of [[[...text, incomplete("max_output_tokens", [item])], "length", "MAX_TOKENS"], [[...text, incomplete("content_filter", [item])], "stop", "CONTENT_FILTERED"],
+    [[...text, incomplete("new_reason", [item])], "stop", "END_TURN"], [[...text, incomplete(undefined, [item])], "stop", "END_TURN"],
+    [[...text, completed([item], { status: "incomplete", incomplete_details: { reason: "max_output_tokens" } })], "length", "MAX_TOKENS"],
+    [textEvents().slice(0, 5).concat(incomplete("max_output_tokens")), "length", "MAX_TOKENS"]] as const) {
+    const { result } = await run(async () => response(fixture as Json[]));
+    assert.equal(result.stopReason, stop); assert.equal(result.content.map(c => (c as { text: string }).text).join(""), "你好🌏");
+    assert.equal((result.diagnostics?.find(d => d.type === "kiro-responses-incomplete")?.details as Json).stopReason, reason);
+  }
+  const handoff = (await run(async () => response([...text, incomplete("compaction_required_for_model_handoff", [item])]))).result;
+  assert.equal(handoff.stopReason, "error"); assert.match(handoff.errorMessage ?? "", /context length exceeded/);
+  assert.equal((await run(async () => response([incomplete("content_filter")]))).result.stopReason, "error");
+  const ctx = { ...context(), tools: [tool] }, name = [...kiroChatRequest(model, normalizeContext(ctx), account).names.keys()][0];
+  const tools = toolEvents(name), call = tools.at(-1)!.response.output;
+  assert.equal((await run(async () => response([...tools.slice(0, -1), incomplete("content_filter", call)]), ctx)).result.stopReason, "error");
+  assert.equal((await run(async () => response([...tools.slice(0, -1), incomplete("max_output_tokens", call)]), ctx)).result.stopReason, "length");
+  // Real Agent: a length stop fails the tool call instead of executing it.
+  const credentials = new InMemoryCredentialStore(); await credentials.modify("kiro", async () => account);
+  const models = createModels({ credentials }); models.setProvider(kiroProvider());
+  let executions = 0;
+  const agent = new Agent({ initialState: { model, systemPrompt: "s", tools: [{ ...tool, label: "fixture", execute: async () => { executions++; return { content: [], details: {} }; } }] },
+    streamFn: (target, c, options) => models.streamSimple(target, c, { ...options, fetch: async (_u, init) => response([...toolEvents(JSON.parse(String(init?.body)).tools[0].name).slice(0, 3), incomplete("max_output_tokens")]) }) });
+  await agent.prompt("Use the fixture tool");
+  assert.equal(executions, 0);
+});
+
+test("Responses shows refusal text like KAS and deduplicates refusal.done", async () => {
+  const item = { ...textItem(), content: [{ type: "refusal", refusal: "不能帮忙" }] };
+  const start: Json[] = [{ type: "response.created", response: { id: "resp-1", model: model.id } }, { type: "response.output_item.added", output_index: 0, item: { ...item, content: [] } }];
+  const done = { type: "response.refusal.done", output_index: 0, item_id: item.id, content_index: 0, refusal: "不能帮忙" };
+  for (const middle of [[{ type: "response.refusal.delta", output_index: 0, item_id: item.id, content_index: 0, delta: "不能" }, { type: "response.refusal.delta", output_index: 0, item_id: item.id, content_index: 0, delta: "帮忙" }, done], [done]]) {
+    const { result } = await run(async () => response([...start, ...middle, { type: "response.output_item.done", output_index: 0, item }, completed([item])]));
+    assert.equal(result.stopReason, "stop"); assert.deepEqual(result.content, [{ type: "text", text: "不能帮忙" }]);
+  }
+  const wrong = { ...item, content: [{ type: "refusal", refusal: "其他" }] };
+  assert.equal((await run(async () => response([...start, done, { type: "response.output_item.done", output_index: 0, item: wrong }, completed([wrong])]))).result.stopReason, "error");
+});
+
+// KAS 0.66.70 MOo: reasoning encrypted_content is a JSON envelope with redactedContent or reasoningText.signature.
+test("Responses decodes reasoning encrypted_content like KAS", async () => {
+  const withEncrypted = (encrypted: string) => reasoningEvents().map(e => e.type === "response.output_item.done" && e.item.type === "reasoning" ? { ...e, item: { ...e.item, encrypted_content: encrypted } } : e);
+  const thinking = async (encrypted: string) => (await run(async () => response(withEncrypted(encrypted)))).result.content.filter(c => c.type === "thinking") as Json[];
+  const signed = await thinking(JSON.stringify({ reasoningText: { text: "思考", signature: "sig-1" } }));
+  assert.equal(signed.map(c => c.thinking).join(""), "思考"); assert.equal(signed.at(-1)!.thinkingSignature, "sig-1"); assert.ok(!signed.some(c => c.redacted));
+  const redacted = await thinking(JSON.stringify({ redactedContent: "opaque" }));
+  assert.ok(redacted.some(c => c.redacted === true && c.thinkingSignature === "opaque"));
+  for (const bad of ["not-json", "[]", JSON.stringify({ other: 1 })]) {
+    const plain = await thinking(bad);
+    assert.equal(plain.map(c => c.thinking).join(""), "思考"); assert.ok(!plain.some(c => c.redacted || c.thinkingSignature));
   }
 });
 
@@ -212,14 +328,14 @@ test("real Agent runs a complete Responses tool loop, never a truncated call", a
   }
 });
 
-test("Responses times out a silent body, and rejects unexpected model or incomplete finish", async () => {
+test("Responses times out a silent body, and rejects unexpected model or id at finish", async () => {
   let cancelled = false;
   const keepAlive = setTimeout(() => {}, 1000);
   try {
     const { result } = await run(async () => new Response(new ReadableStream({ cancel() { cancelled = true; } }), { headers: { "content-type": "text/event-stream" } }), context(), { timeoutMs: 20 });
     assert.equal(result.stopReason, "error"); assert.ok(cancelled);
   } finally { clearTimeout(keepAlive); }
-  for (const patch of [{ model: "auto" }, { status: "incomplete" }, { id: "other" }]) {
+  for (const patch of [{ model: "auto" }, { id: "other" }]) {
     const events = textEvents(); Object.assign(events.at(-1)!.response, patch);
     const { result } = await run(async () => response(events)); assert.equal(result.stopReason, "error");
   }

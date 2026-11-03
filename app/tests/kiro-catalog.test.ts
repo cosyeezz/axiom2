@@ -14,19 +14,19 @@ const page = (models: unknown[] = [model()], extra = {}) => ({ models, defaultMo
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 const signal = () => new AbortController().signal;
 
-test("Kiro uses the CLI AWS JSON POST, origin, and double-serialized pagination", async () => {
+test("Kiro uses the control-plane AWS JSON POST, origin, and body pagination", async () => {
   const calls: URL[] = [];
   const result = await fetchKiroCatalog(credential(), signal(), async (input, init) => {
     const url = new URL(String(input)), body = JSON.parse(String(init?.body)), headers = new Headers(init?.headers);
     calls.push(url);
     assert.equal(init?.method, "POST"); assert.equal(init?.redirect, "error"); assert.ok(init.signal);
-    assert.equal(url.origin, "https://q.us-east-1.amazonaws.com"); assert.equal(url.pathname, "/");
+    assert.equal(url.origin, "https://management.us-east-1.kiro.dev"); assert.equal(url.pathname, "/");
     assert.equal(headers.get("authorization"), "Bearer ACCESS-PRIVATE");
     assert.equal(headers.get("content-type"), "application/x-amz-json-1.0");
-    assert.equal(headers.get("x-amz-target"), "AmazonCodeWhispererService.ListAvailableModels");
+    assert.equal(headers.get("x-amz-target"), "KiroControlPlaneBearerService.ListAvailableModels");
     assert.equal(headers.get("amz-sdk-request"), "attempt=1; max=1");
     assert.equal(headers.get("user-agent"), null);
-    assert.deepEqual(Object.fromEntries(url.searchParams), body);
+    assert.equal(url.search, "", "control-plane AWS JSON fields belong in the body, not the legacy query");
     assert.equal(body.origin, "KIRO_CLI"); assert.equal(body.profileArn, undefined);
     if (calls.length === 1) return json(page([model("a")], { nextToken: "opaque +/?=& token" }));
     assert.equal(body.nextToken, "opaque +/?=& token");
@@ -61,18 +61,48 @@ test("Kiro preserves declared image capability, distinguishes unknown input type
 });
 
 test("Kiro service region follows explicit profile, never the authentication region", async () => {
-  for (const authMethod of ["builder-id", "social", "identity-center"] as const) {
-    const account = credential({ authMethod, authRegion: authMethod === "identity-center" ? "ap-southeast-2" : "us-east-1" });
+  for (const authMethod of ["builder-id", "social"] as const) {
+    const account = credential({ authMethod, authRegion: "us-east-1" });
     await fetchKiroCatalog(account, signal(), async input => {
-      assert.equal(new URL(String(input)).hostname, "q.us-east-1.amazonaws.com"); return json(page());
+      assert.equal(new URL(String(input)).hostname, "management.us-east-1.kiro.dev"); return json(page());
     });
   }
   const profileArn = "arn:aws:codewhisperer:eu-central-1:123456789012:profile/test-profile";
   await fetchKiroCatalog(credential({ authMethod: "identity-center", authRegion: "us-west-2", profileArn }), signal(), async (input, init) => {
     const url = new URL(String(input));
-    assert.equal(url.hostname, "q.eu-central-1.amazonaws.com"); assert.equal(url.searchParams.get("profileArn"), profileArn);
+    assert.equal(url.hostname, "management.eu-central-1.kiro.dev"); assert.equal(url.search, "");
     assert.equal(JSON.parse(String(init?.body)).profileArn, profileArn); return json(page());
   });
+});
+
+test("enterprise catalog resolves its own profile before routing without mutating credentials", async () => {
+  const account = credential({ authMethod: "identity-center", authRegion: "ap-southeast-2" });
+  const original = structuredClone(account), scope = kiroCatalogScope(account);
+  const profileArn = "arn:aws:codewhisperer:eu-central-1:123456789012:profile/discovered";
+  let calls = 0;
+  const result = await fetchKiroCatalog(account, signal(), async (input, init) => {
+    calls++;
+    assert.equal(new Headers(init?.headers).get("authorization"), "Bearer ACCESS-PRIVATE");
+    if (calls === 1) {
+      assert.equal(String(input), "https://q.us-east-1.amazonaws.com/");
+      assert.equal(new Headers(init?.headers).get("x-amz-target"), "AmazonCodeWhispererService.ListAvailableProfiles");
+      return json({ profiles: [{ arn: profileArn }] });
+    }
+    assert.equal(new URL(String(input)).hostname, "management.eu-central-1.kiro.dev");
+    assert.equal(JSON.parse(String(init?.body)).profileArn, profileArn);
+    return json(page());
+  });
+  assert.equal(calls, 2); assert.equal(result.length, 1);
+  assert.deepEqual(account, original); assert.equal(kiroCatalogScope(account), scope);
+});
+
+test("enterprise catalog stops on failed or ambiguous profile discovery", async () => {
+  const arn = "arn:aws:codewhisperer:us-east-1:123456789012:profile/one";
+  for (const response of [json({ secret: "PRIVATE" }, 403), json({ profiles: [{ arn }, { arn: arn + "2" }] })]) {
+    let calls = 0;
+    await assert.rejects(fetchKiroCatalog(credential({ authMethod: "identity-center" }), signal(), async () => { calls++; return response; }), error => error instanceof Error && !error.message.includes("PRIVATE"));
+    assert.equal(calls, 1, "no catalog request after unresolved enterprise identity");
+  }
 });
 
 test("Kiro rejects invalid or expired credentials before issuing a request", async () => {
@@ -94,10 +124,13 @@ test("Kiro errors are sanitized and never retried across profiles or regions", a
     assert.equal(calls, 1);
   }
   await assert.rejects(fetchKiroCatalog(credential(), signal(), async () => { throw Error("PRIVATE network URL"); }), /网络请求失败/);
+  await assert.rejects(fetchKiroCatalog(credential(), signal(), async () => new Response(new ReadableStream({
+    start(controller) { controller.error(Error("PRIVATE response URL token")); },
+  }))), error => error instanceof Error && /响应读取失败/.test(error.message) && !error.message.includes("PRIVATE"));
 });
 
 test("Kiro rejects incomplete, malformed and non-finite catalog metadata", async () => {
-  for (const body of [{ models: [] }, { defaultModel: model() }, page([{ modelId: "" }]), page([{ modelId: "x", tokenLimits: { maxInputTokens: -2 } }]),
+  for (const body of [{ models: [], defaultModel: {} }, { defaultModel: model() }, page([{ modelId: "" }]), page([{ modelId: "x", tokenLimits: { maxInputTokens: -2 } }]),
     page([{ modelId: "x", tokenLimits: { maxOutputTokens: 1.5 } }]), page([model()], { nextToken: 3 }), page([null])]) {
     await assert.rejects(fetchKiroCatalog(credential(), signal(), async () => json(body)), /Kiro/);
   }
@@ -109,6 +142,11 @@ test("Kiro rejects incomplete, malformed and non-finite catalog metadata", async
     assert.equal(nullable.name, "nullable"); assert.equal(nullable.contextWindow, 0); assert.equal(nullable.maxTokens, 0);
   }
   assert.deepEqual(await fetchKiroCatalog(credential(), signal(), async () => json(page([]))), []);
+  for (const defaultFields of [{}, { defaultModel: null }]) {
+    const result = await fetchKiroCatalog(credential(), signal(), async () => json({ models: [model()], ...defaultFields }));
+    assert.deepEqual(result.map(item => item.id), ["upstream-model"]);
+    assert.deepEqual(await fetchKiroCatalog(credential(), signal(), async () => json({ models: [], ...defaultFields })), []);
+  }
 });
 
 test("Kiro rejects repeated pagination, excessive pages and excessive model counts", async () => {

@@ -54,6 +54,15 @@ export function unwrapQoderSse(response: Response, signal?: AbortSignal, options
     if (!raw || raw === "[NOT_EXCEED_QUOTA]" || raw.startsWith("[EXCEED_QUOTA]") || notification(raw)) return;
     if (raw === "[DONE]") { terminal(); return; }
     const envelope = parse(raw);
+    // CLI 1.1.81 remote-chat-stream skips bare `notifications`/`firstTokenDuration` frames.
+    // Live qoder-cn streams end with `event: finish` + {firstTokenDuration,totalDuration,serverDuration}.
+    if (!Object.hasOwn(envelope, "statusCodeValue") && (Object.hasOwn(envelope, "firstTokenDuration") || Object.hasOwn(envelope, "notifications"))) {
+      const timingOnly = Object.entries(envelope).every(([key, value]) => key === "notifications" ? Array.isArray(value)
+        : /^(?:firstTokenDuration|totalDuration|serverDuration)$/.test(key) && (value == null || typeof value === "number" && Number.isFinite(value)));
+      if (!timingOnly) throw new QoderError("Qoder 事件流缺少 choices（未知事件结构）。");
+      if (Array.isArray(envelope.notifications) && envelope.notifications.length) options.onNotification?.(envelope.notifications);
+      return;
+    }
     // Preserve the existing explicit notification payload path; generic notification
     // markers must still pass wrapper status checks below.
     if (typeof envelope.body === "string" && envelope.body.startsWith("[NOTIFICATIONS]#") && notification(envelope.body)) return;
@@ -131,7 +140,9 @@ export function unwrapQoderSse(response: Response, signal?: AbortSignal, options
           if (typeof index !== "number" || !Number.isInteger(index) || index < 0) throw malformedTool();
           const fn = object(tool.function ?? {}), previous = tools.get(index);
           if (!previous && (typeof tool.id !== "string" || !tool.id.trim())) throw malformedTool();
-          if (previous && tool.id !== undefined && tool.id !== previous.id) throw malformedTool();
+          // CLI 1.1.81 sRe resolves argument deltas by index, retaining the initial ID.
+          // Live dfmodel repeats id:"" on continuations; empty/null is not a new call.
+          if (previous && tool.id != null && tool.id !== "" && tool.id !== previous.id) throw malformedTool();
           const name = fn.name;
           if (name !== undefined && (typeof name !== "string" || previous?.name && name !== previous.name)) throw malformedTool();
           if (fn.arguments !== undefined && typeof fn.arguments !== "string") throw malformedTool();

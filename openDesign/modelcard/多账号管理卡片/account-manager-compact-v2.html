@@ -1,0 +1,901 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>账号集 · 多账号管理</title>
+<!--
+图标来源：
+Lucide：https://lucide.dev/icons/（refresh-cw、circle-user-round、search、plus、x、arrow-right）
+SVG 原始文件：https://github.com/lucide-icons/lucide/tree/main/icons
+Simple Icons / OpenAI：https://icon-sets.iconify.design/simple-icons/openai/
+SVG 原始文件：https://api.iconify.design/simple-icons/openai.svg
+Simple Icons 使用 CC0 1.0；OpenAI 标志的商标权归原权利人，仅用于识别账号平台。
+补充品牌图标：Simple Icons / Anthropic、Google Gemini、GitHub Copilot（CC0 1.0）。
+来源：https://api.iconify.design/simple-icons/{anthropic,googlegemini,githubcopilot}.svg
+DeepSeek：Remix Icon，https://api.iconify.design/ri/deepseek-fill.svg
+This project uses icons from Remix Icon (https://remixicon.com), licensed under the Remix Icon License v1.0.
+许可：https://github.com/Remix-Design/RemixIcon/blob/master/License
+补充功能图标：Lucide / trash-2、settings-2（同下方 ISC 许可）。
+所有品牌图标仅用于识别对应平台，不代表品牌背书。
+所有 SVG 已内嵌；viewBox 为 0 0 24 24，按原始 1:1 比例显示。
+
+Lucide — ISC License
+Copyright (c) 2026 Lucide Icons and Contributors
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+search、plus、x、arrow-right 源自 Feather，另适用：
+The MIT License (MIT)
+Copyright (c) 2013-present Cole Bemis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->
+<style>
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #08090a;              /* marketing black — hero canvas */
+  --surface:      #191a1b;              /* elevated surface — cards, dropdowns */
+  --surface-warm: var(--surface);       /* no warm tier in dark achromatic system */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #f7f8f8;                      /* near-white primary text */
+  --fg-2: #d0d6e0;                      /* silver-gray body / secondary text */
+  --muted: #8a8f98;                     /* tertiary — placeholders, metadata */
+  --meta:  #62666d;                     /* quaternary — timestamps, disabled */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      rgba(255, 255, 255, 0.08);   /* standard semi-transparent white */
+  --border-soft: rgba(255, 255, 255, 0.05);   /* ultra-subtle divider */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  --accent:        #5e6ad2;             /* brand indigo — CTA backgrounds */
+  --accent-on:     #ffffff;
+  --accent-hover:  #828fff;             /* lighter saturated hover */
+  --accent-active: #4752c4;             /* darker pressed state */
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #27a644;                   /* Linear green */
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  --font-display: "Inter Variable", "Inter", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-body:    "Inter Variable", "Inter", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    "Berkeley Mono", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §Typography Hierarchy.
+   * Linear's display range 72px→10px; the 8 schema slots map the
+   * key stops. 64px secondary-hero lives inline in components.html. */
+  --text-xs:   12px;                    /* label / micro */
+  --text-sm:   14px;                    /* caption large / link small */
+  --text-base: 16px;                    /* body — standard reading */
+  --text-lg:   18px;                    /* body large — feature descriptions */
+  --text-xl:   24px;                    /* heading 2 */
+  --text-2xl:  32px;                    /* heading 1 */
+  --text-3xl:  48px;                    /* display — section headlines */
+  --text-4xl:  72px;                    /* display XL — hero */
+
+  /* Leading + tracking.
+   * --leading-tight=1.00: Linear's signature "engineered" compression.
+   * h2 (32px) → 1.13; h3 (24px) → 1.33 per DESIGN.md spec.
+   * --tracking-display: -0.022em = -1.584px / 72px normalized. */
+  --leading-body:     1.5;
+  --leading-tight:    1.00;
+  --tracking-display: -0.022em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §Whitespace Philosophy. */
+  --section-y-desktop: 80px;
+  --section-y-tablet:  48px;
+  --section-y-phone:   32px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* 6px for buttons/inputs (comfortable), 8px cards, 12px panels. */
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* On dark surfaces: luminance stepping, not opaque drop shadows.
+     --elev-raised uses semi-transparent border-as-shadow technique. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised:
+    rgba(0, 0, 0, 0.4) 0px 2px 4px,
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  /* Multi-layer stack per DESIGN.md §6 + §7: accent ring makes the
+     indicator visible on the near-black #08090a canvas. */
+  --focus-ring:
+    0 0 0 2px color-mix(in oklab, var(--accent), transparent 30%),
+    0 4px 12px rgba(0, 0, 0, 0.1);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   12px;
+}
+*,*::before,*::after {box-sizing:border-box}
+html {-webkit-text-size-adjust:100%}
+body {margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:var(--text-sm);font-weight:400;line-height:var(--leading-body);font-feature-settings:"cv01","ss03";-webkit-font-smoothing:antialiased;color-scheme:dark}
+img,svg {display:block;max-width:100%}
+a {color:inherit;text-decoration:none}
+button,input,select {font:inherit}
+button {cursor:pointer}
+button:disabled {cursor:wait;opacity:.55}
+p {text-wrap:pretty}
+h1,h2,h3,h4 {text-wrap:balance;font-family:var(--font-display)}
+.container {max-width:var(--container-max);margin-inline:auto;padding-inline:var(--container-gutter-desktop)}
+.section {padding-block:36px}
+.section+.section {border-top:1px solid var(--border)}
+.stack {display:flex;flex-direction:column}
+.stack>*+* {margin-top:var(--space-5)}
+.row {display:flex;align-items:center;gap:var(--space-5)}
+.row-between {display:flex;align-items:center;justify-content:space-between;gap:var(--space-5)}
+.grid-2 {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-8)}
+.grid-3 {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-8)}
+.grid-4 {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-5)}
+.grid-2-1 {display:grid;grid-template-columns:2fr 1fr;gap:var(--space-12);align-items:start}
+.grid-1-2 {display:grid;grid-template-columns:1fr 2fr;gap:var(--space-12);align-items:start}
+.h1,h1 {font-size:var(--text-2xl);font-weight:510;line-height:1.13;letter-spacing:var(--tracking-display);margin:0}
+.h2,h2 {font-size:var(--text-xl);font-weight:510;line-height:1.33;letter-spacing:-.012em;margin:0}
+.h3,h3 {font-size:20px;font-weight:590;line-height:1.33;margin:0}
+.lead {font-size:var(--text-base);line-height:1.6;color:var(--fg-2);max-width:60ch;margin:0}
+.eyebrow {font-family:var(--font-mono);font-size:12px;letter-spacing:.08em;color:var(--muted);margin:0 0 20px}
+.meta {font-family:var(--font-mono);font-size:var(--text-xs);color:var(--muted)}
+.num {font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.topnav {position:relative;z-index:10;background:color-mix(in oklch,var(--fg) 3%,var(--bg));backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+.topnav-inner {display:flex;align-items:center;justify-content:space-between;min-height:70px;gap:20px}
+.topnav .logo {font-family:var(--font-display);font-size:20px;font-weight:510;letter-spacing:var(--tracking-display)}
+.topnav nav {display:flex;gap:28px}
+.topnav nav a {font-size:14px;color:var(--muted)}
+.topnav nav a:hover {color:var(--fg)}
+.pagefoot {padding-block:24px;color:var(--muted);font-size:12px;border-top:1px solid var(--border)}
+.pagefoot .row-between {flex-wrap:wrap;gap:12px}
+.btn {display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 16px;border-radius:var(--radius-sm);border:1px solid transparent;font-size:13px;font-weight:510;transition:background var(--motion-fast),border-color var(--motion-fast),transform var(--motion-fast);white-space:normal}
+.btn:active {transform:translateY(1px)}
+.btn-primary {background:var(--accent);color:var(--accent-on);border-color:transparent}
+.btn-primary:hover {background:var(--accent-active);color:var(--accent-on)}
+.btn-primary:active {background:oklch(from var(--accent-active) calc(l - .06) c h);color:var(--accent-on)}
+.btn-secondary {background:color-mix(in oklch,var(--fg) 2%,transparent);color:var(--fg);border-color:var(--border)}
+.btn-secondary:hover {background:color-mix(in oklch,var(--fg) 6%,transparent);border-color:var(--muted);color:var(--fg)}
+.btn-ghost {background:transparent;color:var(--fg);padding-inline:8px}
+.btn-ghost:hover {background:color-mix(in oklch,var(--fg) 6%,transparent);color:var(--fg)}
+.btn-arrow svg {transition:transform var(--motion-fast)}
+.btn-arrow:hover svg {transform:translateX(2px)}
+.card {background:color-mix(in oklch,var(--fg) 3%,transparent);border:1px solid var(--border);border-radius:var(--radius-md);padding:24px}
+.card-flat {background:transparent;border:0;padding:0}
+.card-rule {background:transparent;border:0;border-top:1px solid var(--fg);padding:24px 0 0;border-radius:0}
+.feature .feature-mark {width:36px;height:36px;display:grid;place-items:center;border:1px solid var(--border);border-radius:var(--radius-md);color:var(--fg);margin-bottom:20px}
+.feature .feature-mark svg {width:18px;height:18px}
+.feature h3 {margin-bottom:6px}.feature p {margin:0;color:var(--muted);font-size:15px}
+.stat .stat-num {font-family:var(--font-display);font-size:56px;line-height:1;color:var(--fg);font-weight:510}
+.stat .stat-label {color:var(--muted);font-size:14px;margin-top:8px;max-width:24ch}
+.stat .stat-unit {font-size:.5em;opacity:.7;margin-left:2px}
+.quote {font-family:var(--font-display);font-size:28px;line-height:1.32;max-width:28ch}
+.quote-author {color:var(--muted);font-size:14px;margin-top:20px}
+.quote-mark {font-family:var(--font-display);font-size:140px;line-height:.7;color:var(--muted);opacity:.18;margin-bottom:-28px}
+.pill {display:inline-flex;align-items:center;gap:6px;padding:4px 9px;background:transparent;border:1px solid var(--border);color:var(--fg-2);border-radius:var(--radius-pill);font-size:11px;font-weight:510;line-height:1.5}
+.tag {display:inline-flex;align-items:center;padding:3px 8px;color:var(--muted);border:1px solid var(--border);border-radius:5px;font-size:11px}
+.field {display:flex;flex-direction:column;gap:6px}.field label {font-size:13px;color:var(--muted)}
+.input,.textarea {width:100%;min-height:44px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:color-mix(in oklch,var(--fg) 2%,transparent);color:var(--fg);font:inherit;font-size:13px}
+.input::placeholder,.textarea::placeholder {color:var(--muted);opacity:1}
+.input:hover,.textarea:hover {border-color:var(--muted)}
+select option {background:var(--surface);color:var(--fg)}
+.textarea {min-height:96px;resize:vertical;line-height:1.55}
+.ds-table {width:100%;border-collapse:collapse;font-size:13px}
+.ds-table th,.ds-table td {padding:13px 10px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top;overflow-wrap:anywhere}
+.ds-table th {color:var(--muted);font-weight:500;font-size:12px}
+.ds-table tbody tr:hover {background:color-mix(in oklch,var(--fg) 4%,transparent)}
+.ds-table .num-col {font-family:var(--font-mono);font-variant-numeric:tabular-nums;text-align:right}
+.ph-img {background:color-mix(in oklch,var(--fg) 4%,transparent);border:1px solid var(--border);border-radius:var(--radius-lg);aspect-ratio:16/10;display:grid;place-items:center;color:var(--muted);font-family:var(--font-mono);font-size:12px}
+.ph-img.square {aspect-ratio:1}.ph-img.portrait {aspect-ratio:3/4}.ph-img.wide {aspect-ratio:16/9}
+.content-img {display:block;max-width:100%;max-height:min(70vh,720px);width:auto;height:auto;object-fit:contain;justify-self:center;border-radius:var(--radius-lg)}
+.rule {border:0;border-top:1px solid var(--border);margin:0}.rule-strong {border:0;border-top:1px solid var(--fg);margin:0}
+.hero {padding-block:36px 26px}.hero-center {text-align:center;max-width:32ch;margin-inline:auto}
+.hero h1 {margin-bottom:12px}.hero .lead {margin-bottom:0}.hero-cta {display:inline-flex;gap:12px;flex-wrap:wrap}
+.hero-center .hero-cta {justify-content:center}.hero-split {display:grid;grid-template-columns:1fr 1fr;gap:var(--section-y-desktop);align-items:center}
+.log-row {display:grid;grid-template-columns:120px 1fr 100px;gap:28px;padding:22px 0;border-top:1px solid var(--border);align-items:baseline}
+.log-row .meta {color:var(--muted)}.log-row h3 {font-size:19px}.log-row .pull {text-align:right}
+/* 产品模块：复用种子的网格、卡片、字段和表格。 */
+:focus-visible {outline:2px solid var(--accent-hover);outline-offset:3px;box-shadow:var(--focus-ring)}
+.btn svg,.icon-button svg {width:16px;height:16px;flex:none}
+.brand {display:flex;align-items:center;gap:12px}.brand-mark {display:grid;grid-template-columns:repeat(2,8px);gap:3px;transform:rotate(-8deg)}
+.brand-mark i {width:8px;height:8px;background:var(--fg);border-radius:2px}.brand-mark i:last-child {background:var(--muted)}
+.nav-divider {width:1px;height:20px;background:var(--border);margin:0 8px}.workspace {font-size:12px;color:var(--muted)}
+.nav-right {display:flex;align-items:center;gap:16px;font-size:12px}.avatar {width:30px;height:30px;border:1px solid var(--border);border-radius:50%;display:grid;place-items:center;background:var(--bg);font-size:11px}
+.breadcrumb {font-size:11px;color:var(--muted);display:flex;gap:10px;margin-bottom:19px}.breadcrumb span:last-child {color:var(--fg)}
+.heading-row {align-items:flex-end;flex-wrap:wrap}.heading-row .lead {font-size:13px}.heading-row h1 {font-weight:510}
+.demo-tag {font-size:11px;border:1px solid var(--border);background:var(--surface);padding:3px 8px;border-radius:5px;color:var(--muted);font-family:var(--font-body);font-weight:400;letter-spacing:0;vertical-align:middle;margin-left:12px;display:inline-block}
+.summary {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin-top:28px;padding:21px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.summary-item {padding-left:28px;border-left:1px solid var(--border);display:flex;align-items:center;gap:16px;min-width:0}
+.summary-item:first-child {padding-left:0;border-left:0}.summary-item .num {font-size:27px;line-height:1.1;letter-spacing:-.06em}.summary-label {font-size:12px;color:var(--muted)}
+.dot {display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--muted);flex:none}
+.warning {color:var(--fg);background:color-mix(in oklch,var(--fg) 4%,transparent)}
+.danger {color:var(--fg);background:color-mix(in oklch,var(--fg) 5%,transparent);border:1px solid var(--border)}
+.dot-warning {background:var(--warn)}.dot-danger {background:var(--danger)}
+.accounts-section {border-top:0!important;padding-top:0;padding-bottom:32px}.toolbar {display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:23px;flex-wrap:wrap}
+.tabs {display:flex;gap:5px;flex-wrap:wrap}.tab {min-height:44px;border:0;background:transparent;color:var(--muted);font-size:12px;padding:0 12px;border-radius:7px;display:flex;align-items:center;gap:8px}
+.tab[aria-pressed="true"] {background:var(--surface);color:var(--fg);box-shadow:var(--elev-ring);font-weight:510}
+.tab:hover {background:color-mix(in oklch,var(--fg) 6%,transparent);color:var(--fg)}.tab-count {font-family:var(--font-mono);font-size:10px;color:var(--muted)}
+.filter-tools {display:flex;gap:10px}.search {position:relative;width:215px}.search svg {position:absolute;left:12px;top:14px;width:15px;height:15px;color:var(--muted)}
+.search input {padding-left:36px}.filter-tools select {width:118px;padding-right:8px}.cards-grid {gap:20px}
+.account-card {display:flex;flex-direction:column;width:368px;height:440px;padding:16px 16px 0;transition:box-shadow .18s,border-color .18s;min-width:0}
+.account-card:hover {background:color-mix(in oklch,var(--fg) 4%,transparent);border-color:color-mix(in oklch,var(--muted) 25%,var(--border))}
+.account-top {display:flex;align-items:flex-start;gap:10px;min-width:0;flex-shrink:0}.provider-icon {width:44px;height:44px;border:1px solid var(--border);border-radius:var(--radius-md);display:grid;place-items:center;color:var(--fg);background:color-mix(in oklch,var(--fg) 3%,transparent);flex:none}.provider-icon:hover {background:color-mix(in oklch,var(--fg) 9%,transparent);border-color:var(--muted)}.provider-icon svg {width:22px;height:22px}
+.identity {min-width:0;flex:1}.account-heading {display:flex;align-items:center;flex-wrap:wrap;gap:0 6px;min-width:0}.account-name {max-width:100%;display:flex;align-items:center;min-height:44px;font-size:14px;font-weight:510;overflow-wrap:anywhere;line-height:1.5;border-radius:3px;cursor:text}.account-name:hover {background:color-mix(in oklch,var(--fg) 6%,transparent)}.identity .email {display:block;margin-top:5px;line-height:1.6;color:var(--fg-2)}.rename-input {width:100%;min-width:0;font:inherit;font-size:14px;color:var(--fg);background:var(--bg);border:1px solid var(--accent-hover);border-radius:3px;padding:0 3px;min-height:44px}
+.card-aside {width:88px;flex:none}.card-badges {display:flex;flex-wrap:wrap;justify-content:flex-start;gap:4px;max-width:100%}.card-badge {display:inline-flex;align-items:center;padding:2px 6px;border-radius:4px;font-size:10px;line-height:1.6;overflow-wrap:anywhere;max-width:100%;color:var(--fg-2);background:color-mix(in oklch,var(--fg) 8%,transparent)}
+.card-badge[data-tone="green"] {color:color-mix(in oklch,var(--success) 55%,var(--fg));background:color-mix(in oklch,var(--success) 16%,transparent)}.card-badge[data-tone="yellow"] {color:var(--warn);background:color-mix(in oklch,var(--warn) 12%,transparent)}.card-badge[data-tone="red"] {color:color-mix(in oklch,var(--danger) 45%,var(--fg));background:color-mix(in oklch,var(--danger) 15%,transparent)}.card-badge[data-tone="indigo"] {color:var(--accent-hover);background:color-mix(in oklch,var(--accent) 20%,transparent)}
+.card-actions {display:flex;overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--muted) transparent;margin-top:0}.card-actions .icon-button {color:var(--fg-2)}.card-actions .icon-button:hover {background:color-mix(in oklch,var(--fg) 8%,transparent);color:var(--fg)}.card-actions [data-kind="delete"]:hover {background:color-mix(in oklch,var(--danger) 20%,transparent);color:var(--fg)}
+.subscription-progress {margin:0 0 16px}.subscription-progress+.subscription-progress {padding-top:12px;border-top:1px solid var(--border)}.subscription-labels {display:flex;justify-content:space-between;align-items:flex-start;gap:12px;font-size:10px;color:var(--muted)}.subscription-labels strong {font-size:12px;font-weight:510;color:var(--fg);flex:none}.reset-time {text-align:right;overflow-wrap:anywhere}.subscription-progress .meter {margin:8px 0 0;height:6px}.subscription-progress .meter-fill {background:color-mix(in oklch,var(--success) 65%,var(--fg))}.subscription-progress[data-level="low"] .meter-fill {background:var(--warn)}.subscription-progress[data-level="empty"] .meter-fill {background:var(--danger)}
+.info-grid {display:flex;flex-wrap:wrap;gap:12px;margin:0 0 16px;align-items:flex-start}.info-grid:last-child {margin-bottom:0}.info-tile {flex:0 1 auto;width:max-content;min-width:calc((100% - 24px)/3);max-width:100%;padding:0;background:transparent;border:0;overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain}.info-tile::-webkit-scrollbar {display:none;width:0;height:0}.info-tile[data-wide="true"] {width:100%}.info-tile dt,.info-tile dd,.info-tile small {white-space:nowrap;overflow-wrap:normal;width:max-content}.info-tile dt {display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);margin-bottom:4px}.info-tile dt svg {width:12px;height:12px;flex:none}.info-tile dd {margin:0;font-size:12px;line-height:1.6;color:var(--fg-2)}.info-tile small {display:block;font-size:10px;color:var(--muted);margin-top:4px}.info-tile .quota-number {display:block;font-size:12px;line-height:1.6;letter-spacing:0;margin:0}.dot-good {background:var(--success)}.state-description {font-size:11px;color:var(--muted);padding:12px 0;margin:0}.card-footer .status {color:var(--fg-2);font-size:11px}
+.editor-section {margin:24px 0 0;border-top:1px solid var(--border);padding-top:16px}.editor-section h3 {font-size:15px;font-weight:510}.editor-section>.row-between {gap:8px}.editor-row {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 44px;gap:8px;align-items:end;margin-top:12px}.editor-row.fields {grid-template-columns:repeat(2,minmax(0,1fr)) 44px}.editor-row.fields .field:last-of-type {grid-column:2}.editor-row.fields .remove-row {grid-column:3;grid-row:1 / span 4;align-self:center}.editor-row.badges .field:nth-child(3),.editor-row.actions .field:nth-child(3) {grid-column:1 / span 2}.editor-row.badges .remove-row,.editor-row.actions .remove-row {grid-column:3;grid-row:1 / span 2;align-self:center}.editor-row .field label {font-size:11px}.editor-row .input {font-size:12px;padding-inline:8px}.editor-row .wide-field {grid-column:1 / span 2}.editor-help {font-size:11px;color:var(--muted);margin:8px 0 0}.editor-provider-preview {display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.provider-option {display:flex;align-items:center;gap:7px;min-height:44px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;color:var(--fg-2);font-size:12px}.provider-option svg {width:18px;height:18px}.provider-option[aria-pressed="true"] {border-color:var(--fg-2);background:color-mix(in oklch,var(--fg) 8%,transparent);color:var(--fg)}.provider-option:hover {background:color-mix(in oklch,var(--fg) 10%,transparent);color:var(--fg)}.form-error {color:color-mix(in oklch,var(--danger) 40%,var(--fg));font-size:12px}.delete-confirm {background:color-mix(in oklch,var(--danger) 20%,transparent);color:var(--fg);border-color:color-mix(in oklch,var(--danger) 40%,transparent)}.delete-confirm:hover {background:color-mix(in oklch,var(--danger) 30%,transparent);color:var(--fg)}
+.icon-button {width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:var(--radius-sm);color:var(--muted);padding:0;flex:none}.icon-button:hover {background:color-mix(in oklch,var(--fg) 6%,transparent);color:var(--fg)}
+.identity-line {display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px;flex-wrap:wrap}.email {font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.card-body {padding:14px 0 12px;margin-top:10px;border-top:1px solid var(--border-soft);flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:none}
+/* 隐藏轨道与滑块，保留滚轮、触控及键盘滚动。 */
+.card-body::-webkit-scrollbar {display:none;width:0;height:0}
+.card-body:focus-visible {outline-offset:-2px}
+.account-top,.identity-line {flex-shrink:0}
+.quota-label {display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px;color:var(--muted)}
+.quota-number {font-size:18px;line-height:1.4;letter-spacing:-.02em;margin-top:6px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;overflow-wrap:anywhere}.quota-number small {font-size:10px;color:var(--muted);letter-spacing:0;font-family:var(--font-body)}
+.meter {height:5px;border-radius:3px;background:color-mix(in oklch,var(--fg) 9%,transparent);margin:15px 0 7px;overflow:hidden}.meter-fill {height:100%;background:var(--fg-2);border-radius:3px}
+.meter-meta {display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10px;color:var(--muted)}
+.detail-lines {display:grid;gap:8px;margin:18px 0 19px}.detail-line {display:flex;align-items:flex-start;justify-content:space-between;gap:16px;font-size:11px}.detail-line dt {color:var(--muted);flex:none}.detail-line dd {margin:0;text-align:right;overflow-wrap:anywhere}
+.card-footer {display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--border);height:50px;flex-shrink:0;margin-top:auto;font-size:10px;color:var(--muted)}
+.card-footer .btn {font-size:11px;min-height:44px;padding:8px 0 8px 8px}.status {display:inline-flex;align-items:center;gap:5px;font-size:10px}
+.text-action {min-height:44px;display:inline-flex;align-items:center;padding:0 4px;border:0;border-radius:4px;background:transparent;color:inherit;font-size:11px;text-decoration:underline;text-underline-offset:3px}.text-action:hover {background:color-mix(in oklch,var(--fg) 6%,transparent);color:var(--fg)}
+.inline-error {display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:9px;padding:0 9px;border-radius:5px;font-size:10px;min-height:38px}.inline-error .text-action {min-height:44px;font-size:10px;flex:none}
+.empty-module {display:flex;flex-direction:column;align-items:flex-start;justify-content:center;min-height:145px;padding:15px 0}.empty-module strong {font-size:18px;font-weight:500;margin:7px 0}.empty-module p {font-size:11px;color:var(--muted);line-height:1.8;margin:0;max-width:32ch}.empty-module .btn {padding-left:0;font-size:11px}
+.state-stamp {font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:.03em}.no-results {grid-column:1/-1;text-align:center;padding:65px 24px}.no-results h2 {font-size:23px}.no-results p {color:var(--muted);font-size:13px}
+.module-note {margin-top:23px;display:flex;justify-content:space-between;gap:20px;align-items:center;padding:18px 22px;border:1px dashed var(--border);border-radius:9px}.module-note strong {font-size:12px;font-weight:500}.module-note p {font-size:11px;color:var(--muted);margin:4px 0 0}.module-note .btn {font-size:11px;flex:none}
+.footer-left {display:flex;gap:18px;align-items:center}.footer-left .dot {width:5px;height:5px}
+dialog {border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);color:var(--fg);padding:0;width:min(680px,calc(100% - 32px));max-height:90dvh;box-shadow:var(--elev-raised)}
+dialog::backdrop {background:color-mix(in oklch,var(--bg) 85%,transparent);backdrop-filter:blur(3px)}
+.dialog-head {padding:22px 26px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:16px;position:sticky;top:0;z-index:1;background:var(--surface)}
+.dialog-head h2 {font-size:24px}.dialog-body {padding:24px 26px}.dialog-lead {color:var(--muted);font-size:12px;margin:0 0 20px}.dialog-tabs {display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap}.dialog-tabs .tab {border:1px solid var(--border)}
+.contract-panel[hidden] {display:none}.rule-list {margin:0;padding:0;list-style:none;display:grid;gap:0}.rule-list li {display:grid;grid-template-columns:90px 1fr;gap:14px;padding:15px 0;border-bottom:1px solid var(--border);font-size:12px}.rule-list li strong {font-weight:500}.rule-list li span {color:var(--muted)}
+.code {background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:15px;font-family:var(--font-mono);font-size:11px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0;color:var(--fg)}
+.subheading {font-size:17px;margin:22px 0 8px}.endpoint-label {font-family:var(--font-mono);font-size:10px;overflow-wrap:anywhere;color:var(--muted)}
+.resource-row {padding:17px 0;border-bottom:1px solid var(--border)}.resource-head {display:flex;justify-content:space-between;align-items:center;gap:10px}.resource-head strong {font-size:13px}.resource-data {font-size:12px;margin:9px 0 0;overflow-wrap:anywhere}.resource-hint {font-size:11px;color:var(--muted);margin:5px 0 0}
+.add-form {display:grid;gap:18px}.form-foot {display:flex;justify-content:flex-end;gap:10px;margin-top:8px}.form-note {font-size:11px;color:var(--muted);padding:12px;background:var(--bg);border-radius:7px;margin:0}
+.toast {position:fixed;bottom:24px;left:50%;transform:translateX(-50%);max-width:calc(100% - 32px);padding:12px 18px;border-radius:var(--radius-md);border:1px solid var(--border);box-shadow:var(--elev-raised);color:var(--fg);background:var(--surface);z-index:30;font-size:12px}.toast:empty {display:none}
+/* 所有卡片固定尺寸、按行对齐，字段差异只影响内部滚动。 */
+.cards-grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(0,368px));gap:16px;align-items:start}
+.cards-grid .account-card {width:100%;max-width:368px}
+.cards-grid .no-results {grid-column:1/-1}
+@media(max-width:415px) {.cards-grid {grid-template-columns:minmax(0,1fr)}}
+.module-section {padding-top:16px;margin-top:16px;border-top:1px solid var(--border)}
+.module-heading {display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.module-heading h4 {font-size:12px;font-weight:510;margin:0}
+.module-heading .meta {font-size:10px}
+.module-section .detail-lines {margin:10px 0 0}
+.module-section .detail-line {font-size:11px}
+.module-section .meter {margin-top:10px}
+.module-section .meter-meta {flex-wrap:wrap;line-height:1.7}
+.module-section .detail-line dd {min-width:0}
+.module-pending {font-size:11px;color:var(--muted);margin:8px 0}
+.quota-number.precise {font-size:18px;letter-spacing:-.02em;overflow-wrap:anywhere}
+.auth-caption {font-size:10px;color:var(--muted);margin:8px 0 0}
+.default-tag {font-size:10px;color:var(--fg-2);font-weight:400;border:1px solid var(--border);border-radius:4px;padding:2px 5px;display:inline-block;margin-top:4px}
+.cost-values {display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px}
+.cost-values dt {font-size:10px;color:var(--muted)}
+.cost-values dd {margin:5px 0 0;font-size:16px;overflow-wrap:anywhere}
+.sr-only {position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(min-width:921px) and (max-width:1120px) {.toolbar {gap:15px}}
+@media(max-width:920px) {
+  .grid-2,.grid-3:not(.cards-grid),.grid-4,.grid-2-1,.grid-1-2,.hero-split {grid-template-columns:1fr}
+  .container {padding-inline:var(--container-gutter-tablet)}.summary-item {padding-left:16px;gap:10px}.summary-item .num {font-size:23px}.summary-label {font-size:11px}.toolbar {gap:17px}.filter-tools {width:100%}.search {flex:1;width:auto}.heading-row {align-items:flex-start}.module-note {align-items:flex-start}.workspace {display:none}.nav-divider {display:none}
+}
+@media(max-width:540px) {
+  .container {padding-inline:var(--container-gutter-phone)}.topnav-inner {min-height:62px}.nav-right {gap:8px}.nav-right>span {display:none}.hero {padding-top:24px}.breadcrumb {margin-bottom:16px}.heading-row {gap:20px}.heading-row>.hero-cta {width:100%}.heading-row .lead {font-size:12px}.demo-tag {margin-left:8px}.summary {grid-template-columns:repeat(2,minmax(0,1fr));row-gap:22px;margin-top:24px;padding:21px 0}.summary-item:nth-child(3) {padding-left:0;border:0}.summary-item .num {font-size:26px}.summary-label {font-size:12px}.tabs {gap:0;justify-content:space-between;width:100%}.tab {padding-inline:9px;font-size:11px;gap:5px}.filter-tools select {width:106px}.account-card {padding-inline:14px}.module-note {flex-direction:column;gap:7px;padding:16px}.module-note .btn {padding-left:0}.pagefoot .row-between {align-items:flex-start}.footer-left {flex-wrap:wrap;gap:8px}.dialog-head,.dialog-body {padding:20px}.rule-list li {grid-template-columns:77px 1fr;gap:10px}.ds-table th,.ds-table td {padding-inline:5px;font-size:11px}.summary-item {gap:16px}
+}
+@media(prefers-reduced-motion:reduce) {*,*::before,*::after {transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="topnav" data-od-id="topnav">
+  <div class="container topnav-inner">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="logo">账号集</span><span class="nav-divider"></span><span class="workspace">个人工作空间 <span aria-hidden="true">/</span> 连接管理</span></div>
+    <div class="nav-right"><button class="btn btn-ghost" data-action="docs" data-od-id="nav-api-docs">接入规范</button><span>演示工作区</span><div class="avatar" aria-label="当前工作区">本地</div></div>
+  </div>
+</header>
+<main id="content">
+  <!-- 基于布局 1 的紧凑产品页头，取消营销页大留白。 -->
+  <section class="section hero" data-od-id="account-overview">
+    <div class="container">
+      <div class="breadcrumb"><span>工作空间</span><span aria-hidden="true">/</span><span>账号管理</span></div>
+      <div class="row-between heading-row">
+        <div><h1 data-od-id="page-title">账号管理<span class="demo-tag">演示数据</span></h1><p class="lead">集中查看账号资源。信息按需展示，查询互不影响。</p></div>
+        <div class="hero-cta"><button class="btn btn-secondary" id="refresh-all" data-action="refresh-all" data-od-id="refresh-all"></button><button class="btn btn-primary" data-action="add" data-od-id="add-account"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:plus"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 添加账号</button></div>
+      </div>
+      <div class="summary" id="summary" data-od-id="account-summary" aria-label="账号状态汇总"></div>
+    </div>
+  </section>
+  <!-- 基于布局 3 的卡片网格；所有账号共用同一渲染器。 -->
+  <section class="section accounts-section" data-od-id="accounts">
+    <div class="container">
+      <div class="toolbar" data-od-id="account-filters">
+        <div class="tabs" role="group" aria-label="按账号状态筛选">
+          <button class="tab" data-filter="all" aria-pressed="true" data-od-id="filter-all">全部账号 <span class="tab-count" id="count-all">6</span></button>
+          <button class="tab" data-filter="good" aria-pressed="false" data-od-id="filter-good">正常 <span class="tab-count" id="count-good">3</span></button>
+          <button class="tab" data-filter="partial" aria-pressed="false" data-od-id="filter-partial">信息不全 <span class="tab-count" id="count-partial">2</span></button>
+          <button class="tab" data-filter="error" aria-pressed="false" data-od-id="filter-error">需处理 <span class="tab-count" id="count-error">1</span></button>
+        </div>
+        <div class="filter-tools">
+          <label class="search" data-od-id="account-search"><span class="sr-only">搜索账号名称、邮箱或平台</span><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:search"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg><input class="input" id="search" data-od-id="search-input" type="search" placeholder="搜索账号名称、邮箱…" autocomplete="off"></label>
+          <label><span class="sr-only">账号类型</span><select class="input" id="type-filter" data-od-id="type-filter"><option value="all">全部类型</option><option value="api">API 账号</option><option value="subscription">订阅账号</option></select></label>
+        </div>
+      </div>
+      <div class="grid-3 cards-grid" id="account-grid" data-od-id="account-grid" aria-label="账号列表"></div>
+      <div class="module-note" data-od-id="module-rules-note"><div><strong>同一张卡片，适配不同账号能力。</strong><p>未支持的模块自动收起；未返回与查询失败分开处理，零额度如实显示。</p></div><button class="btn btn-ghost btn-arrow" data-action="docs" data-od-id="view-module-contract">查看字段与接口<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:arrow-right"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button></div>
+      <p id="result-count" class="sr-only" role="status"></p>
+    </div>
+  </section>
+</main>
+<footer class="pagefoot" data-od-id="footer"><div class="container row-between"><div class="footer-left"><span><span class="dot" aria-hidden="true"></span> 本地演示 · 未连接真实后台</span><span>包含用户提供的字段样本，其余为演示数据</span></div><span>各接口独立查询 · 不合计不同口径的额度</span></div></footer>
+<dialog id="docs-dialog" aria-labelledby="docs-title" data-od-id="api-contract-dialog">
+  <div class="dialog-head"><h2 id="docs-title" data-od-id="api-contract-title">字段与接口约定</h2><button class="icon-button" data-close="docs-dialog" aria-label="关闭接口说明" data-od-id="close-api-docs"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></div>
+  <div class="dialog-body">
+    <p class="dialog-lead">以下是建议的自有后台接口，不是 OpenAI 官方接口。服务端负责平台适配、鉴权和密钥保管。</p>
+    <div class="dialog-tabs" role="group" aria-label="接入说明分类"><button class="tab" data-doc-tab="rules" aria-pressed="true" data-od-id="docs-rules">展示规则</button><button class="tab" data-doc-tab="endpoints" aria-pressed="false" data-od-id="docs-endpoints">接口映射</button><button class="tab" data-doc-tab="response" aria-pressed="false" data-od-id="docs-response">返回格式</button></div>
+    <div class="contract-panel" id="doc-rules">
+      <ul class="rule-list">
+        <li><strong>有数据</strong><span>展示真实值；数值 0 是有效数据，不使用真假判断隐藏。</span></li>
+        <li><strong>不支持</strong><span>capabilities 对应项为 false，跳过查询并收起模块；全部无额度能力时改为订阅说明。</span></li>
+        <li><strong>未返回</strong><span>能力存在但 data 为 null，核心额度显示“暂未返回额度”；等级显示“未返回等级”；其他字段省略。</span></li>
+        <li><strong>加载中</strong><span>首次显示“查询中”；再次查询保留上次成功值，并标注正在更新。</span></li>
+        <li><strong>查询失败</strong><span>仅在失败模块显示原因和重试。已有数据保留并标注“上次数据”，不伪装成当前值。</span></li>
+        <li><strong>订阅进度</strong><span>仅订阅账号且 usage 返回有效百分比时展示进度，左侧剩余比例，右侧周期及重置时间。无订阅或无周期数据则不占位。余额独立显示，不混算百分比。</span></li>
+        <li><strong>点数精度</strong><span>高精度点数与金额支持十进制字符串，原样保留小数位。点数、美元与周期百分比互不换算。</span></li>
+        <li><strong>周期与费用</strong><span>usage.windows 支持多个周期；仅有百分比也可展示，不要求总点数。费用估算独立标注来源，金额未返回显示“—”，不从额度推算。有效期按后台提供的时区展示；无时区时保留原值。</span></li>
+        <li><strong>认证与健康</strong><span>默认账号来自身份接口；已保存认证不代表当前有效；账号检查结果与模块查询状态分别展示。过期判断由后台返回，前端不依据样本日期伪造状态。</span></li>
+        <li><strong>健康状态</strong><span>绿色“监控中”仅表示 auth 成功返回可用；黄色为未确认；红色为封禁、停用、认证过期或检查未通过。额度查询超时不等于封禁。</span></li>
+        <li><strong>扩展与复用</strong><span>统一模块状态与卡片渲染。presentation.fields 通过 module 与 path 绑定对应 GET 接口；position 为 above（进度条上方）或 below（下方，兼容旧配置默认值），missing 为 hide 或 dash。两区按内容宽度排列，每行最多三个、无边框；标题和内容均不换行，超长内容可聚焦后横向滚动查看。标题可选配 Lucide 小图标，icon 为空或省略时不显示；点击供应商图标可编辑位置、标题、图标、字段、颜色与操作个数。</span></li>
+        <li><strong>卡片操作</strong><span>默认依次刷新、删除；删除需二次确认，生产模式调用 DELETE /api/accounts/{id}，失败保留卡片。自定义操作触发 account-card-action 事件（accountId、actionId），由宿主绑定后台行为；不会执行任意脚本或 URL。</span></li>
+      </ul>
+    </div>
+    <!-- 基于布局 8 的接口映射表。 -->
+    <div class="contract-panel" id="doc-endpoints" hidden>
+      <p class="dialog-lead">账号列表：<code>GET /api/accounts</code> 返回 id、provider、type、label 与 capabilities。列表失败时保留原列表并提供重试。</p>
+      <table class="ds-table" data-od-id="endpoint-table"><thead><tr><th>卡片区域</th><th>查询接口 · GET</th><th>关键字段</th></tr></thead><tbody id="endpoint-rows"></tbody></table>
+      <p class="dialog-lead" style="margin-top:18px">路径中的 {id} 是内部账号 ID。各模块独立加载，不因一个失败清空其他模块。401 / 403 提示重新授权，429 按 Retry-After 重试；不要在前端调用平台私有接口或保存密钥。</p>
+    </div>
+    <div class="contract-panel" id="doc-response" hidden>
+      <p class="dialog-lead">所有模块使用相同信封；模块内的 data 按右侧接口映射定义。页面源代码包含同协议的查询适配点。</p>
+      <pre class="code">{
+  "status": "success",
+  "data": {
+    "remaining": 84.2,
+    "total": 120,
+    "unit": "USD",
+    "unlimited": false
+  },
+  "updatedAt": "2026-04-08T09:30:00Z"
+}</pre>
+      <pre class="code">// 未返回数据
+{ "status": "empty", "data": null }
+
+// 平台不支持，也可由 capabilities 提前声明
+{ "status": "unsupported", "data": null }
+
+// 单模块错误，不清空其他模块
+{ "status": "error", "data": null,
+  "error": { "code": "TIMEOUT", "message": "查询超时" } }</pre>
+      <p class="dialog-lead">loading / idle 由客户端管理。失败时缓存的旧值不属于新的成功响应；需保留旧时间并标记过期。金额与数量必须是非负有限数或非负十进制字符串；高精度值建议返回字符串。可选字段缺失时省略，不以 0 补齐。日期应返回带时区的 ISO 8601；历史无时区样本保留原文。</p>
+    </div>
+  </div>
+</dialog>
+<dialog id="detail-dialog" aria-labelledby="detail-title" data-od-id="account-detail-dialog"><div class="dialog-head"><h2 id="detail-title" data-od-id="account-detail-title">账号详情</h2><button class="icon-button" data-close="detail-dialog" aria-label="关闭账号详情" data-od-id="close-account-detail"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></div><div class="dialog-body" id="detail-body"></div></dialog>
+<dialog id="add-dialog" aria-labelledby="add-title" data-od-id="add-account-dialog"><div class="dialog-head"><h2 id="add-title" data-od-id="add-account-title">添加演示账号</h2><button class="icon-button" data-close="add-dialog" aria-label="关闭添加账号" data-od-id="close-add-account"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></div><div class="dialog-body"><form id="add-form" class="add-form">
+  <p class="dialog-lead">创建一张本地卡片，查看缺少后台数据时的展示效果。</p>
+  <div class="field"><label for="account-label">账号名称 *</label><input class="input" id="account-label" name="label" placeholder="例如：开发备用账号" required maxlength="40" data-od-id="new-account-label"></div>
+  <div class="grid-2" style="gap:16px"><div class="field"><label for="account-provider">平台</label><select class="input" id="account-provider" name="provider" data-od-id="new-account-provider"><option>OpenAI</option><option>Anthropic</option><option>Google Gemini</option><option>DeepSeek</option><option>GitHub Copilot</option><option>未指定平台</option></select></div><div class="field"><label for="account-type">账号类型</label><select class="input" id="account-type" name="type" data-od-id="new-account-type"><option value="api">API 账号</option><option value="subscription">订阅账号</option></select></div></div>
+  <div class="field"><label for="account-email">邮箱（选填）</label><input class="input" type="email" id="account-email" name="email" maxlength="120" placeholder="name@example.com" data-od-id="new-account-email"></div>
+  <p class="form-note">不收集 API Key；不保存真实凭据。新增内容仅保留于当前页面，刷新后重置。真实账号连接需对接服务端。</p>
+  <div class="form-foot"><button type="button" class="btn btn-secondary" data-close="add-dialog" data-od-id="cancel-add">取消</button><button type="submit" class="btn btn-secondary" data-od-id="confirm-add">创建演示卡片</button></div>
+</form></div></dialog>
+<dialog id="card-settings-dialog" aria-labelledby="card-settings-title" data-od-id="card-settings-dialog"><div class="dialog-head"><h2 id="card-settings-title" data-od-id="card-settings-title">编辑卡片</h2><button type="button" class="icon-button" id="close-card-settings" data-close="card-settings-dialog" aria-label="关闭卡片设置" data-od-id="close-card-settings"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:x"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><form id="card-settings-form" class="dialog-body">
+  <p class="dialog-lead">配置当前账号的供应商、标记、操作和信息块。名称可在卡片上双击修改。</p>
+  <label class="field"><span>供应商</span><select class="input" id="settings-provider" data-od-id="settings-provider"></select></label><div id="provider-options" class="editor-provider-preview" role="group" aria-label="常用供应商图标"></div>
+  <div class="editor-section"><div class="row-between"><h3 data-od-id="badge-settings-title">特殊标记</h3><button type="button" class="btn btn-secondary" data-action="add-editor-row" data-section="badges" data-od-id="add-badge">添加标记</button></div><p class="editor-help">套餐、默认状态随接口更新；自定义标记可选择颜色。</p><div id="badge-editor"></div></div>
+  <div class="editor-section"><div class="row-between"><h3 data-od-id="action-settings-title">操作按钮</h3><button type="button" class="btn btn-secondary" data-action="add-editor-row" data-section="actions" data-od-id="add-card-action">添加操作</button></div><p class="editor-help">按列表顺序展示，默认先刷新、后删除。按钮较多时可横向滚动；删除始终需要确认。</p><div id="action-editor"></div></div>
+  <div class="editor-section"><div class="row-between"><h3 data-od-id="field-settings-title">信息展示块</h3><button type="button" class="btn btn-secondary" data-action="add-editor-row" data-section="fields" data-od-id="add-card-field">添加信息块</button></div><p class="editor-help">每块按“上标题、下内容”展示，标题左侧可选择小图标，也可不显示；按内容宽度排列，每行最多三个、无边框；标题和内容不换行，超长内容可聚焦后横向滚动查看；可选择放在进度条上方或下方。绑定查询模块与字段路径，例如 windows.0.remaining；未支持时隐藏，缺失值可隐藏或显示“—”。</p><div id="field-editor"></div></div>
+  <p class="form-note" style="margin-top:20px">当前为本地演示。卡片配置、名称修改和删除仅在当前页面生效，不修改真实供应商账号。</p><p id="settings-error" class="form-error" role="alert"></p><div class="form-foot"><button type="button" class="btn btn-secondary" data-close="card-settings-dialog" data-od-id="cancel-card-settings">取消</button><button type="submit" class="btn btn-secondary" data-od-id="save-card-settings">保存配置</button></div>
+</form></dialog>
+<dialog id="delete-dialog" aria-labelledby="delete-title" data-od-id="delete-account-dialog" style="max-width:440px"><div class="dialog-head"><h2 id="delete-title" data-od-id="delete-account-title">删除账号卡片？</h2></div><div class="dialog-body"><p id="delete-message" style="margin-top:0;overflow-wrap:anywhere"></p><p class="dialog-lead">仅移除管理列表中的卡片，不注销供应商账号。演示页面刷新后恢复。</p><p id="delete-error" class="form-error" role="alert"></p><div class="form-foot"><button class="btn btn-secondary" data-close="delete-dialog" autofocus data-od-id="cancel-delete-account">取消</button><button class="btn delete-confirm" id="confirm-delete" data-action="confirm-delete" data-od-id="confirm-delete-account">确认删除</button></div></div></dialog>
+<div id="toast" class="toast" role="status"></div>
+<script id="account-core">
+'use strict';
+// 接入真实后台时设置同源 API 前缀，如 ''。null 明确表示仅使用演示数据。
+const API_BASE = null;
+const MODULES = {
+  profile:{label:'账号身份',path:'profile',fields:'name? · email? · accountId? · isDefault?'},
+  plan:{label:'套餐与订阅',path:'plan',fields:'name? · expiresAt?'},
+  quota:{label:'订阅余额与额度',path:'quota',fields:'remaining? · total? · unit? · unlimited? · resetCount?'},
+  limits:{label:'速率上限',path:'limits',fields:'rpm'},
+  models:{label:'可用模型',path:'models',fields:'names[]'},
+  auth:{label:'认证与账号检查',path:'auth',fields:'method? · credentialStatus? · checkStatus? · accountState? · tokenExpiresAt?'}, 
+  usage:{label:'周期额度',path:'usage',fields:'windows[{period,remainingPercent?,usedPercent?,resetsAt?}]'},
+  costs:{label:'费用估算',path:'costs',fields:'unit · source? · windows[{period,total?,remaining?}]'}
+};
+const esc = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const endpoint = (id,key) => `/api/accounts/${encodeURIComponent(id)}/${MODULES[key].path}`;
+const hasValue = value => value !== null && value !== undefined;
+const nonnegative = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+function visibleData(module) {
+  if (!module || !['success','error','loading'].includes(module.status)) return null;
+  return module.data ?? null;
+}
+// 精确值仅格式化字符串；Number 只参与近似比例绘制，不参与金额换算。
+const decimal = value => nonnegative(value) || (typeof value==='string' && /^(0|[1-9]\d*)(\.\d+)?$/.test(value) && Number.isFinite(Number(value)));
+function formatAmount(value,unit) {
+  if (!decimal(value)) return '—';
+  let amount;
+  if (typeof value==='string') {
+    const [whole,fraction]=value.split('.');
+    amount=whole.replace(/\B(?=(\d{3})+(?!\d))/g,',')+(fraction===undefined?'':'.'+fraction);
+  } else amount=new Intl.NumberFormat('zh-CN',{minimumFractionDigits:unit==='USD'?2:0,maximumFractionDigits:20}).format(value);
+  return unit==='USD'?`$${amount}`:unit?`${amount} ${unit}`:amount;
+}
+function quotaInfo(data) {
+  if (!data) return null;
+  if (data.unlimited === true) return {text:'不限额',percent:null};
+  if (!decimal(data.remaining) || typeof data.unit!=='string' || !data.unit.trim() || (hasValue(data.total)&&!decimal(data.total))) return null;
+  return {text:formatAmount(data.remaining,data.unit),percent:decimal(data.total)&&Number(data.total)>0?Math.min(100,Math.max(0,Number(data.remaining)/Number(data.total)*100)):null};
+}
+const dateLabel = value => value.replace(/^(\d{4})-(\d{2})-(\d{2})T/,'$1/$2/$3 ');
+const validDate = value => typeof value==='string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && !Number.isNaN(Date.parse(value));
+const percent = value => nonnegative(value) && value<=100;
+const authLabels = {saved:'已保存认证',missing:'未保存认证',expired:'认证已过期',passed:'检查通过',failed:'检查未通过',unknown:'尚未检查'};
+function accountStatus(account) {
+  const auth=visibleData(account.modules.auth);
+  if (['banned','disabled','expired'].includes(auth?.accountState)||auth?.checkStatus==='failed'||['expired','missing'].includes(auth?.credentialStatus)) return 'error';
+  const supported = Object.values(account.modules).filter(m=>m.status!=='unsupported');
+  if (supported.some(m=>m.status==='error')) return 'partial';
+  if ((!auth || auth.accountState==='unknown' || (!auth.accountState && auth.checkStatus!=='passed'))||supported.some(m=>['empty','idle','loading'].includes(m.status))) return 'partial';
+  return 'good';
+}
+function validateResponse(key,response) {
+  if (!response || !['success','empty','unsupported','error'].includes(response.status)) throw new Error('接口返回格式不符合约定');
+  if (response.status!=='success') return {...response,data:null};
+  const data=response.data;
+  if (!data || typeof data!=='object' || Array.isArray(data)) return {...response,status:'empty',data:null};
+  if ((key==='limits'&&!hasValue(data.rpm)) || (key==='models'&&!hasValue(data.names))) return {...response,status:'empty',data:null};
+  if (key==='quota') {
+    if (hasValue(data.remaining) || hasValue(data.total) || data.unlimited===true) {
+      if (!quotaInfo(data)) throw new Error('额度数据格式无效');
+    } else if (!hasValue(data.resetCount)) return {...response,status:'empty',data:null};
+    if (hasValue(data.resetCount)&&(!nonnegative(data.resetCount)||!Number.isInteger(data.resetCount))) throw new Error('重置次数格式无效');
+  }
+  if (key==='limits'&&!nonnegative(data.rpm)) throw new Error('速率数据格式无效');
+  if (key==='models'&&(!Array.isArray(data.names)||data.names.some(n=>typeof n!=='string'))) throw new Error('模型数据格式无效');
+  const textFields={profile:['name','email','accountId'],plan:['name'],auth:['method'],costs:['unit','source']}[key]||[];
+  for (const field of textFields) if (hasValue(data[field])&&(typeof data[field]!=='string'||!data[field].trim())) throw new Error('文本字段格式无效');
+  if (key==='profile'&&hasValue(data.isDefault)&&typeof data.isDefault!=='boolean') throw new Error('默认账号标记格式无效');
+  for (const field of key==='plan'?['expiresAt']:key==='auth'?['tokenExpiresAt']:[]) if(hasValue(data[field])&&!validDate(data[field])) throw new Error('有效期格式无效');
+  if (key==='auth') for (const [field,values] of Object.entries({credentialStatus:['saved','missing','expired'],checkStatus:['passed','failed','unknown'],accountState:['active','unknown','banned','disabled','expired']})) if(hasValue(data[field])&&!values.includes(data[field])) throw new Error('认证状态格式无效');
+  if (key==='usage'||key==='costs') {
+    if (!hasValue(data.windows)) return {...response,status:'empty',data:null};
+    if (!Array.isArray(data.windows)) throw new Error('周期列表格式无效');
+    for (const window of data.windows) {
+      if (!window || typeof window!=='object' || typeof window.period!=='string' || !window.period.trim()) throw new Error('周期格式无效');
+      if (key==='usage') {
+        for (const field of ['remainingPercent','usedPercent']) if(hasValue(window[field])&&!percent(window[field])) throw new Error('周期百分比格式无效');
+        if(hasValue(window.remainingPercent)&&hasValue(window.usedPercent)&&Math.abs(window.remainingPercent+window.usedPercent-100)>.01) throw new Error('周期百分比口径不一致');
+        if(hasValue(window.resetsAt)&&!validDate(window.resetsAt)) throw new Error('重置时间格式无效');
+      } else {
+        if (typeof data.unit!=='string'||!data.unit.trim()) throw new Error('费用币种未返回');
+        for (const field of ['total','remaining']) if(hasValue(window[field])&&!decimal(window[field])) throw new Error('费用金额格式无效');
+      }
+    }
+    if(!data.windows.length) return {...response,status:'empty',data:null};
+  }
+  if (key==='profile'&&!['name','email','accountId','isDefault'].some(field=>hasValue(data[field]))) return {...response,status:'empty',data:null};
+  if (key==='plan'&&!['name','expiresAt'].some(field=>hasValue(data[field]))) return {...response,status:'empty',data:null};
+  if (key==='auth'&&!['method','credentialStatus','checkStatus','accountState','tokenExpiresAt'].some(field=>hasValue(data[field]))) return {...response,status:'empty',data:null};
+  return response;
+}
+function formatEmail(email) {
+  return typeof email==='string' && email.includes('@') ? email : '未返回邮箱';
+}
+const DEMO_TIME = new Date().toISOString();
+const success = data => ({status:'success',data,updatedAt:DEMO_TIME});
+const empty = () => ({status:'empty',data:null});
+const unsupported = () => ({status:'unsupported',data:null});
+// 可复用入口：传入后台账号清单和各模块结果；未声明支持情况时允许查询。
+function createAccount(manifest,modules={}) {
+  return {...manifest,modules:Object.fromEntries(Object.keys(MODULES).map(key=>[key,manifest.capabilities?.[key]===false?unsupported():modules[key]??{status:'idle',data:null}]))};
+}
+function demoAccount(id,label,email,plan,quota,limits,models,type='api') {
+  const modules={profile:success({name:label,email}),plan,quota,limits,models,auth:success({checkStatus:'passed',accountState:'active'}),usage:unsupported(),costs:unsupported()};
+  return createAccount({id,label,provider:'OpenAI',type,capabilities:Object.fromEntries(Object.entries(modules).map(([key,module])=>[key,module.status!=='unsupported']))},modules);
+}
+const accounts = [
+  demoAccount('acc-prod','生产主账号','production@example.com',success({name:'Tier 3'}),success({remaining:84.2,total:120,unit:'USD'}),success({rpm:5000}),success({names:['gpt-4o','gpt-4o-mini']})),
+  demoAccount('acc-dev','个人开发','developer@example.com',success({name:'Tier 1'}),success({remaining:12.6,total:50,unit:'USD'}),success({rpm:500}),success({names:['gpt-4o-mini']})),
+  demoAccount('acc-team','团队共享','team@example.com',empty(),success({remaining:0,total:100,unit:'USD'}),success({rpm:500}),success({names:['gpt-4o','gpt-4o-mini']})),
+  demoAccount('acc-plus','日常订阅','personal@example.com',success({name:'Plus'}),unsupported(),unsupported(),unsupported(),'subscription'),
+  demoAccount('acc-ops','运营备用','operations@example.com',success({name:'Tier 2'}),{status:'error',data:{remaining:27.3,total:100,unit:'USD'},updatedAt:DEMO_TIME,error:{code:'TIMEOUT',message:'额度查询超时'}},success({rpm:3500}),success({names:['gpt-4o','gpt-4o-mini']})),
+  demoAccount('acc-new','待补全账号','backup@example.com',empty(),empty(),unsupported(),unsupported())
+];
+// 用户字段样本，平台未指定；只重现提供的值，不将样本绑定到 OpenAI。
+accounts.push(createAccount({id:'acc-sample',label:'账号1',provider:'未指定平台',type:'subscription',sample:true,capabilities:{limits:false,models:false}},{
+  profile:success({name:'账号1',email:'cosyeezz@gmail.com',isDefault:true,accountId:'eacb1af2-67fd-4498-8917-fb7d350236b6'}),
+  plan:success({name:'pro',expiresAt:'2026-11-01T20:46:41'}),
+  quota:success({remaining:'62340.4532700000',unit:'点数',resetCount:0}),
+  auth:success({method:'OAuth',credentialStatus:'saved',checkStatus:'passed',tokenExpiresAt:'2026-11-09T17:59:00'}),
+  usage:success({windows:[{period:'7天',remainingPercent:48,usedPercent:52,resetsAt:'2026-11-06T12:16:19'}]}),
+  costs:success({unit:'USD',source:'本机样本估算',windows:[{period:'7天',total:null,remaining:null}]})
+}));
+// 以下健康状态仅为演示；模块查询失败不等于账号封禁。
+accounts[2].modules.auth=success({accountState:'banned',checkStatus:'failed'});
+accounts[5].modules.auth=success({accountState:'unknown',checkStatus:'unknown'});
+// 演示响应独立于 UI 状态；新增账号没有伪造额度或等级。
+const demoResponses = new Map(accounts.map(a=>[a.id,structuredClone(a.modules)]));
+demoResponses.get('acc-ops').quota=success({remaining:27.3,total:100,unit:'USD'});
+async function queryModule(account,key) {
+  if (API_BASE===null) {
+    await new Promise(resolve=>setTimeout(resolve,500));
+    const response=structuredClone(demoResponses.get(account.id)?.[key] ?? empty());
+    if(response.status==='success') response.updatedAt=new Date().toISOString();
+    return response;
+  }
+  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),10000);
+  try {
+    const response=await fetch(API_BASE+endpoint(account.id,key),{credentials:'same-origin',signal:controller.signal,headers:{Accept:'application/json'}});
+    if (!response.ok) throw new Error(response.status===401||response.status===403?'权限失效，请重新授权':response.status===429?`请求过多，请稍后重试${response.headers.get('Retry-After')?'（遵循服务端等待时间）':''}`:`查询失败（${response.status}）`);
+    return await response.json();
+  } finally {clearTimeout(timer)}
+}
+</script>
+<script id="account-ui">
+const $ = id=>document.getElementById(id);
+const icons = {
+  refresh:'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:refresh-cw"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>',
+  account:'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:circle-user-round"><path d="M17.925 20.056a6 6 0 0 0-11.851.001"/><circle cx="12" cy="11" r="4"/><circle cx="12" cy="12" r="10"/></svg>',
+  arrow:'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:arrow-right"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>',
+  openai:'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" focusable="false" data-icon="simple-icons:openai"><path fill="currentColor" d="M22.282 9.821a6 6 0 0 0-.516-4.91a6.05 6.05 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a6 6 0 0 0-3.998 2.9a6.05 6.05 0 0 0 .743 7.097a5.98 5.98 0 0 0 .51 4.911a6.05 6.05 0 0 0 6.515 2.9A6 6 0 0 0 13.26 24a6.06 6.06 0 0 0 5.772-4.206a6 6 0 0 0 3.997-2.9a6.06 6.06 0 0 0-.747-7.073M13.26 22.43a4.48 4.48 0 0 1-2.876-1.04l.141-.081l4.779-2.758a.8.8 0 0 0 .392-.681v-6.737l2.02 1.168a.07.07 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494M3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085l4.783 2.759a.77.77 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646M2.34 7.896a4.5 4.5 0 0 1 2.366-1.973V11.6a.77.77 0 0 0 .388.677l5.815 3.354l-2.02 1.168a.08.08 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.08.08 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667m2.01-3.023l-.141-.085l-4.774-2.782a.78.78 0 0 0-.785 0L9.409 9.23V6.897a.07.07 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.8.8 0 0 0-.393.681zm1.097-2.365l2.602-1.5l2.607 1.5v2.999l-2.597 1.5l-2.607-1.5Z"/></svg>'
+};
+const brandSVG=(id,path)=>`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" focusable="false" data-icon="${id}"><path fill="currentColor" d="${path}"/></svg>`;
+Object.assign(icons,{
+  trash:'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" focusable="false" data-icon="lucide:trash-2"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 11v6m4-6v6m5-11v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+  settings:'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:settings-2"><path d="M14 17H5M19 7h-9"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>',
+  close:'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:x"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+  anthropic:brandSVG('simple-icons:anthropic','M17.304 3.541h-3.672l6.696 16.918H24Zm-10.608 0L0 20.459h3.744l1.37-3.553h7.005l1.369 3.553h3.744L10.536 3.541Zm-.371 10.223L8.616 7.82l2.291 5.945Z'),
+  gemini:brandSVG('simple-icons:googlegemini','M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68q.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58a12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68q-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96q2.19.93 3.81 2.55t2.55 3.81'),
+  copilot:brandSVG('simple-icons:githubcopilot','M23.922 16.997C23.061 18.492 18.063 22.02 12 22.02S.939 18.492.078 16.997A.6.6 0 0 1 0 16.741v-2.869a1 1 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656c.167-.429.414-1.055.644-1.517a10 10 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368c.397-.406.89-.717 1.474-.952C7.255 2.937 9.248 1.98 11.978 1.98s4.767.957 6.166 2.093c.584.235 1.077.546 1.474.952c.85.869 1.132 2.037 1.132 3.368c0 .368-.014.733-.052 1.086c.23.462.477 1.088.644 1.517c1.258.364 2.233 1.721 2.605 2.656a.8.8 0 0 1 .053.22v2.869a.6.6 0 0 1-.078.256m-11.75-5.992h-.344a4 4 0 0 1-.355.508c-.77.947-1.918 1.492-3.508 1.492c-1.725 0-2.989-.359-3.782-1.259a2 2 0 0 1-.085-.104L4 11.746v6.585c1.435.779 4.514 2.179 8 2.179s6.565-1.4 8-2.179v-6.585l-.098-.104s-.033.045-.085.104c-.793.9-2.057 1.259-3.782 1.259c-1.59 0-2.738-.545-3.508-1.492a4 4 0 0 1-.355-.508m2.328 3.25c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1s-1-.451-1-1v-2c0-.549.451-1 1-1m-5 0c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1s-1-.451-1-1v-2c0-.549.451-1 1-1m3.313-6.185c.136 1.057.403 1.913.878 2.497c.442.544 1.134.938 2.344.938c1.573 0 2.292-.337 2.657-.751c.384-.435.558-1.15.558-2.361c0-1.14-.243-1.847-.705-2.319c-.477-.488-1.319-.862-2.824-1.025c-1.487-.161-2.192.138-2.533.529c-.269.307-.437.808-.438 1.578v.021q0 .397.063.893m-1.626 0q.063-.496.063-.894v-.02c-.001-.77-.169-1.271-.438-1.578c-.341-.391-1.046-.69-2.533-.529c-1.505.163-2.347.537-2.824 1.025c-.462.472-.705 1.179-.705 2.319c0 1.211.175 1.926.558 2.361c.365.414 1.084.751 2.657.751c1.21 0 1.902-.394 2.344-.938c.475-.584.742-1.44.878-2.497'),
+  deepseek:brandSVG('ri:deepseek-fill','M23.75 4.927c-.245-.12-.34.108-.482.224c-.049.038-.09.087-.131.13c-.357.384-.773.634-1.315.604c-.796-.044-1.474.207-2.074.818c-.127-.754-.551-1.203-1.195-1.492c-.338-.15-.68-.3-.915-.626c-.165-.231-.21-.49-.293-.744c-.052-.153-.105-.31-.28-.337c-.192-.03-.266.13-.341.265c-.3.55-.416 1.158-.406 1.772c.027 1.382.608 2.482 1.762 3.266c.132.09.166.18.124.311c-.079.27-.172.531-.255.8c-.052.173-.13.211-.314.135A5.3 5.3 0 0 1 15.97 8.92c-.82-.797-1.563-1.677-2.489-2.366a11 11 0 0 0-.66-.454c-.944-.922.125-1.679.372-1.768c.259-.093.09-.416-.747-.412c-.835.004-1.6.285-2.574.659c-.143.057-.326.153-.446.13a9.2 9.2 0 0 0-2.763-.096c-1.806.203-3.25 1.06-4.31 2.525c-1.275 1.76-1.574 3.759-1.207 5.846c.385 2.197 1.502 4.019 3.22 5.442c1.78 1.474 3.83 2.197 6.169 2.058c1.42-.081 3.003-.273 4.786-1.789c.45.224.922.313 1.707.381c.603.057 1.184-.03 1.634-.123c.704-.15.655-.804.4-.926c-2.065-.966-1.612-.573-2.024-.89c1.05-1.248 2.632-2.544 3.25-6.741c.049-.334.007-.543 0-.814c-.003-.163.034-.228.22-.247a4 4 0 0 0 1.482-.457c1.338-.734 1.867-1.939 1.995-3.385c.019-.22-.004-.45-.236-.565m-11.652 13.01c-2.002-1.58-2.972-2.1-3.373-2.078c-.375.021-.308.452-.225.733c.086.277.198.468.356.711c.109.162.184.402-.108.58c-.645.403-1.766-.134-1.82-.16c-1.303-.77-2.394-1.79-3.163-3.182c-.741-1.342-1.172-2.78-1.243-4.315c-.02-.372.09-.503.456-.57a4.5 4.5 0 0 1 1.466-.037c2.043.3 3.782 1.218 5.24 2.67c.832.829 1.462 1.817 2.11 2.783c.69 1.027 1.432 2.004 2.377 2.804c.333.281.6.495.854.653c-.768.085-2.05.104-2.927-.592m.96-6.199a.294.294 0 1 1 .588 0a.294.294 0 0 1-.296.296a.29.29 0 0 1-.293-.296m2.98 1.537c-.192.078-.383.146-.566.154a1.2 1.2 0 0 1-.765-.245c-.262-.22-.45-.343-.53-.73a1.7 1.7 0 0 1 .016-.566c.068-.315-.008-.516-.228-.7c-.18-.15-.408-.19-.66-.19a.5.5 0 0 1-.244-.076c-.105-.053-.191-.184-.109-.345a1 1 0 0 1 .185-.201c.34-.195.734-.13 1.098.015c.337.139.592.393.959.752c.375.434.442.555.656.88c.168.256.323.518.428.818c.063.186-.02.34-.24.434')
+});
+// 信息标题图标：Lucide 官方 SVG，来源 https://github.com/lucide-icons/lucide/tree/main/icons；沿用页首 ISC 许可。
+Object.assign(icons,{
+  wallet:'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:wallet"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>',
+  rotate:'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:rotate-ccw"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>',
+  gauge:'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:gauge"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>',
+  layers:'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:layers"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></svg>',
+  calendar:'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:calendar-days"><path d="M8 2v3M16 2v3"/><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01M16 17h.01"/></svg>',
+  clock:'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:clock"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
+  shield:'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:shield-check"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>',
+  hash:'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:hash"><line x1="4" x2="20" y1="9" y2="9"/><line x1="4" x2="20" y1="15" y2="15"/><line x1="10" x2="8" y1="3" y2="21"/><line x1="16" x2="14" y1="3" y2="21"/></svg>',
+  key:'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-icon="lucide:key-round"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg>'
+});
+const FIELD_ICONS={'':'不显示图标',wallet:'钱包 · 额度',rotate:'重置 · 次数',gauge:'仪表 · 速率',layers:'层叠 · 模型',calendar:'日历 · 订阅',clock:'时钟 · 有效期',key:'钥匙 · 认证',shield:'盾牌 · 状态',hash:'编号 · 标识',account:'账号 · 身份'};
+const PROVIDERS={'OpenAI':'openai','Anthropic':'anthropic','Google Gemini':'gemini','DeepSeek':'deepseek','GitHub Copilot':'copilot','未指定平台':'account'};
+const DEFAULT_FIELDS=[
+  {label:'剩余额度',icon:'wallet',module:'quota',path:'remaining',format:'amount',missing:'dash',position:'above',wide:false},
+  {label:'重置次数',icon:'rotate',module:'quota',path:'resetCount',format:'text',missing:'hide',position:'above',wide:false},
+  {label:'速率上限',icon:'gauge',module:'limits',path:'rpm',format:'text',missing:'hide',position:'above',wide:false},
+  {label:'可用模型',icon:'layers',module:'models',path:'names',format:'text',missing:'hide',position:'below',wide:false},
+  {label:'订阅有效至',icon:'calendar',module:'plan',path:'expiresAt',format:'date',missing:'hide',position:'below',wide:false},
+  {label:'令牌有效期',icon:'clock',module:'auth',path:'tokenExpiresAt',format:'date',missing:'hide',position:'below',wide:false},
+  {label:'认证方式',icon:'key',module:'auth',path:'method',format:'text',missing:'hide',position:'below',wide:false},
+  {label:'认证状态',icon:'shield',module:'auth',path:'credentialStatus',format:'text',missing:'hide',position:'below',wide:false},
+  {label:'账号 ID',icon:'hash',module:'profile',path:'accountId',format:'text',missing:'hide',position:'below',wide:false},
+  {label:'总金额',icon:'wallet',module:'costs',path:'windows.0.total',format:'amount',missing:'dash',position:'below',wide:false},
+  {label:'剩余金额',icon:'wallet',module:'costs',path:'windows.0.remaining',format:'amount',missing:'dash',position:'below',wide:false}
+];
+function presentation(account) {return account.presentation??{badges:[{source:'plan',label:'',tone:'green'},{source:'default',label:'默认',tone:'neutral'}],actions:[{id:'refresh',label:'刷新',kind:'refresh',icon:'refresh'},{id:'delete',label:'删除',kind:'delete',icon:'trash'}],fields:DEFAULT_FIELDS}}
+const accountName=account=>account.label||visibleData(account.modules.profile)?.name||account.id;
+let filter='all',search='',typeFilter='all',detailId=null,toastTimer,nameEdit=null,editor=null,deleteId=null;
+function notify(message) {clearTimeout(toastTimer);$('toast').textContent=message;toastTimer=setTimeout(()=>$('toast').textContent='',3500)}
+function timeLabel(module) {
+  if (!module?.updatedAt) return '尚未同步';
+  const date=new Date(module.updatedAt);
+  if (Number.isNaN(date.getTime())) return '时间未返回';
+  return `${module.status==='error'?'上次成功':'更新于'} ${date.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}`;
+}
+function retryButton(account,key,text='重试',scope='card') {return `<button class="text-action" data-action="retry" data-account="${esc(account.id)}" data-module="${key}" data-od-id="retry-${scope}-${esc(account.id)}-${key}">${text}</button>`}
+function errorBlock(account,key) {
+  const module=account.modules[key];
+  return module.status==='error'?`<div class="inline-error danger"><span>${esc(module.error?.message||'查询失败')}</span>${retryButton(account,key)}</div>`:'';
+}
+function renderName(account) {
+  return nameEdit?.id===account.id?`<input id="rename-input" class="rename-input" value="${esc(nameEdit.draft)}" maxlength="40" aria-label="修改账号名称，回车保存，Esc 取消" data-od-id="rename-${esc(account.id)}">`:`<strong class="account-name" role="button" tabindex="0" data-rename-account="${esc(account.id)}" title="双击或按回车修改名称" data-od-id="name-${esc(account.id)}">${esc(accountName(account))}</strong>`;
+}
+function renderBadges(account) {
+  return presentation(account).badges.map((badge,index)=>{
+    const module=badge.source==='plan'?account.modules.plan:badge.source==='default'?account.modules.profile:null;
+    const data=module?visibleData(module):null;
+    if (badge.source==='plan'&&!data?.name || badge.source==='default'&&data?.isDefault!==true) return '';
+    const label=badge.label||(badge.source==='plan'?data.name:badge.source==='default'?'默认':'');
+    const cached=module&&['error','loading'].includes(module.status);
+    return label?`<span class="card-badge" data-tone="${esc(badge.tone)}" title="${esc(label)}${cached?' · 上次数据':''}" data-od-id="badge-${esc(account.id)}-${index}">${esc(label)}${cached?' · 旧值':''}</span>`:'';
+  }).join('');
+}
+function renderActions(account) {
+  const busy=Object.values(account.modules).some(m=>m.status==='loading');
+  return presentation(account).actions.map((action,index)=>`<button class="icon-button" data-action="card-operation" data-account="${esc(account.id)}" data-index="${index}" data-kind="${esc(action.kind)}" aria-label="${esc(action.label)}${esc(accountName(account))}" title="${esc(action.label)}" data-od-id="operation-${esc(account.id)}-${index}" ${action.kind==='refresh'&&busy?'disabled':''}>${icons[action.icon]||({refresh:icons.refresh,delete:icons.trash,details:icons.arrow,settings:icons.settings})[action.kind]||icons.settings}</button>`).join('');
+}
+function renderUsage(account) {
+  if (account.type!=='subscription'||account.modules.usage.status==='unsupported') return '';
+  const module=account.modules.usage,data=visibleData(module);
+  return (data?.windows||[]).map((window,index)=>{
+    const remaining=hasValue(window.remainingPercent)?window.remainingPercent:hasValue(window.usedPercent)?100-window.usedPercent:null;
+    if(remaining===null) return '';
+    const value=Number(remaining.toFixed(2));
+    return `<div class="subscription-progress" data-level="${value===0?'empty':value<=25?'low':'healthy'}" data-od-id="usage-${esc(account.id)}-${index}"><div class="subscription-labels"><strong>剩余 ${esc(value)}%</strong><span class="reset-time">${esc(window.period)} · ${window.resetsAt?`重置 ${esc(dateLabel(window.resetsAt))}`:'重置时间未返回'}</span></div><div class="meter" role="meter" aria-label="${esc(window.period)}订阅剩余额度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${value}"><div class="meter-fill" style="width:${value}%"></div></div>${['error','loading'].includes(module.status)?`<p class="editor-help">上次数据${module.status==='loading'?' · 更新中':''}</p>`:''}</div>`;
+  }).join('');
+}
+const validFieldPath=path=>typeof path==='string'&&/^[A-Za-z_][\w]*(?:\.(?:[A-Za-z_][\w]*|\d+))*$/.test(path)&&!path.split('.').some(key=>['__proto__','prototype','constructor'].includes(key));
+function fieldValue(data,path) {return validFieldPath(path)?path.split('.').reduce((value,key)=>value!=null&&Object.prototype.hasOwnProperty.call(value,key)?value[key]:undefined,data):undefined}
+function renderFields(account,position='all') {
+  const tiles=presentation(account).fields.map((field,index)=>{
+    if(position!=='all'&&(field.position??'below')!==position)return '';
+    const module=account.modules[field.module];if(!module||module.status==='unsupported') return '';
+    const data=visibleData(module),value=fieldValue(data,field.path),unlimited=field.module==='quota'&&field.path==='remaining'&&data?.unlimited===true;
+    const missing=!unlimited&&(!hasValue(value)||value===''||Array.isArray(value)&&!value.length);
+    if(missing&&field.missing==='hide') return '';
+    let text=missing?(module.status==='loading'?'查询中…':'—'):unlimited?'不限额':Array.isArray(value)?value.join('、'):typeof value==='object'?JSON.stringify(value):String(value);
+    if(!missing&&!unlimited) {
+      if(field.format==='date') text=validDate(value)?dateLabel(value):'—';
+      if(field.format==='amount') text=formatAmount(value,data?.unit);
+      if(field.path==='resetCount') text+= ' 次';
+      if(field.module==='limits'&&field.path==='rpm') text+=' RPM';
+      if(field.module==='auth') text=authLabels[value]||text;
+    }
+    const cached=['error','loading'].includes(module.status)&&data;
+    const costHint=field.module==='costs'?[data?.unit,data?.source,data?.windows?.[0]?.period].filter(Boolean).join(' · '):'';
+    return `<div class="info-tile" tabindex="0" title="${esc(field.label)}：${esc(text)}${costHint?' · '+esc(costHint):''}" data-wide="${!!field.wide}" data-module="${esc(field.module)}" data-path="${esc(field.path)}" data-od-id="field-${esc(account.id)}-${index}"><dt data-od-id="field-title-${esc(account.id)}-${index}">${field.icon&&Object.hasOwn(FIELD_ICONS,field.icon)?icons[field.icon]:''}${esc(field.label)}</dt><dd class="num${field.module==='quota'&&field.path==='remaining'?' quota-number':''}">${esc(text)}</dd>${costHint?`<small>${esc(costHint)}</small>`:''}${cached?`<small>上次数据${module.status==='loading'?' · 更新中':''}</small>`:''}</div>`;
+  }).join('');
+  return tiles?`<dl class="info-grid" data-position="${esc(position)}" aria-label="${position==='above'?'进度条上方信息':position==='below'?'进度条下方信息':'账号信息'}" data-od-id="info-${esc(account.id)}-${esc(position)}">${tiles}</dl>`:'';
+}
+function healthStatus(account) {
+  const auth=visibleData(account.modules.auth);
+  if(auth?.accountState==='banned') return {level:'error',text:'封禁 · 无法使用'};
+  if(auth?.accountState==='disabled') return {level:'error',text:'已停用 · 无法使用'};
+  if(auth?.accountState==='expired'||auth?.credentialStatus==='expired') return {level:'error',text:'认证过期 · 无法使用'};
+  if(auth?.checkStatus==='failed'||auth?.credentialStatus==='missing') return {level:'error',text:'不可用 · 检查未通过'};
+  if(auth?.accountState==='unknown') return {level:'partial',text:'未确认'};
+  if(account.modules.auth.status==='success'&&(auth?.accountState==='active'||auth?.checkStatus==='passed')) return {level:'good',text:'监控中'};
+  return {level:'partial',text:'未确认'};
+}
+function renderCard(account) {
+  const profile=visibleData(account.modules.profile),health=healthStatus(account),loading=Object.values(account.modules).some(m=>m.status==='loading'),label=accountName(account);
+  const above=renderFields(account,'above'),usage=renderUsage(account),below=renderFields(account,'below');
+  return `<article class="card account-card" data-od-id="card-${esc(account.id)}" aria-label="${esc(label)}" aria-busy="${loading}">
+    <div class="account-top"><button class="provider-icon" data-action="card-settings" data-account="${esc(account.id)}" aria-label="${esc(account.provider)}，选择供应商与编辑卡片" title="${esc(account.provider)} · 编辑卡片" data-od-id="provider-${esc(account.id)}">${icons[PROVIDERS[account.provider]]||icons.account}</button><div class="identity"><div class="account-heading">${renderName(account)}<div class="card-badges">${renderBadges(account)}</div></div><span class="email" title="${esc(profile?.email||'未返回邮箱')}">${esc(formatEmail(profile?.email))}</span></div><div class="card-aside"><div class="card-actions" tabindex="0" role="group" aria-label="账号操作，可横向滚动">${renderActions(account)}</div></div></div>
+    <div class="card-body" data-account="${esc(account.id)}" tabindex="0" role="region" aria-label="${esc(label)}的账号资源">${above}${usage}${below}${!above&&!usage&&!below?'<p class="state-description">暂无可展示信息。已隐藏未支持及未返回的字段。</p>':''}${Object.keys(MODULES).map(key=>errorBlock(account,key)).join('')}</div>
+    <div class="card-footer"><span class="status"><i class="dot dot-${health.level==='good'?'good':health.level==='error'?'danger':'warning'}" aria-hidden="true"></i>${health.text}</span><button class="btn btn-ghost btn-arrow" data-action="details" data-account="${esc(account.id)}" data-od-id="details-${esc(account.id)}">详情${icons.arrow}</button></div>
+  </article>`;
+}
+function render() {
+  const input=nameEdit?$('rename-input'):null,editing=input&&document.activeElement===input,selection=editing?[input.selectionStart,input.selectionEnd]:null;
+  const scrollPositions=new Map([...document.querySelectorAll('.account-card .card-body')].map(body=>[body.dataset.account,body.scrollTop]));
+  const counts={all:accounts.length,good:0,partial:0,error:0};accounts.forEach(a=>counts[accountStatus(a)]++);
+  const labels={all:'账号总数',good:'正常连接',partial:'信息不全',error:'需要处理'};
+  $('summary').innerHTML=Object.entries(labels).map(([key,label])=>`<div class="summary-item" data-od-id="summary-${key}"><span class="num">${String(counts[key]).padStart(2,'0')}</span><span class="summary-label">${key==='partial'?'<i class="dot dot-warning" aria-hidden="true"></i> ':key==='error'?'<i class="dot dot-danger" aria-hidden="true"></i> ':''}${label}</span></div>`).join('');
+  for (const key of Object.keys(counts)) $(`count-${key}`).textContent=counts[key];
+  document.querySelectorAll('[data-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.filter===filter)));
+  const shown=accounts.filter(a=>(filter==='all'||accountStatus(a)===filter)&&(typeFilter==='all'||a.type===typeFilter)&&`${a.label} ${a.provider} ${a.modules.profile.data?.email||''} ${a.modules.profile.data?.accountId||''}`.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>Number(!!b.sample)-Number(!!a.sample));
+  $('account-grid').innerHTML=shown.length?shown.map(renderCard).join(''):'<div class="card no-results" data-od-id="empty-search"><h2>没有匹配的账号</h2><p>试试其他关键词，或清除当前筛选。</p><button class="btn btn-secondary" data-action="clear-filters" data-od-id="clear-filters">清除筛选</button></div>';
+  document.querySelectorAll('.account-card .card-body').forEach(body=>{body.scrollTop=scrollPositions.get(body.dataset.account)??0});
+  if(nameEdit&&editing){const next=$('rename-input');next.focus();if(selection)next.setSelectionRange(...selection)}
+  $('result-count').textContent=`共 ${accounts.length} 个账号，当前显示 ${shown.length} 个`;
+  const busy=accounts.some(a=>Object.values(a.modules).some(m=>m.status==='loading'));
+  $('refresh-all').disabled=busy;$('refresh-all').innerHTML=icons.refresh+(busy?'正在查询':'刷新数据');
+  if(detailId&&$('detail-dialog').open) renderDetails();
+}
+async function loadModule(account,key) {
+  if (account.capabilities?.[key]===false||account.modules[key].status==='unsupported'||account.modules[key].status==='loading') return;
+  const previous=account.modules[key];account.modules[key]={...previous,status:'loading'};render();
+  try {
+    const response=validateResponse(key,await queryModule(account,key));
+    account.modules[key]=response.status==='error'?{...previous,...response,data:previous.data||null,updatedAt:previous.updatedAt}:response;
+  } catch(error) {
+    account.modules[key]={...previous,status:'error',error:{code:'QUERY_FAILED',message:error.name==='AbortError'?'查询超时，请重试':error.message}};
+  }
+  render();
+}
+async function refreshAccount(account) {await Promise.allSettled(Object.keys(MODULES).map(key=>loadModule(account,key)))}
+function renderDetails() {
+  const account=accounts.find(a=>a.id===detailId);if(!account) return;
+  $('detail-title').textContent=account.label;
+  const descriptions={success:'查询成功',empty:'未返回数据',unsupported:'平台不支持，卡片已收起',error:'查询失败',loading:'查询中',idle:'尚未查询'};
+  $('detail-body').innerHTML=`<p class="dialog-lead">${esc(account.provider)} · ${esc(account.id)} · ${account.sample?'用户字段样本（非实时状态）':'演示账号'}<br>每个区域独立查询；失败与缺失不会覆盖其他区域。</p><button class="btn btn-secondary" data-action="card-settings" data-account="${esc(account.id)}" data-od-id="detail-edit-card">${icons.settings}编辑卡片</button>`+Object.entries(MODULES).map(([key,config])=>{
+    const module=account.modules[key],data=visibleData(module);
+    return `<div class="resource-row" data-od-id="resource-${key}"><div class="resource-head"><strong>${config.label}</strong><span class="pill ${module.status==='error'?'danger':''}">${descriptions[module.status]}</span></div><p class="endpoint-label">GET ${esc(endpoint(account.id,key))}</p>${data?`<pre class="code">${esc(JSON.stringify(data,null,2))}</pre>`:''}${module.status==='error'?`<p class="resource-data">${esc(module.error?.message||'查询失败')}${data?'；以上为上次成功数据。':''}</p>`:''}${module.status==='unsupported'?'':`<div class="row-between"><span class="resource-hint">${timeLabel(module)}</span>${module.status==='loading'?'<span class="resource-hint">正在查询…</span>':retryButton(account,key,'重新查询','detail')}</div>`}</div>`;
+  }).join('');
+}
+function beginRename(id) {
+  const account=accounts.find(a=>a.id===id);if(!account)return;
+  if(nameEdit&&!finishRename(false))return;
+  nameEdit={id,draft:accountName(account)};render();$('rename-input').value=nameEdit.draft;$('rename-input').focus();$('rename-input').select();
+}
+function finishRename(cancel=false,repaint=true) {
+  if(!nameEdit)return true;
+  const account=accounts.find(a=>a.id===nameEdit.id),value=nameEdit.draft.trim();
+  if(!cancel&&(!value||value.length>40)){$('rename-input').setCustomValidity('名称需为 1–40 个字符');$('rename-input').reportValidity();return false}
+  if(account&&!cancel)account.label=value;
+  nameEdit=null;
+  if(repaint)render();else if(account){const input=$('rename-input');input.outerHTML=renderName(account);input.closest?.('.account-card')?.setAttribute('aria-label',accountName(account));if(detailId===account.id&&$('detail-dialog').open)renderDetails()}
+  return true;
+}
+const editorOptions=(choices,value)=>Object.entries(choices).map(([key,label])=>`<option value="${esc(key)}" ${key===value?'selected':''}>${esc(label)}</option>`).join('');
+function editorControl(section,index,key,label,value,choices=null) {
+  const attrs=`data-editor-section="${section}" data-index="${index}" data-key="${key}" data-od-id="edit-${section}-${index}-${key}"`;
+  return `<label class="field"><span>${label}</span>${choices?`<select class="input" ${attrs}>${editorOptions(choices,String(value))}</select>`:`<input class="input" ${attrs} value="${esc(value)}" maxlength="120">`}</label>`;
+}
+function renderEditorRows() {
+  for(const section of ['badges','actions','fields']) {
+    const rows=editor.draft[section].map((row,index)=>{
+      const control=(key,label,choices)=>editorControl(section,index,key,label,row[key]??(key==='position'?'below':''),choices);
+      let content=control('label',section==='fields'?'标题':section==='actions'?'操作名称':'标记文字');
+      if(section==='badges')content+=control('tone','颜色',{neutral:'冷灰',green:'绿色',yellow:'黄色',red:'红色',indigo:'靛紫'})+control('source','内容来源',{custom:'自定义',plan:'套餐接口',default:'默认账号标记'});
+      if(section==='actions')content+=control('kind','操作行为',{refresh:'刷新账号',delete:'删除账号',details:'查看详情',settings:'编辑卡片',custom:'自定义事件'})+control('icon','图标',{refresh:'刷新',trash:'删除',arrow:'箭头',account:'账号',settings:'设置'});
+      if(section==='fields')content+=control('icon','标题小图标',FIELD_ICONS)+control('module','查询模块',Object.fromEntries(Object.entries(MODULES).map(([key,module])=>[key,module.label])))+control('path','字段路径')+control('format','显示格式',{text:'文本 / 数字',date:'日期时间',amount:'额度 / 金额'})+control('missing','缺失时',{hide:'隐藏信息块',dash:'显示 —'})+control('position','展示位置',{above:'进度条上方',below:'进度条下方'})+control('wide','宽度',{false:'自动宽度（每行最多三个）',true:'整行'});
+      return `<div class="editor-row ${section}" data-od-id="editor-${section}-${index}">${content}<button type="button" class="icon-button remove-row" data-action="remove-editor-row" data-section="${section}" data-index="${index}" aria-label="移除第 ${index+1} 个${section==='fields'?'信息块':section==='badges'?'标记':'操作'}" data-od-id="remove-${section}-${index}">${icons.trash}</button></div>`;
+    }).join('');
+    $({badges:'badge-editor',actions:'action-editor',fields:'field-editor'}[section]).innerHTML=rows||'<p class="editor-help">尚未添加，可使用上方按钮添加。</p>';
+  }
+}
+function renderProviderOptions() {
+  $('provider-options').innerHTML=Object.entries(PROVIDERS).map(([name,icon])=>`<button type="button" class="provider-option" data-action="choose-provider" data-provider="${esc(name)}" aria-pressed="${editor.provider===name}" data-od-id="choose-provider-${icon}">${icons[icon]}${esc(name)}</button>`).join('');
+}
+function openSettings(account) {
+  if(!account)return;
+  editor={accountId:account.id,provider:account.provider,draft:structuredClone(presentation(account))};
+  const providers={...PROVIDERS,[account.provider]:PROVIDERS[account.provider]||'account'};
+  $('settings-provider').innerHTML=editorOptions(Object.fromEntries(Object.keys(providers).map(name=>[name,name])),account.provider);
+  $('settings-provider').value=account.provider;$('settings-error').textContent='';renderProviderOptions();renderEditorRows();
+  $('card-settings-dialog').showModal();
+}
+function validatePresentation(config) {
+  if(!config||!['badges','actions','fields'].every(key=>Array.isArray(config[key])))throw new Error('卡片配置格式无效');
+  for(const badge of config.badges)if(!['custom','plan','default'].includes(badge.source)||!['neutral','green','yellow','red','indigo'].includes(badge.tone)||(badge.source==='custom'&&!badge.label.trim())||badge.label.length>40)throw new Error('请填写标记文字（最多 40 个字符）并选择有效颜色');
+  for(const action of config.actions)if(!action.label.trim()||action.label.length>40||!['refresh','delete','details','settings','custom'].includes(action.kind)||hasValue(action.icon)&&!['refresh','trash','arrow','account','settings'].includes(action.icon))throw new Error('请填写操作名称（最多 40 个字符）并选择行为');
+  for(const field of config.fields)if(!field.label.trim()||field.label.length>40||!Object.hasOwn(MODULES,field.module)||!validFieldPath(field.path)||!['text','date','amount'].includes(field.format)||!['hide','dash'].includes(field.missing)||typeof field.wide!=='boolean'&&hasValue(field.wide)||hasValue(field.position)&&!['above','below'].includes(field.position)||hasValue(field.icon)&&(typeof field.icon!=='string'||!Object.hasOwn(FIELD_ICONS,field.icon)))throw new Error('请检查信息块标题、图标、模块、字段路径与展示位置');
+  return config;
+}
+function requestDelete(account) {
+  if(!account)return;
+  deleteId=account.id;$('delete-message').textContent=`确定从管理列表移除“${accountName(account)}”？`;$('delete-error').textContent='';$('delete-dialog').showModal();
+}
+async function deleteAccount() {
+  const id=deleteId,account=accounts.find(a=>a.id===id);if(!account)return;
+  $('confirm-delete').disabled=true;
+  try {
+    if(API_BASE!==null){const response=await fetch(`${API_BASE}/api/accounts/${encodeURIComponent(id)}`,{method:'DELETE',credentials:'same-origin'});if(!response.ok)throw new Error('删除失败，账号卡片已保留，请稍后重试')}
+    const index=accounts.findIndex(a=>a.id===id);if(index>=0)accounts.splice(index,1);demoResponses.delete(id);
+    if(detailId===id){$('detail-dialog').close();detailId=null}if(editor?.accountId===id)$('card-settings-dialog').close();if(nameEdit?.id===id)nameEdit=null;
+    $('delete-dialog').close();deleteId=null;render();notify(API_BASE===null?'已移除本地演示卡片':'已移除账号');
+  }catch(error){$('delete-error').textContent=error.message}finally{$('confirm-delete').disabled=false}
+}
+$('card-settings-form').addEventListener('submit',event=>{
+  event.preventDefault();if(!editor)return;
+  try{validatePresentation(editor.draft);const account=accounts.find(a=>a.id===editor.accountId);if(!account)throw new Error('账号已移除');account.presentation=structuredClone(editor.draft);account.provider=editor.provider;$('card-settings-dialog').close();editor=null;render();notify('卡片配置已更新，仅当前页面生效')}catch(error){$('settings-error').textContent=error.message}
+});
+$('settings-provider').addEventListener('change',event=>{if(editor){editor.provider=event.target.value;renderProviderOptions()}});
+function updateEditor(target) {
+  const section=target.dataset?.editorSection,index=Number(target.dataset?.index),key=target.dataset?.key;
+  if(!editor||!['badges','actions','fields'].includes(section)||!editor.draft[section]?.[index])return;
+  const allowed={badges:['label','tone','source'],actions:['label','kind','icon'],fields:['label','icon','module','path','format','missing','position','wide']}[section];
+  if(allowed.includes(key))editor.draft[section][index][key]=key==='wide'?target.value==='true':target.value;
+}
+document.addEventListener('input',event=>{if(event.target.id==='rename-input'&&nameEdit){nameEdit.draft=event.target.value;event.target.setCustomValidity('')}else updateEditor(event.target)});
+document.addEventListener('change',event=>updateEditor(event.target));
+document.addEventListener('dblclick',event=>{const target=event.target.closest('[data-rename-account]');if(target)beginRename(target.dataset.renameAccount)});
+document.addEventListener('keydown',event=>{
+  if(event.target.id==='rename-input'&&nameEdit&&!event.isComposing){if(event.key==='Enter'){event.preventDefault();finishRename()}if(event.key==='Escape'){event.preventDefault();finishRename(true)}return}
+  const target=event.target.closest?.('[data-rename-account]');if(target&&['Enter','F2'].includes(event.key)){event.preventDefault();beginRename(target.dataset.renameAccount)}
+});
+document.addEventListener('focusout',event=>{if(event.target.id==='rename-input'&&nameEdit)finishRename(false,false)});
+$('endpoint-rows').innerHTML=Object.entries(MODULES).map(([key,m])=>`<tr><td>${m.label}</td><td><code>/api/accounts/{id}/${m.path}</code></td><td><code>${m.fields}</code></td></tr>`).join('');
+document.addEventListener('click',async event=>{
+  const close=event.target.closest('[data-close]');if(close){$(close.dataset.close).close();return}
+  const tab=event.target.closest('[data-filter]');if(tab){filter=tab.dataset.filter;render();return}
+  const docTab=event.target.closest('[data-doc-tab]');if(docTab){document.querySelectorAll('[data-doc-tab]').forEach(b=>b.setAttribute('aria-pressed',String(b===docTab)));document.querySelectorAll('.contract-panel').forEach(p=>p.hidden=p.id!==`doc-${docTab.dataset.docTab}`);return}
+  const button=event.target.closest('[data-action]');if(!button)return;
+  const account=accounts.find(a=>a.id===button.dataset.account);
+  switch(button.dataset.action){
+    case 'card-settings':openSettings(account);break;
+    case 'choose-provider':if(editor&&Object.hasOwn(PROVIDERS,button.dataset.provider)){editor.provider=button.dataset.provider;$('settings-provider').value=editor.provider;renderProviderOptions()}break;
+    case 'add-editor-row':{
+      const section=button.dataset.section;if(!editor||!['badges','actions','fields'].includes(section))break;
+      const defaults={badges:{label:'',source:'custom',tone:'neutral'},actions:{id:`custom-${Date.now()}-${editor.draft.actions.length}`,label:'',kind:'custom',icon:'settings'},fields:{label:'',icon:'',module:'profile',path:'email',format:'text',missing:'hide',position:'below',wide:false}};
+      editor.draft[section].push(defaults[section]);renderEditorRows();break;
+    }
+    case 'remove-editor-row':if(editor&&['badges','actions','fields'].includes(button.dataset.section)){editor.draft[button.dataset.section].splice(Number(button.dataset.index),1);renderEditorRows()}break;
+    case 'card-operation':{
+      if(!account)break;const action=presentation(account).actions[Number(button.dataset.index)];if(!action)break;
+      if(action.kind==='refresh'){await refreshAccount(account);notify('账号查询已完成')}
+      if(action.kind==='delete')requestDelete(account);
+      if(action.kind==='details'){detailId=account.id;renderDetails();$('detail-dialog').showModal()}
+      if(action.kind==='settings')openSettings(account);
+      if(action.kind==='custom'){document.dispatchEvent(new CustomEvent('account-card-action',{detail:{accountId:account.id,actionId:action.id,label:action.label}}));notify('已触发本地自定义事件，尚未连接后台操作')}
+      break;
+    }
+    case 'delete-account':requestDelete(account);break;
+    case 'confirm-delete':await deleteAccount();break;
+    case 'docs':$('docs-dialog').showModal();break;
+    case 'add':$('add-dialog').showModal();break;
+    case 'details':detailId=account.id;renderDetails();$('detail-dialog').showModal();break;
+    case 'retry':await loadModule(account,button.dataset.module);notify('模块查询已完成，其他信息未受影响');break;
+    case 'refresh-account':await refreshAccount(account);notify('账号查询已完成');break;
+    case 'refresh-all':await Promise.allSettled(accounts.map(refreshAccount));notify('查询已完成；未返回的数据保持为空');break;
+    case 'clear-filters':filter='all';search='';typeFilter='all';$('search').value='';$('type-filter').value='all';render();break;
+  }
+});
+$('search').addEventListener('input',event=>{search=event.target.value.trim();render()});
+$('type-filter').addEventListener('change',event=>{typeFilter=event.target.value;render()});
+$('add-form').addEventListener('submit',event=>{
+  event.preventDefault();const form=new FormData(event.target),label=String(form.get('label')).trim();
+  if(!label){$('account-label').setCustomValidity('请输入非空账号名称');$('account-label').reportValidity();return}
+  const subscription=form.get('type')==='subscription';
+  const account=demoAccount(`acc-${Date.now()}`,label,String(form.get('email')).trim(),empty(),subscription?unsupported():empty(),unsupported(),unsupported(),subscription?'subscription':'api');
+  account.provider=String(form.get('provider')||'OpenAI');account.modules.auth=empty();
+  accounts.push(account);demoResponses.set(account.id,structuredClone(account.modules));
+  filter='all';search='';typeFilter='all';$('search').value='';$('type-filter').value='all';
+  $('add-dialog').close();event.target.reset();render();notify('演示卡片已创建，未返回的字段不会生成虚假数据');
+});
+$('account-label').addEventListener('input',()=>$('account-label').setCustomValidity(''));
+// 接入点：默认操作可覆盖；自定义操作统一发送 account-card-action 事件。
+// 信息块绑定 MODULES 中的独立 GET 接口；额外字段可由相同模块返回。
+// 配置保存为本地演示；生产环境应将 presentation 交由自有后台校验和持久化。
+render();
+</script>
+</body>
+</html>

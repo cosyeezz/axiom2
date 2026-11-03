@@ -1,4 +1,5 @@
 import { parseProviderProxy } from "../integrations/model-proxy-env.js";
+import { accountKeyReference, isAccountKeyReference, isAuthenticationHeader } from "../../shared/account-auth-headers.js";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { AppError, object, text } from "../../shared/protocol.js";
@@ -118,6 +119,8 @@ function headersInput(
             "请求头包含可执行命令；需要明确授权后才能保存。",
           );
         if (/^[*•●]+$/.test(value)) invalid("掩码不能作为请求头值保存");
+        if ((isAuthenticationHeader(key) || value.includes(accountKeyReference)) && !isAccountKeyReference(value))
+          throw new AppError("ACCOUNT_HEADER_REQUIRED", "认证头不能保存共享密钥；请使用 {{account.key}} 或 Bearer {{account.key}} 绑定所选 API Key 账号。OAuth 请移除认证头覆盖，使用原生认证。");
       }
       result.push([key, value]);
     });
@@ -436,8 +439,8 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
           }
         });
       }
-      // Model edits only change configuration; provider credentials are independent.
-      // Logout is reserved for explicit credential clearing or provider removal.
+      // Connection/model saves cannot mutate a selected credential slot.
+      // Older clients must use the append-only interactive account flow too.
       if (
         typeof p.key !== "string" ||
         p.key.length > 8192 ||
@@ -445,17 +448,8 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
       )
         invalid("API 密钥无效");
       const key = (p.key as string).trim();
-      if (key) {
-        if (key.startsWith("!") && draft.allowCommands !== true)
-          throw new AppError(
-            "COMMAND_AUTHORIZATION_REQUIRED",
-            "API 密钥包含可执行命令；需要明确授权后才能保存。",
-          );
-        if (/^[*•●]+$/.test(key)) invalid("掩码不能作为新密钥保存");
-        keys.set(providerId, key);
-        delete next.apiKey;
-      }
-      if (p.clearKey === true) logout.add(providerId);
+      if (key || p.clearKey === true)
+        throw new AppError("ACCOUNT_AUTH_REQUIRED", "连接设置不再写入或清除账号认证；请在账号与认证中新增或删除账号。");
       if (Object.keys(common).length && !modelIds.size)
         invalid("供应商请求体项需要至少一个模型才能生效");
       providers[providerId] = next;

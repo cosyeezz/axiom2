@@ -36,8 +36,8 @@ try {
     server.onMessage(message => route.send(message));
   });
   await page.goto(app.origin + "/model-config.html");
-  await page.locator("#provider-auth-status").filter({ hasText: "已通过 OAuth 登录" }).waitFor();
-  assert.ok(await page.getByRole("button", { name: "退出授权", exact: true }).isEnabled());
+  await page.locator(".model-account-card").getByText("OAuth", { exact: false }).waitFor();
+  assert.ok(await page.getByRole("button", { name: "删除", exact: true }).isEnabled());
   await page.locator("#models-tab").click();
   const editor = page.locator("#model-editor");
   const edit = page.getByRole("button", { name: "编辑模型：编辑测试模型", exact: true });
@@ -102,7 +102,8 @@ try {
   assert.ok(await save.isEnabled());
   await page.locator("#provider-name").fill("OAuth fixture");
   assert.ok(await save.isDisabled());
-  assert.ok(await page.locator("#logout-provider").isEnabled());
+  await page.locator("#accounts-tab").click();
+  assert.ok(await page.getByRole("button", { name: "删除", exact: true }).isEnabled());
 
   await page.locator("#models-tab").click();
   await page.locator("#add-model").click();
@@ -126,15 +127,16 @@ try {
   assert.equal(readFileSync(authPath, "utf8"), credentials);
   assert.deepEqual((await service.read()).providers[0].models, []);
   await page.reload();
-  await page.locator("#provider-auth-status").filter({ hasText: "已通过 OAuth 登录" }).waitFor();
+  await page.locator(".model-account-card").getByText("OAuth", { exact: false }).waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-  await page.getByRole("button", { name: "退出授权", exact: true }).click();
-  await page.locator(".configuration-feedback").filter({ hasText: "已退出授权" }).waitFor();
+  await page.getByRole("button", { name: "删除", exact: true }).click();
+  await page.getByRole("dialog", { name: "删除账号", exact: true }).getByRole("button", { name: "确认删除", exact: true }).click();
+  await page.getByText("此连接尚无已保存账号。添加首个账号后会自动设为默认。", { exact: true }).waitFor();
   assert.equal(JSON.parse(readFileSync(authPath, "utf8"))["github-copilot"], undefined);
   assert.equal((await service.read()).providers.length, 1);
-  assert.ok(await page.locator("#logout-provider").isDisabled());
-  assert.ok(await page.locator("#oauth-login-provider").isEnabled());
+  assert.equal(await page.locator(".model-account-card").count(), 0);
+  assert.ok(await page.getByRole("button", { name: "添加账号", exact: true }).isEnabled());
   assert.deepEqual(errors, []);
   console.log("PASS: unchanged/reverted edit cancellation, real-change protection, clean-state buttons, last OAuth model deletion/auth retention, independent logout, mobile layout.");
 } finally {

@@ -16,6 +16,8 @@ const fixtureFetch = async (input, init) => {
     body = { token: 'dt-FIXTURE', refresh_token: 'refresh-FIXTURE', user_id: 'fixture-user', expires_in: 3600 };
   } else if (url.pathname === '/algo/api/v5/service/region/endpoints') {
     body = { inferNodes: ['https://gateway.qoder.com.cn'] };
+  } else if (url.pathname === '/algo/api/v2/config/getDataPolicy') {
+    body = { result: { status: 'AGREE' } };
   } else if (url.pathname === '/algo/api/v2/model/list') {
     if (!new Headers(init?.headers).get('authorization')?.startsWith('Bearer COSY.')) throw new Error('Missing COSY signature');
     body = { chat: [{ key: 'auto', display_name: 'Auto fixture', max_input_tokens: 64000, max_output_tokens: 1024, source: 'system' }] };

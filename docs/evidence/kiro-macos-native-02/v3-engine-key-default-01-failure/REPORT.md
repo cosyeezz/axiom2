@@ -1,0 +1,3 @@
+# BLOCKED: frozen target function table mismatch
+
+Initial /usr/bin/python3 heredoc command exited 1 at expected frozen function-table SHA256 assertion. No helper boundaries decoded and no helper bytes acquired. A second /usr/bin/python3 heredoc diagnostic exited 0 and preserved the exact expected/actual SHA256, read length, size and stat metadata in verification.json. No LLDB, execution, model/network/HOME/credentials access, or repo edits. Identity must be re-established by main agent before static helper investigation. Key mapping, fallback default and current session remain unknown. Two exact table reads only; second is diagnostic, not a successful analysis rerun.

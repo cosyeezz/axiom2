@@ -98,12 +98,17 @@ try {
   await retryPage.goto(app.origin + "/model-config.html");
   await retryPage.getByRole("heading", { name: "本地配置夹具", exact: true }).waitFor({ timeout: 15000 });
   assert.equal(attempts, 2, "initial read retries once on a new connection generation");
+  await retryPage.locator("#suppliers-tab").click();
   await retryPage.locator("#provider-name").fill("Unsaved reconnect draft");
   disconnect();
   await reconnected;
   await retryPage.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   assert.equal(attempts, 2, "reconnection must not reload an existing draft");
   assert.equal(await retryPage.locator("#provider-name").inputValue(), "Unsaved reconnect draft");
+  assert.ok(await retryPage.locator("#save-provider").isDisabled(), "reconnected drafts cannot publish until authoritative configuration reconciliation");
+  await retryPage.locator("#accounts-tab").click();
+  assert.ok(await retryPage.getByRole("button", { name: "添加账号", exact: true }).isDisabled());
+  assert.ok(await retryPage.getByRole("button", { name: "删除", exact: true }).isDisabled());
   assert.equal(readFileSync(modelsPath, "utf8"), models);
   assert.equal(readFileSync(authPath, "utf8"), auth);
   await retryPage.close();

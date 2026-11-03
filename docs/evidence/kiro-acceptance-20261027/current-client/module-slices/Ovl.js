@@ -1,0 +1,1 @@
+function Ovl(t){return typeof crypto<"u"&&typeof crypto.randomUUID=="function"?()=>crypto.randomUUID():()=>{let e=new Uint8Array(16);return t(e),e[6]=e[6]&15|64,e[8]=e[8]&63|128,E_[e[0]]+E_[e[1]]+E_[e[2]]+E_[e[3]]+"-"+E_[e[4]]+E_[e[5]]+"-"+E_[e[6]]+E_[e[7]]+"-"+E_[e[8]]+E_[e[9]]+"-"+E_[e[10]]+E_[e[11]]+E_[e[12]]+E_[e[13]]+E_[e[14]]+E_[e[15]]}};

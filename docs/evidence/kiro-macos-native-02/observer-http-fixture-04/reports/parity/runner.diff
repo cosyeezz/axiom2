@@ -1,0 +1,15 @@
+--- /Volumes/D_Work/axiom2/docs/evidence/kiro-macos-native-02/observer-http-fixture-03/reports/consumer/runner.py
++++ /tmp/axiom-consumer04-parity-Hntnujbs/runner.py
+@@ -4,10 +4,10 @@
+ resource.setrlimit(resource.RLIMIT_CPU, (8, 8))
+ resource.setrlimit(resource.RLIMIT_FSIZE, (1048576,1048576))
+ root=sys.argv[1]
+-source='/Volumes/D_Work/axiom2/docs/evidence/kiro-macos-native-02/observer-http-fixture-02/terminal_consumer.py'
++source='/Volumes/D_Work/axiom2/docs/evidence/kiro-macos-native-02/observer-http-fixture-04/terminal_consumer.py'
+ source_bytes=open(source,'rb').read()
+ sha=hashlib.sha256(source_bytes).hexdigest()
+-assert sha=='0a4871784b92e07baa43f9ad2395e95d6ac0b5250ec390e548f05a9b61193bdf'
++assert sha=='4d848742029ed86dd8769a0dc2280312cd92002fc8d44e645e4777692e8def1f'
+ spec=importlib.util.spec_from_file_location('consumer_under_test',source)
+ m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+ # Static import surface and dynamic audit are complementary; not an OS sandbox.

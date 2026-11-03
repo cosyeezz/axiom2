@@ -1,13 +1,15 @@
 # Kiro 原生对齐：macOS 接手与提交检查点
 
-> **当前主线：macOS上分析macOS版Kiro CLI，以免费Ghidra为主；先定位，再局部分析。**
+> **历史迁移快照，不是当前执行计划。** 通用方法现见[CLI原生Provider接入技能](../.agents/skills/cli-native-provider/SKILL.md)，后续Kiro结果见[Responses实现记录](kiro-responses-implementation.md)及[重试设计](kiro-native-retry-design.md)。以下“当前/下一步”均指原迁移时点；不据此恢复旧实验。旧技能原样归档，路径映射见[技能迁移记录](evidence/cli-native-provider-skill-01/REPORT.md)。
+
+> **当时主线：macOS上分析macOS版Kiro CLI，以免费Ghidra为主；先定位，再局部分析。**
 > 本页按用户新决定取代旧Windows交接中“先完成controller02/supervisor02”的下一步。它不改写旧实验，不代表最终parity完成，也不要求购买Hopper/IDA。
 
 ## 1. 接手顺序
 
 1. 检出本次Kiro进展提交；先看`git status`，不覆盖其他未提交工作。本次仅提交经归属核定的Kiro差异，未提交的compression/REA/前台服务改动不属于Mac前置。
-2. 读[避坑Skill](../.agents/skills/kiro-native-parity-evidence/SKILL.md)，重点第3节 **先定位，再局部分析**。
-3. 读[Mac工具与门禁](../.agents/skills/kiro-native-parity-evidence/references/macos-native.md)与[Windows进展、限制及来源SHA](../.agents/skills/kiro-native-parity-evidence/references/windows-evidence.md)。
+2. 读[通用接入Skill](../.agents/skills/cli-native-provider/SKILL.md)，按[REA定位路线](../.agents/skills/cli-native-provider/references/rea-workflow.md)先定位，再局部分析。
+3. 按需查历史[Mac工具与门禁](evidence/cli-native-provider-skill-01/legacy/kiro-native-parity-evidence/references/macos-native.md)与[Windows进展、限制及来源SHA](evidence/cli-native-provider-skill-01/legacy/kiro-native-parity-evidence/references/windows-evidence.md)，不把旧停点当新授权。
 4. 核下面的目标与缺口。**第一项工作是绑定实际Mac产物并验证小型Mach-O分析，不是发模型请求，也不是移植Windows挂钩。**
 
 本次Windows宿主没有Mac运行环境/产物，因此没有声称做过本次Mac实测。仓库较早的macOS2.33.1资料仅为历史参考，不能替代新基线。
@@ -65,5 +67,5 @@ HTTP200、相同答案、去品牌、mock/VM、TCP owner、pcap、文档和Git�
 - 免费主线：Ghidra/JDK；辅助`file/otool/nm/lipo/codesign`，动态按需LLDB/Frida。具体可用性尚未在目标Mac验证。
 - Wireshark/TShark/dumpcap或tcpdump；Mac libpcap/BPF后端，不用Npcap。接口/路由重新核定；普通HTTPS包不含明文。
 - 不复制CLI凭据到Axiom、不导Keychain/TLS keys；使用正常认证。最高授权不等系统已提权，不扩展到他人进程/数据或全局CA/代理/防火墙修改。
-- `.agents/skills/kiro-native-parity-evidence`可直接阅读；Axiom/Pi实际发现/同名优先级需核。不要为了加载文档重启Abandoned服务或改生产安全策略。
+- 当前技能为[cli-native-provider](../.agents/skills/cli-native-provider/SKILL.md)；其解析/发现验证范围见[迁移记录](evidence/cli-native-provider-skill-01/REPORT.md)，不代表活动会话已热加载。不要为了加载文档重启Abandoned服务或改生产安全策略。
 - 本次只做本地提交；若尚未推送，Mac需通过用户选定的仓库远端或受控Git传输取得该提交，不假称远端已同步。

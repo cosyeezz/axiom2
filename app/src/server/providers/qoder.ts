@@ -1,11 +1,12 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createProvider, envApiKeyAuth, lazyApi, type Api, type Model, type SimpleStreamOptions, type StreamOptions, type TranscriptContext } from "@earendil-works/pi-ai";
 import { imagesInput } from "../images.js";
 import { packQoderCredential, QoderCredentials, qoderOAuth } from "./qoder-auth.js";
-import { assertQoderBodyBudget, assertQoderBodySize, encodeQoderBody, object, qoderChatPath, QoderError, qoderFailure, qoderHeaders, qoderInference, qoderJson, qoderSignal, qoderSites, type QoderIdentity, type QoderRegion } from "./qoder-protocol.js";
+import { assertQoderBodyBudget, assertQoderBodySize, encodeQoderBody, object, qoderChatPath, qoderDataPolicy, type QoderDataPolicy, QoderError, qoderFailure, qoderHeaders, qoderInference, qoderJson, qoderSignal, qoderSites, type QoderIdentity, type QoderRegion } from "./qoder-protocol.js";
 import { unwrapQoderSse } from "./qoder-sse.js";
 import { normalizeQoderConfig, qoderDescriptor, type QoderConfig } from "./qoder-catalog.js";
 import { buildQoderRequest, qoderClientOptions, type QoderStreamOptions } from "./qoder-client.js";
+import { QoderImages } from "./qoder-images.js";
 
 const completions = lazyApi(() => import("@earendil-works/pi-ai/api/openai-completions"));
 function validateImages(context: TranscriptContext) {
@@ -34,14 +35,24 @@ function validateImages(context: TranscriptContext) {
 // SDK fetch exceptions hide actionable local errors; expose only controlled diagnostics as API errors.
 const requestError = (message: string, status = 400) => new Response(JSON.stringify({ error: { message } }), { status, headers: { "content-type": "application/json" } });
 export function qoderProvider(region: QoderRegion = "intl") {
-  const site = qoderSites[region], credentials = new QoderCredentials(region), oauth = qoderOAuth(region);
-  const catalogs = new Map<string, { expires: number; configs: Map<string, QoderConfig>; endpoint: string }>();
+  const site = qoderSites[region], credentials = new QoderCredentials(region), oauth = qoderOAuth(region), images = new QoderImages();
+  const catalogs = new Map<string, { expires: number; configs: Map<string, QoderConfig>; endpoint: string; dataPolicy: QoderDataPolicy }>();
+  // Host session identities never cross the native transport; retain only an opaque CLI-style UUID.
+  const sessions = new Map<string, string>();
+  function nativeSession(hostId: string | undefined, accountKey: string) {
+    if (!hostId) return randomUUID();
+    const key = `${accountKey}:${hostId}`, old = sessions.get(key);
+    if (old) return old;
+    if (sessions.size >= 256) sessions.delete(sessions.keys().next().value!);
+    const id = randomUUID(); sessions.set(key, id); return id;
+  }
   async function catalog(identity: QoderIdentity, transport: typeof fetch, signal?: AbortSignal, force = false) {
     const key = createHash("sha256").update(identity.token).digest("hex"), old = catalogs.get(key);
     if (!force && old && old.expires > Date.now()) return old;
     const endpoint = await qoderInference(region, identity, transport, signal);
+    const dataPolicy = await qoderDataPolicy(region, identity, transport, signal, old?.dataPolicy);
     const url = endpoint + "/algo/api/v2/model/list?Encode=1";
-    const data = await qoderJson(transport, url, { signal, headers: { Accept: "application/json", "Accept-Encoding": "identity", ...qoderHeaders("", url, identity) } }, true);
+    const data = await qoderJson(transport, url, { signal, headers: qoderHeaders("", url, identity, dataPolicy) }, true);
     if (!Array.isArray(data.chat)) throw new QoderError("Qoder 模型目录格式无效。");
     const configs = new Map<string, QoderConfig>();
     for (const item of data.chat) {
@@ -51,7 +62,7 @@ export function qoderProvider(region: QoderRegion = "intl") {
     if (!configs.size) throw new QoderError("Qoder 账号没有可用模型，请检查权限。");
     signal?.throwIfAborted();
     if (catalogs.size >= 16) catalogs.delete(catalogs.keys().next().value!);
-    const result = { configs, endpoint, expires: Date.now() + 300000 };
+    const result = { configs, endpoint, dataPolicy, expires: Date.now() + 300000 };
     catalogs.set(key, result);
     return result;
   }
@@ -77,9 +88,9 @@ export function qoderProvider(region: QoderRegion = "intl") {
           const identity = await credentials.resolve(input?.apiKey, transport, signal);
           let body: Record<string, unknown>;
           try { body = object(JSON.parse(String(init?.body))); } catch { return requestError("Qoder 请求格式无效。"); }
-          const { configs, endpoint } = await catalog(identity, transport, signal), config = configs.get(String(body.model));
+          const { configs, endpoint, dataPolicy } = await catalog(identity, transport, signal), config = configs.get(String(body.model));
           if (!config) return requestError("Qoder 当前账号目录不包含所选模型；请重新拉取模型列表，不会回退到其他模型。");
-          const nativeInput: QoderStreamOptions = { ...input };
+          const nativeInput: QoderStreamOptions = { ...input, sessionId: nativeSession(input?.sessionId, identity.userId) };
           if (simple) {
             const simpleInput = input as SimpleStreamOptions | undefined;
             if (simpleInput?.reasoning) nativeInput.reasoningEffort ??= model.thinkingLevelMap?.[simpleInput.reasoning] ?? simpleInput.reasoning;
@@ -89,23 +100,24 @@ export function qoderProvider(region: QoderRegion = "intl") {
             const budget = simpleInput?.reasoning && simpleInput.thinkingBudgets?.[simpleInput.reasoning as keyof NonNullable<SimpleStreamOptions["thinkingBudgets"]>];
             if (budget !== undefined) nativeInput.thinkingBudget ??= budget;
           }
-          let payload: unknown = buildQoderRequest(body, config, region, model, context, nativeInput);
-          assertQoderBodyBudget(payload);
+          const nativePayload = buildQoderRequest(body, config, region, model, context, nativeInput);
+          assertQoderBodyBudget(nativePayload);
+          await images.prepare(nativePayload, site.center, identity, dataPolicy, transport, signal);
+          assertQoderBodyBudget(nativePayload);
+          let payload: unknown = nativePayload;
           const replacement = await input?.onPayload?.(payload, model);
           if (replacement !== undefined) payload = replacement;
+          signal.throwIfAborted();
           assertQoderBodyBudget(payload);
           const encoded = encodeQoderBody(JSON.stringify(payload));
           const url = endpoint + qoderChatPath + "?FetchKeys=llm_model_result&AgentId=agent_common&Encode=1";
-          const extraHeaders: Record<string, string> = {};
-          for (const [key, value] of Object.entries({ ...model.headers, ...input?.headers })) {
-            if (typeof value === "string" && !/^(?:authorization|host|cookie|content-length|cosy-.*|x-model-.*|login-version|x-request-id)$/i.test(key)) extraHeaders[key] = value;
-          }
+          // Native wire headers are a closed CLI allowlist. Do not forward SDK/model/caller identity headers.
           let response: Response;
           try {
             response = await transport(url, {
               method: "POST", redirect: "error", signal, body: encoded,
-              headers: { ...extraHeaders, "Content-Type": "application/json", Accept: "text/event-stream", "Cache-Control": "no-cache", "Accept-Encoding": "identity",
-                "X-Model-Key": config.key, "X-Model-Source": String(config.source ?? "system"), ...qoderHeaders(encoded, url, identity) },
+              headers: { Accept: "text/event-stream", "Cache-Control": "no-cache",
+                "X-Model-Key": config.key, "X-Model-Source": String(config.source ?? "system"), ...qoderHeaders(encoded, url, identity, dataPolicy) },
             });
           } catch { signal.throwIfAborted(); throw new QoderError("Qoder 网络请求失败；未自动重放，请确认后重试。"); }
           if (!response.ok) {

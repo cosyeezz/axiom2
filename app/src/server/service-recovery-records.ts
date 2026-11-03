@@ -36,20 +36,14 @@ export class ServiceRecoveryRecords {
     else this.db.prepare("DELETE FROM service_recoveries WHERE sessionId=?").run(sessionId);
   }
   retry(expected: ServiceRecovery, error: string) {
-    const changed = this.db.prepare(`UPDATE service_recoveries SET state='pending',error=?
+    // Retry diagnostics belong to the internal recovery intention, not the
+    // user-visible task/run result. Preserve the original execution error.
+    this.db.prepare(`UPDATE service_recoveries SET state='pending',error=?
       WHERE sessionId=? AND runId IS ? AND kind=? AND createdAt=? AND payload=?`)
-      .run(error, expected.sessionId, expected.runId, expected.kind, expected.createdAt, expected.payload).changes;
-    if (!changed) return;
-    this.db.prepare("UPDATE runs SET error=? WHERE id=? AND status IN ('interrupted','cancelled')")
-      .run(`自动恢复等待重试：${error}`, expected.runId);
-    this.db.prepare("UPDATE tasks SET error=? WHERE sessionId=? AND status IN ('interrupted','queued')")
-      .run(`自动恢复等待重试：${error}`, expected.sessionId);
+      .run(error, expected.sessionId, expected.runId, expected.kind, expected.createdAt, expected.payload);
   }
   block(sessionId: string, error: string) {
     this.db.prepare("UPDATE service_recoveries SET state='blocked',error=? WHERE sessionId=?").run(error, sessionId);
-    this.db.prepare(`UPDATE runs SET error=? WHERE id=(SELECT runId FROM service_recoveries WHERE sessionId=?)
-      AND status IN ('interrupted','cancelled')`).run(`自动恢复受阻：${error}`, sessionId);
-    this.db.prepare("UPDATE tasks SET error=? WHERE sessionId=? AND status='interrupted'").run(`自动恢复受阻：${error}`, sessionId);
   }
   /** Called inside finishRun's transaction, before task settlement consumes its live queue. */
   interrupted(sessionId: string, runId: string) {

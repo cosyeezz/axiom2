@@ -8,6 +8,7 @@ const { createKiroNativeRequest, prepareKiroNativeRequest, sendKiroNativeRequest
 const fixture = join(dirname(process.argv[2]), "fixture.txt"), marker = "NATIVE-NO-PI-工具";
 await writeFile(fixture, marker);
 let requests = 0, toolRuns = 0;
+const identity = { continuationId: "506f1108-18b6-4d12-949b-96e85bdfb2a5" };
 const account = { access: "SYNTHETIC-ACCESS", expires: Date.now() + 60000, profileArn: "arn:aws:codewhisperer:us-east-1:123456789012:profile/fixture" };
 const context = { systemPrompt: "Caller policy stays intact.", tools: [{ name: "read", description: "read fixture", parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] } }], messages: [{ role: "user", content: "Read the fixture" }] };
 const args = JSON.stringify({ path: fixture });
@@ -26,6 +27,7 @@ const server = createServer(async (req, res) => {
     let raw = ""; for await (const part of req) raw += part;
     const body = JSON.parse(raw);
     assert.equal(body.model, "deepseek-3.2");
+    assert.equal(body.metadata["kiro:agent_continuation_id"], identity.continuationId);
     assert.match(body.input[0].content, /Caller policy stays intact/);
     assert.equal(body.tools[0].name, "read");
     const item = requests === 1
@@ -54,7 +56,7 @@ const localUrl = "http://127.0.0.1:" + server.address().port + "/v1/responses";
 try {
   let final = "";
   for (let turn = 0; turn < 2; turn++) {
-    const { payload } = createKiroNativeRequest("deepseek-3.2", context, account, "standalone-session");
+    const { payload } = createKiroNativeRequest("deepseek-3.2", context, account, "standalone-session", identity);
     const prepared = prepareKiroNativeRequest("deepseek-3.2", account, payload);
     assert.equal(prepared.url, "https://runtime.us-east-1.kiro.dev/v1/responses");
     const signal = AbortSignal.timeout(5000), response = await sendKiroNativeRequest({ ...prepared, url: localUrl }, signal);

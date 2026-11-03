@@ -6,7 +6,17 @@ export { createCodeBuddyOAuth, type CodeBuddyOAuthOptions } from "./codebuddy/au
 export { createCodeBuddyClient, type CodeBuddyStreamInput } from "./codebuddy/client.js";
 export { createCodeBuddyCatalog, fetchCodeBuddyCatalog, type CodeBuddyCatalogSnapshot } from "./codebuddy/catalog.js";
 export { codeBuddyBuiltinModels, parseCodeBuddyConfiguration } from "./codebuddy/models.js";
+export { fetchCodeBuddyAccount, parseCodeBuddyAccounts, CodeBuddyAccountError, type CodeBuddyAccountInfo } from "./codebuddy/account-info.js";
 export { codeBuddyId, codeBuddyOrigin, codeBuddyBaseUrl, codeBuddyCliVersion, codeBuddyHeaders } from "./codebuddy/identity.js";
 export { codeBuddyNativeFetch, codeBuddyNativeHttp } from "./codebuddy/http.js";
 export { prepareCodeBuddyRequest, type CodeBuddyStreamOptions, type CodeBuddyIdentity } from "./codebuddy/request.js";
 export { CodeBuddyProtocolError, CodeBuddyServiceError, codeBuddyFailure } from "./codebuddy/failure.js";
+export { createKiroOAuth, type KiroCredential } from "./kiro/auth.js";
+export { kiroCallback } from "./kiro/callback.js";
+export { createKiroNativeProvider } from "./kiro/provider.js";
+export { createKiroClient, type KiroStreamInput } from "./kiro/client.js";
+export { fetchKiroCatalog, describeKiroModel, validateKiroCredential, kiroCatalogScope, kiroServiceRegion, type KiroCatalogModel } from "./kiro/catalog.js";
+export { kiroThinkingCapabilities, kiroThinkingRequest, KiroThinkingError, type KiroThinkingModelInput } from "./kiro/thinking.js";
+export { readKiroTokenUsage } from "./kiro/usage.js";
+export { fetchKiroQuota, parseKiroQuota, KiroQuotaError, type KiroQuota, type KiroQuotaBucket } from "./kiro/quota.js";
+export { createKiroNativeRequest, prepareKiroNativeRequest, sendKiroNativeRequest, kiroNativeFetch, kiroCliUserAgent, KIRO_CLI_COMPATIBILITY, KiroChatError } from "./kiro/request.js";

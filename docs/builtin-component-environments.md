@@ -1,6 +1,6 @@
 # 内置组件的独立运行环境
 
-Axiom 管理四类内置组件：REA、OpenCLI、RTK、模型代理。安装和运行不再要求它们与 Axiom 后台共用同一套 Node/npm，也不修改系统 PATH、全局 npm/pip、系统 Java 或其他程序的运行环境。
+Axiom 管理五类内置组件：REA、OpenCLI、RTK、FFmpeg、模型代理。安装和运行不再要求它们与 Axiom 后台共用同一套 Node/npm，也不修改系统 PATH、全局 npm/pip、系统 Java 或其他程序的运行环境。
 
 这是**进程运行环境与组件状态隔离**，不是容器或安全沙箱：HOME、系统凭据、证书、浏览器配置和外部命令仍按工具需求可用。用户自行运行的终端、其他 MCP 和 Agent 的普通 Python/Node 命令不切换到组件运行时。
 
@@ -13,13 +13,18 @@ Axiom 管理四类内置组件：REA、OpenCLI、RTK、模型代理。安装和�
 | REA | `integrations/rea/versions/v<版本>-<UUID>/node_modules/rea-agents` | 同一版本目录下的私有 Node/npm、`runtime.json`、`environment/` |
 | OpenCLI | `integrations/opencli/versions/v<版本>-<UUID>/node_modules/@jackwener/opencli` | 同一版本目录下的私有 Node/npm、`runtime.json`、`environment/`、`commands/` |
 | RTK | `integrations/rtk/versions/` 中的本机平台二进制 | `integrations/rtk/environment/`；本组件独占的数据库变量 |
+| FFmpeg | `integrations/ffmpeg/versions/<程序包标签>-<UUID>/` 中的 FFmpeg、FFprobe、LICENSE、README、source.json | `integrations/ffmpeg/environment/`；无私有 Node/npm |
 | 模型代理 | `integrations/model-proxy/versions/` 中的 mihomo/Xray 二进制 | 安装自检使用候选目录的 `environment/`；运行线路使用各自 `runs/<generation>/environment/` |
 
 Node 发行包位于候选版本目录的 `runtime/node-v<版本>-<系统>-<架构>/`。macOS/Linux 直接使用该包的 `bin/node` 和 `lib/node_modules/npm/bin/npm-cli.js`，Windows 使用 `node.exe` 与 `node_modules/npm/bin/npm-cli.js`。Axiom 自身的监督 JS 仍由后台 Node 执行，真正的 npm、工具程序、MCP、REA doctor 则显式使用绑定的私有 Node。
 
 OpenCLI 的 Agent PATH **只增加 `commands/`**，不加入私有 Node/npm 目录。launcher 在子进程内才准备私有 PATH 和环境；因此 Agent 执行普通 `node`、`npm`、`python` 的含义不变。POSIX、cmd 与 PowerShell 入口均绑定同一个 Node 和工具入口，并在发布前用实际命令验证版本。launcher 不持久化安装时代理 URL 或凭据；它从执行时工具环境取得代理。
 
-原生 RTK/代理不安装 Node。模型代理的自检、导入和临时验证不再复用 RTK runner，因而不会继承 RTK 数据库与遥测控制变量。
+FFmpeg 使用第三方 [shaka-project/static-ffmpeg-binaries](https://github.com/shaka-project/static-ffmpeg-binaries) 的最新稳定程序包（macOS arm64/x64、Linux arm64/x64、Windows x64）。只接受有双程序及 GitHub asset SHA-256 的发布；原始二进制限制下载大小并校验长度与 SHA-256，无需归档解包或包安装脚本。另从 FFmpeg 官方固定路径下载并校验 GPLv3 完整许可，生成包含精确构建标签与源码链接的 README、source.json；Shaka 构建脚本 Apache-2.0 不是二进制许可。发布前实际执行双程序、生成 PNG 并复核尺寸。程序包标签不是上游 FFmpeg 最新版本保证，实际版本通过自检展示。下载与自检异步间复核目录身份，发现替换时拒绝写入/删除替换路径；这不是防御任意本机进程的文件系统安全沙箱。
+
+Agent 的后续 Bash/PowerShell 命令按当前 FFmpeg 配置增加托管二进制目录，不修改进程/系统 PATH 或 Node/Python 含义；安装、更新和卸载在下一条命令生效，已启动进程不会热替换。程序缺失或绑定损坏不阻断普通 shell 命令；通过 `cache/ffmpeg-unavailable/` 中的双命令诊断包装阻止误用并提示重新安装，卸载同时清除此专属缓存。诊断缓存不可写时仍允许 shell 启动，环境变量 `AXIOM_FFMPEG_ERROR` 告知抽帧 Skill 拒绝处理；此时普通 shell 中手动调用同名系统命令不在托管保证内。此功能只提供本地预处理，视频理解需要抽帧 Skill 和支持图片的模型；不包含语音转录，远程模型仍会收到读取的帧图。
+
+原生 RTK/FFmpeg/代理不安装 Node。模型代理的自检、导入和临时验证不再复用 RTK runner，因而不会继承 RTK 数据库与遥测控制变量。
 
 ## 环境边界
 
@@ -31,16 +36,18 @@ OpenCLI 的 Agent PATH **只增加 `commands/`**，不加入私有 Node/npm 目�
 
 ## 安装、检查和切换
 
+以下安装流程受 [通用组件维护规范](../app/src/server/integrations/component-maintenance.ts) 约束：安装/更新现场获取最新目标，可降级；非取消失败会强制清理后重试一次，不能保证旧安装保留。卸载确认后中止本组件维护任务，直接删除托管资源及安装记录，失败重试一次，不因修订、归属日志或在途 Agent 阻塞；不删除用户视频和技能。维护任务不跨后台重启保留。下文候选验证与原子切换描述单次尝试，不能解释成失败重试或卸载时保留旧资源的承诺。
+
 1. 检查更新取得目标工具的精确稳定版本；REA 可展示尚未适配的新版本，但安装目标必须命中已核验的依赖契约表。
 2. 从 npm 官方精确版本元数据读取 `engines.node`，从 Node 官方发行索引选择满足要求、具有本平台/架构资产的 LTS 版本。不使用后台 Node 猜测是否能装，也不靠 `--force` 跳过引擎检查。
-3. 下载 Node 官方归档和 `SHASUMS256.txt`，校验 SHA-256，受限安全解包，再实际执行私有 Node/npm 的版本自检。下载仅允许官方 HTTPS 地址；没有满足要求的 LTS 资产则明确失败，旧安装不变。
+3. 下载 Node 官方归档和 `SHASUMS256.txt`，校验 SHA-256，受限安全解包，再实际执行私有 Node/npm 的版本自检。下载仅允许官方 HTTPS 地址；没有满足要求的 LTS 资产则明确失败；失败后的强制清理重试遵循上述通用规范。
 4. 使用该私有 npm，在全新版本目录执行带 `--engine-strict` 的局部安装。REA 保留其所需安装脚本与原生可选依赖；OpenCLI 仍禁用安装脚本。
 5. 验证目标包、技能与入口。REA 实际连接 MCP、核对服务版本与工具列表，并调用 `binary_session`；OpenCLI 验证实际私有命令与 launcher 的版本。
-6. 取消检查、配置修订与目录归属复核通过后，原子发布配置指向新版本。**发布前**失败、取消或冲突清理本次未发布候选，不改变原配置。
+6. 取消检查、配置修订与目录归属复核通过后，原子发布配置指向新版本。单次尝试**发布前**失败、取消或冲突清理本次未发布候选；非取消失败的清理重试仍可能删除旧安装。
 
 配置 rename 已成功而后续目录 fsync 等确认失败时，配置可能已切换。任务必须明确报告“已切换、后续确认未完成”，保留新安装并要求刷新核实；不能删除已发布目录或谎称旧版本仍在使用。
 
-更新不删除成功的旧程序或引擎目录。**REA/OpenCLI 已加载的资源及已启动子进程保留原绑定**，不会在执行中替换其 Node、程序或依赖。显式资源重载、新建 worker、后台重启后的冷恢复按当时已发布配置重新绑定；当前没有“冷恢复自动还原历史工具版本”的会话级快照保证。RTK 每次过滤重新读取配置，同一 worker 的后续过滤可以使用新版本，但已启动的过滤进程不会被热替换；模型代理按线路 generation 管理已启动内核。全量卸载仍受现有在途任务与进程归属检查保护。
+更新不删除成功的旧程序或引擎目录。**REA/OpenCLI 已加载的资源及已启动子进程保留原绑定**，不会在执行中替换其 Node、程序或依赖。显式资源重载、新建 worker、后台重启后的冷恢复按当时已发布配置重新绑定；当前没有“冷恢复自动还原历史工具版本”的会话级快照保证。RTK 每次过滤重新读取配置，同一 worker 的后续过滤可以使用新版本，但已启动的过滤进程不会被热替换；模型代理按线路 generation 管理已启动内核。全量卸载按通用规范直接移除，不等待在途会话；正在使用这些文件的任务需自行处理资源缺失。
 
 无 `runtime` 字段的历史安装仍按原方式运行，不在启动/刷新时静默迁移，也不自动升级共享后台 Node。界面标记旧共享环境，重新安装或更新成功后才转为私有环境。私有绑定损坏时明确报错，不回退到系统 Node。界面的安装平台支持与旧安装的运行兼容性分别判断：旧 Node 不兼容可以提示修复，但不能禁用私有运行时安装入口。
 
@@ -92,6 +99,7 @@ OpenCLI 的 Agent PATH **只增加 `commands/`**，不加入私有 Node/npm 目�
 - `app/tests/component-environments.test.ts`：不污染宿主/其他语言环境、原生组件启动前取消的未启动确认与无目录副作用、目标 engines/LTS/资产选择、完整运行时篡改检测、真实 launcher 子进程与 literal MCP 环境。
 - `app/tests/component-publication.test.ts`：状态残留、旧共享 Node 的 patch 兼容性与修复入口、未知契约拒绝、发布后 fsync 故障、Ghidra 版本拼写。
 - 现有 `rea*.test.ts` / `opencli*.test.ts`：离线私有 Node fixture、安装/更新回滚、取消/冲突、技能/MCP 与卸载保护。
+- `app/tests/ffmpeg.test.ts`：发行元数据/双程序/许可/SHA-256、受限下载/解压、安装自检、失败重试/取消/卸载、Agent 命令 PATH 与宿主环境不污染。
 - 现有 RTK、模型代理和 tool-process 测试：原生安装/监督/归属/清理回归。
 
 离线 fixture 复制测试进程的真实 Node 到私有目录，仅证明绑定、执行与回滚；不能用它证明该 Node 满足真实 `rea-agents@6.8.0` 引擎要求。真实官方发行下载、npm 安装、MCP 或浏览器 doctor 的结果需单独报告。

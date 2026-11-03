@@ -1,0 +1,25 @@
+# Narrow wrapper01 — synthetic PASS, first HTTP fixture failed
+
+Observer8409B/SHA2566c458b29319449cb4849ec491ad1f6bd3df4a60d3a10640e5ac099a156406eb6, helper6639B/SHAf357a0bf5c04308eae7eade520a30240c7350cc6d8e1f8880b716bb83790f802 unchanged. [Design](WRAPPER-DESIGN.md), [predeclared tests](WRAPPER01-EXPERIMENT.md). No actual official/Axiom request evidence or production modification.
+
+## Unit01 — limited PASS
+
+Matched t11702/r11708. Root [/private/tmp/end-observer-unit01-1793328873127579000](/private/tmp/end-observer-unit01-1793328873127579000/): REPORT.json, harness.cjs, stdout.raw, stderr.raw, privacy-scan.json, controller-manifest.json all read in full by main. Retained Node69298/actual0/bothEOF/no-timeout/overflow, worker .03790675s/controller .039443917s. 56uniquePASS/255recorded assertions/0fail, one worker/no network/no old suite rerun. HarnessSHA eccddd18ccfb6cc7408aebc8f4a8255290c2838a1baead1e6644270091b933c6 before/after/current match; observer/helper also match.
+
+Covers synthetic originalthis/argument arity+refs/callbackowner/return identity/throw object,null,undefined,string,Symbol; own/inherited descriptors/name/length/refusal/rollback/restore conflicts/late/pending/reentry; call128/129/record4/5/perstring256KiB/cumulative512KiB; unsupportedbody statuses; ownheader getter not called; before/after metadata faults labelled syntheticProxy; detached snapshot/falseproofflags. This is not a recursive production-schema validation or arbitraryProxy/intrinsics guarantee. No actual Node version/platform report was recorded. Fixed public executable path alone does not fill that gap. Controller is described as inline `/usr/bin/python3 -I -B -`, source not separately saved; no retrospective controller-source audit/limit-enforcement proof. Controller inherited tool environment, worker exact explicit six-key mapping. Whole-author time not measured.
+
+Main data-only audit exit0 verified complete result array=report,56uniquePASS/255,69298exit0/EOF/empty stderr, all before-after-currentSHA, and canary absence raw/base64/lower+upperhex/Unicode+hexescaped in stdout/stderr/report/manifest/privacy-scan. No new Node execution. Synthetic input source canary is explicitly excluded, not hidden observation output.
+
+## HTTP01 — failed fixture, no scenario PASS
+
+Matched t11703/r11709. Root [/private/tmp/end-observer-http01-s9x8ing_](/private/tmp/end-observer-http01-s9x8ing_/): FAILURE.md, REPORT.json, held.json, controller.py, harness.cjs, raw.json read by main; one combined display truncated a REPORT fragment, later read separately and full report/held agreement parsed by data-only audit0. Worker69376/controller actual1/trueEOF both/no timeout/overflow/.045994s. Original exact failed assertion, actual request count, selected port and server-close callback completion were not retained. **Do not call planned20 actual20, or any pair PASS.** raw.json is a fixed output-withheld marker, not raw observation.
+
+Conditional static fixture bug: endSpy derives only the own descriptor of ClientRequest.prototype.end. If inherited, `{...undefined,value:endSpy}` creates a nonconfigurable own property, which observer correctly refuses. The later restoration also defines with undefined instead of deleting an originally absent own property. No diagnostic execution established the precise failed assertion, so this is a supported static explanation, not proof the wrapper failed or that only one defect exists. Preserve original files; no implementation change justified.
+
+HarnessSHA2164e064be5b7a3b77ef69090cecb171373f433fea0befbeb27fadf77721058e; controllerSHA21e917f2231c484f708dc182ac1085ad4da057acd4360e8252ff8b7c95d9bf70. Main data-only audit0 checked before/after/current four hashes,69376actual1/EOF/no-timeout,REPORT-held equality and fixedsuppression. Controller environment **key names only** were recorded and worker mapping explicit; no claim all-layer minimal environment. Planned comparison statements inside failed REPORT limitations are not evidence that those comparisons ran/passed. HTTPS, actual HTTP passivity and realserver-close callback proof remain unverified.
+
+## New replacement case
+
+[HTTP02 experiment](HTTP02-EXPERIMENT.md) and main-authored [http02_fixture.cjs](http02_fixture.cjs)11246B/SHA8145e3b1c8148bc4169d81c14b0594fe25fe35e8f6718e1b2c9233574bd84302 fix only fixture inheriteddescriptor resolution/configurable spy/delete-versus-define restoration and safe failure diagnostics. Observer/helper unchanged; no unit56/pure suite rerun. t11717/r11724已结束且matched消费、full文件与data-only审计0核完：HTTP02oneNode76134/0/双EOF、10pairs/20actualrequests/402coreassertions，inheritedend/write flagsfalse，serverClosed/restoredtrue，observer/helper未改。完整结果及限制见[HTTP02-VALIDATION.md](HTTP02-VALIDATION.md)。无活动背景/无需复跑，production/official/model请求0。
+
+Even eventual self-owned HTTP PASS cannot prove HTTPS/embedded runtime/natural installation/complete request capture/paired-value comparison/authscope/outbound/server parity. The observer currently emits only primitive-body status and generatedheader shape, retains no raw payload, and cannot compare complete real requests.

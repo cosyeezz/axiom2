@@ -10,6 +10,8 @@ import { ModelProxyTool } from "./ModelProxyTool.js";
 import { emptyModelProxyState } from "../../shared/model-proxy.js";
 import { RtkTool } from "./RtkTool.js";
 import { emptyRtkState } from "../../shared/rtk.js";
+import { FfmpegTool } from "./FfmpegTool.js";
+import { emptyFfmpegState } from "../../shared/ffmpeg.js";
 import { useEffect, useRef, useState } from "react";
 import { LocalPath } from "../LocalPath.js";
 import { SettingsSidebar } from "../components.js";
@@ -21,12 +23,13 @@ import "../styles/settings.css";
 import "../styles/builtin-tools.css";
 
 const empty: OpenCliState = { ready: false, nodeVersion: "", configured: false, revision: "", settings: defaultOpenCliSettings };
-const selectedTool = () => location.hash === "#rea" ? "rea" : location.hash === "#rtk" ? "rtk" : location.hash === "#model-proxy" ? "model-proxy" : "opencli";
+const selectedTool = () => location.hash === "#rea" ? "rea" : location.hash === "#rtk" ? "rtk" : location.hash === "#ffmpeg" ? "ffmpeg" : location.hash === "#model-proxy" ? "model-proxy" : "opencli";
 export default function BuiltinTools() {
   const [selected, setSelected] = useState(selectedTool);
   const proxy = useScope("builtin-tools:model-proxy", emptyModelProxyState);
   const rea = useScope("builtin-tools:rea", emptyReaState);
   const rtk = useScope("builtin-tools:rtk", emptyRtkState);
+  const ffmpeg = useScope("builtin-tools:ffmpeg", emptyFfmpegState);
   useEffect(() => { const sync = () => setSelected(selectedTool()); window.addEventListener("hashchange", sync); return () => window.removeEventListener("hashchange", sync); }, []);
   const state = useScope("builtin-tools:opencli", empty);
   const connection = useConnectionState();
@@ -85,11 +88,12 @@ export default function BuiltinTools() {
         <SettingsHeader page="tools" />
         <div className="configuration-layout">
           <aside className="supplier-panel" aria-label="内置工具列表">
-            <div className="supplier-toolbar"><h2>全部工具 <span className="meta num">4</span></h2></div>
+            <div className="supplier-toolbar"><h2>全部工具 <span className="meta num">5</span></h2></div>
             <nav className="supplier-list">
               <a className="supplier-option" href="#opencli" aria-current={selected === "opencli" ? "true" : undefined}><span><strong>OpenCLI <span className="tag">浏览器</span></strong><small>{installStatus}</small></span></a>
               <a className="supplier-option" href="#rea" aria-current={selected === "rea" ? "true" : undefined}><span><strong>REA <span className="tag">逆向分析</span></strong><small>{rea.version ? `v${rea.version}${rea.error ? " · 需修复" : ""}` : rea.packageRoot ? "已安装" : rea.revision ? "未安装" : undefined}</small></span></a>
               <a className="supplier-option" href="#rtk" aria-current={selected === "rtk" ? "true" : undefined}><span><strong>RTK <span className="tag">输出过滤</span></strong><small>{rtk.version ? `v${rtk.version} · ${rtk.settings.enabled ? "已启用" : "未启用"}` : rtk.executable ? "已安装" : rtk.revision ? "未安装" : undefined}</small></span></a>
+              <a className="supplier-option" href="#ffmpeg" aria-current={selected === "ffmpeg" ? "true" : undefined}><span><strong>FFmpeg <span className="tag">视频</span></strong><small>{ffmpeg.version ? `${ffmpeg.version}${ffmpeg.error ? " · 需修复" : ""}` : ffmpeg.revision ? "未安装" : undefined}</small></span></a>
               <a className="supplier-option" href="#model-proxy" aria-current={selected === "model-proxy" ? "true" : undefined}><span><strong>模型代理 <span className="tag">网络</span></strong><small>{proxy.profiles.filter(p => p.status === "running").length} 条线路运行中</small></span></a>
             </nav>
           </aside>
@@ -145,6 +149,7 @@ export default function BuiltinTools() {
           </article>
           <ReaTool active={selected === "rea"} />
           <RtkTool active={selected === "rtk"} />
+          <FfmpegTool active={selected === "ffmpeg"} />
           <ModelProxyTool active={selected === "model-proxy"} />
         </div>
       </main>

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Axiom · 组件卡片设计</title>
+<style>
+:root{color-scheme:dark;--bg:#111314;--card:#1a1d1e;--line:#2b2f30;--text:#edece8;--muted:#939a9d;--gold:#d4b783;--green:#9fbead}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}button,summary{font:inherit}button{cursor:pointer}button:focus-visible,summary:focus-visible{outline:2px solid var(--gold);outline-offset:4px}button:disabled{cursor:default;opacity:.65}svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}.symbols{position:absolute;width:0;height:0;overflow:hidden}
+.shell{max-width:1080px;margin:auto;padding:64px 32px 48px}.eyebrow{display:flex;align-items:center;gap:12px;color:#7f878b;font-size:11px;letter-spacing:1.7px;margin-bottom:39px}.brand{color:#d9d9d3;font-weight:650;letter-spacing:2.8px}.slash{color:#444a4d}.heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}h1{font-size:23px;letter-spacing:-.5px;font-weight:600;margin:0}.check{border:1px solid var(--line);background:transparent;border-radius:8px;color:#b2b8ba;padding:9px 12px;display:flex;gap:7px;align-items:center;font-size:12px;min-height:40px}.check svg{width:15px;height:15px}.check:hover{background:#202425;color:var(--text)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;position:relative;min-width:0;transition:border-color .18s}.card:hover{border-color:#424849}.card.update{border-color:#524733}.top{display:flex;gap:12px;align-items:center}.icon{width:38px;height:38px;border:1px solid #343a3b;background:#222728;border-radius:10px;color:#aab6b8;display:grid;place-items:center;flex:none}.update .icon{color:var(--gold);background:#2c2922;border-color:#423a2d}h2{font-size:15px;font-weight:600;line-height:1.5;margin:0}.version{font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted);margin-top:3px}.version.empty{color:#747d81}.menu{position:absolute;right:12px;top:15px}.menu summary{list-style:none;cursor:pointer;color:#858e92;width:32px;height:32px;display:grid;place-items:center;border-radius:7px}.menu summary::-webkit-details-marker{display:none}.menu summary:hover,.menu[open] summary{color:var(--text);background:#2a2f30}.popup{position:absolute;right:0;top:37px;background:#25292a;border:1px solid #3b4244;border-radius:10px;width:168px;padding:5px;z-index:5;box-shadow:0 12px 28px #0006}.popup button{border:0;background:transparent;display:block;text-align:left;width:100%;padding:9px 10px;color:#d5d9d8;border-radius:6px;font-size:12px}.popup button:hover{background:#33393b}.popup hr{border:0;border-top:1px solid #3b4142;margin:4px 6px}.bottom{margin-top:30px;display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:34px}.state{font-size:12px;color:var(--muted);display:flex;gap:7px;align-items:center}.dot{width:5px;height:5px;background:var(--gold);border-radius:50%;flex:none}.update .state{color:var(--gold)}.state.ok{color:var(--green)}.state svg{width:14px;height:14px}.action{border:1px solid #42494b;background:#272c2e;color:#e0e4e3;border-radius:7px;font-size:12px;padding:7px 16px;min-height:34px;white-space:nowrap}.action:hover{background:#343b3d}.action.primary{background:var(--gold);border-color:var(--gold);color:#262016;font-weight:600}.action.primary:hover{background:#e0c797}.aux{font-size:11px;color:#687276;margin:17px 0 0;display:flex;align-items:center;gap:6px}.aux svg{width:13px;height:13px}.preview-note{border-top:1px solid #24292b;margin-top:61px;padding-top:18px;display:flex;justify-content:space-between;gap:16px;font-size:11px;color:#626c70}.preview-note span:first-child{letter-spacing:1px}
+dialog{border:1px solid #3a4243;background:#1b2021;color:var(--text);border-radius:16px;padding:25px;width:min(390px,calc(100vw - 40px));box-shadow:0 24px 80px #0009}dialog::backdrop{background:#0009;backdrop-filter:blur(4px)}dialog h2{font-size:18px}dialog p{color:#a3adaf;font-size:13px;line-height:1.8;white-space:pre-line}dialog .action{float:right;margin-top:14px}.dialog-label{color:var(--gold);font-size:11px;margin-bottom:8px}dl{font-size:13px;margin:20px 0}dl div{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line)}dt{color:var(--muted)}dd{margin:0}
+@media(max-width:760px){.shell{padding:36px 22px}.grid{grid-template-columns:1fr}.eyebrow{margin-bottom:28px}.heading{margin-bottom:18px}h1{font-size:21px}.card{padding:19px 20px}.bottom{margin-top:22px}.preview-note{margin-top:36px;flex-direction:column;gap:5px}.check{font-size:11px;padding:8px 10px}}
+.environment{margin-top:32px}.environment .heading{margin-bottom:16px}.environment .heading h2{font-size:17px;font-weight:600}.environment .check{border-color:transparent;color:var(--muted)}.environment .card{background:#171b1c}.environment .icon{background:#202627}.environment .bottom{margin-top:22px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<svg class="symbols" aria-hidden="true"><defs>
+<symbol id="server" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="7" rx="2"/><rect x="4" y="14" width="16" height="7" rx="2"/><path d="M8 6.5h.01M8 17.5h.01M12 6.5h4M12 17.5h4"/></symbol>
+<symbol id="terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 9 3 3-3 3m6 0h4"/></symbol>
+<symbol id="desktop" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></symbol>
+<symbol id="runtime" viewBox="0 0 24 24"><path d="m12 2 8.5 5v10L12 22l-8.5-5V7zM8 14V9l8 6v-5"/></symbol>
+<symbol id="network" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><path d="M8 6h8M6 8v8m2 2h8m2-10v8M8 8l8 8"/></symbol>
+<symbol id="more" viewBox="0 0 24 24"><circle cx="5" cy="12" r=".8"/><circle cx="12" cy="12" r=".8"/><circle cx="19" cy="12" r=".8"/></symbol>
+<symbol id="refresh" viewBox="0 0 24 24"><path d="M20 5v5h-5M4 19v-5h5M5.5 8a7 7 0 0 1 11.6-3L20 10M4 14l2.9 5A7 7 0 0 0 18.5 16"/></symbol>
+<symbol id="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+<symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></symbol>
+</defs></svg>
+<main class="shell">
+<div class="eyebrow"><span class="brand">AXIOM</span><span class="slash">/</span><span>本机组件</span></div>
+<header class="heading"><h1>组件与运行环境</h1><button class="check" id="check-all"><svg aria-hidden="true"><use href="#refresh"/></svg><span>检查更新</span></button></header>
+<section class="grid" aria-label="组件">
+<article class="card update" aria-label="后台服务">
+<div class="top"><div class="icon"><svg aria-hidden="true"><use href="#server"/></svg></div><div><h2>后台服务</h2><div class="version">v0.4.21</div></div></div>
+<details class="menu"><summary aria-label="后台服务更多操作"><svg aria-hidden="true"><use href="#more"/></svg></summary><div class="popup"><button data-info="service">组件详情</button><button data-demo="查看更新内容">更新内容</button><hr><button data-demo="重新安装后台服务">重新安装…</button></div></details>
+<div class="bottom"><span class="state"><i class="dot"></i>v0.4.25 可更新</span><button class="action primary" data-demo="更新后台服务">更新</button></div>
+</article>
+<article class="card" aria-label="桌面客户端">
+<div class="top"><div class="icon"><svg aria-hidden="true"><use href="#desktop"/></svg></div><div><h2>桌面客户端</h2><div class="version">v0.4.25</div></div></div>
+<details class="menu"><summary aria-label="桌面客户端更多操作"><svg aria-hidden="true"><use href="#more"/></svg></summary><div class="popup"><button data-info="client">组件详情</button><button data-demo="查看更新内容">更新内容</button></div></details>
+<div class="bottom"><span class="state ok"><svg aria-hidden="true"><use href="#check"/></svg>已是最新版本</span></div>
+</article>
+<article class="card" aria-label="运行时与 SDK">
+<div class="top"><div class="icon"><svg aria-hidden="true"><use href="#runtime"/></svg></div><div><h2>运行时与 SDK</h2><div class="version">Node.js · npm · Pi</div></div></div>
+<details class="menu"><summary aria-label="运行时更多操作"><svg aria-hidden="true"><use href="#more"/></svg></summary><div class="popup"><button data-demo="重新检测运行环境">重新检测</button></div></details>
+<div class="bottom"><span class="state ok"><svg aria-hidden="true"><use href="#check"/></svg>已就绪</span><button class="action" data-info="runtime">详情</button></div>
+</article>
+<article class="card" aria-label="Tailscale 环境">
+<div class="top"><div class="icon"><svg aria-hidden="true"><use href="#network"/></svg></div><div><h2>远程连接</h2><div class="version empty">Tailscale · 未安装</div></div></div>
+<details class="menu"><summary aria-label="Tailscale 更多操作"><svg aria-hidden="true"><use href="#more"/></svg></summary><div class="popup"><button data-info="tailscale">环境详情</button></div></details>
+<div class="bottom"><span class="state">远程连接可选</span><button class="action" data-demo="安装 Tailscale">安装</button></div>
+</article>
+</section>
+<p class="aux" role="status" id="check-status"><svg aria-hidden="true"><use href="#clock"/></svg><span>刚刚检查</span></p>
+<footer class="preview-note"><span>DESIGN 03 · 统一运行底座</span><span>交互设计稿 · 版本与状态均为示例，不执行系统操作</span></footer>
+</main>
+<dialog id="detail"><div class="dialog-label">组件详情</div><h2 id="detail-title"></h2><div id="detail-body"></div><form method="dialog"><button class="action">关闭</button></form></dialog>
+<dialog id="demo"><div class="dialog-label">设计预览</div><h2 id="demo-title"></h2><p>此处展示操作入口，不会执行真实更新或安装。
+执行进度与错误反馈将在当前卡片内展示，详细日志按需展开。</p><form method="dialog"><button class="action">知道了</button></form></dialog>
+<script>
+const contents={service:{title:'后台服务',body:'<dl><div><dt>当前版本</dt><dd>v0.4.21</dd></div><div><dt>可更新至</dt><dd>v0.4.25</dd></div><div><dt>应用内 Pi 引擎</dt><dd>v1.1.0</dd></div></dl><p>Pi 引擎随后台服务更新，无需单独管理。</p>'},pi:{title:'终端 Pi',body:'<p>独立的命令行工具，按需安装。<br>不影响应用内的 Pi 引擎。</p><dl><div><dt>安装状态</dt><dd>未安装</dd></div><div><dt>可安装版本</dt><dd>v1.4.0</dd></div></dl>'},client:{title:'桌面客户端',body:'<dl><div><dt>当前版本</dt><dd>v0.4.25</dd></div><div><dt>更新状态</dt><dd>已是最新版本</dd></div></dl>'}};
+contents.runtime={title:'运行时与 SDK',body:'<dl><div><dt>Node.js</dt><dd>v24.13.0 · 就绪</dd></div><div><dt>npm</dt><dd>11.6.2 · 可用</dd></div><div><dt>Pi 引擎</dt><dd>v1.1.0 · 随后台更新</dd></div></dl><p>应用运行所需的底层组件，统一查看与检测。npm 随 Node.js 准备，Pi 引擎随后台服务更新，不重复安装。</p><details><summary>可选工具 · 终端 Pi</summary><p>独立命令行工具，未安装。不影响应用内 Pi 引擎。</p><button class="action" data-demo="安装终端 Pi">安装终端 Pi</button></details>'};
+contents.tailscale={title:'Tailscale',body:'<dl><div><dt>安装状态</dt><dd>未安装</dd></div><div><dt>用途</dt><dd>远程设备连接</dd></div></dl><p>仅使用本机时无需安装。安装完成不代表已登录或设备在线，连接状态在设备区域单独确认。</p>'};
+const closeMenus=()=>document.querySelectorAll('details[open]').forEach(e=>e.open=false);
+document.querySelectorAll('[data-info]').forEach(b=>b.onclick=()=>{const c=contents[b.dataset.info];closeMenus();document.querySelector('#detail-title').textContent=c.title;document.querySelector('#detail-body').innerHTML=c.body;document.querySelector('#detail').showModal()});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-demo]');if(!b)return;closeMenus();document.querySelector('#demo-title').textContent=b.dataset.demo;document.querySelector('#demo').showModal()});
+document.querySelector('#check-all').onclick=()=>{const b=document.querySelector('#check-all');b.disabled=true;b.querySelector('span').textContent='检查中…';setTimeout(()=>{b.disabled=false;b.querySelector('span').textContent='检查更新';document.querySelector('#check-status span').textContent='刚刚检查 · 示例状态已刷新'},700)};
+document.addEventListener('click',e=>{if(!e.target.closest('.menu'))closeMenus()});document.addEventListener('keydown',e=>{if(e.key==='Escape'){const s=document.querySelector('details[open] summary');closeMenus();s?.focus()}});
+</script>
+</body></html>
