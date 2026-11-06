@@ -1,0 +1,20 @@
+{
+  "modulesUnchanged": true,
+  "cases": 16,
+  "claimCount": 16,
+  "defaultRestored": true,
+  "refreshedUiReadbacksPassed": true,
+  "runs": [
+    {
+      "model": "glm-5.3",
+      "status": "completed",
+      "active": false
+    },
+    {
+      "model": "deepseek-v4.1-flash",
+      "status": "completed",
+      "active": false
+    }
+  ],
+  "passed": true
+}

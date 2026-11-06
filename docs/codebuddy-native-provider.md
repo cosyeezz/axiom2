@@ -17,8 +17,10 @@
 
 - 当前CLI兼容基准2.179.0；默认UA为`CLI/2.179.0 CodeBuddy/2.179.0`，IDE标识为CLI。此项不保证整个请求不含Axiom：调用方提示词、历史及工具内容不会被删改。
 - 推理固定CN目标，使用原生Node HTTP(S)，校验TLS；不自动redirect/retry。认证和目录使用Fetch。
-- 固定验收模型`deepseek-v4.1-flash`，off映射`reasoning_effort: none`。不静默换模型或降低调用方安全设置。
+- 当前正式验收模型`glm-5.3`与`deepseek-v4.1-flash`，覆盖off/high；off映射`reasoning_effort: none`。不静默换模型或降低调用方安全设置。
 - SSE成功必须有合法stop/tool_calls、DONE及干净EOF。null/明确安全空legacy占位、空非终态finish可兼容；已严格验证工具的后继空name表示无增量，首次空名、改名、变ID和坏type仍拒绝。
+- CN product-gateway保留图片工具结果的tool角色、call ID与image_url块，不使用custom-model图片hoist；见[2.179.0静态依据](evidence/codebuddy-repair-20261106-01/CLI-STATIC.md)。
+- 额外SDK headers不透传；Pi宿主session/run仅作RAM映射键，独立生成CLI形状UUIDv7（session带横线，run/invocation32hex）。映射在provider runtime内稳定、dispose/invalidate清理，不提供官方跨进程恢复等价。
 - 全部工具参数严格schema校验、无coercion，完整成功后才交宿主审批和执行。组件不直接运行工具。
 - 不支持的签名、namespace、强制grammar等明确拒绝；不以删除上下文或伪造权限换取成功。
 
@@ -28,4 +30,6 @@
 
 此前限定独立SDK实测完成2语义轮、3次模型HTTP200、1次工具/宿主审批钩子、工具后精确输出及下一轮续接，三次DONE+干净EOF。官方CLI真实文本成功，但官方观察实验未全部验收通过；失败历史不转为成功。双方成功场景的system/prompt/工具/输出预算不同，不能称同输入或完整wire/TLS等价。
 
-此提交不部署、重启或验证常驻worker/UI已加载。真实refresh未触发；其它模型/配置、官方完整重试及keepalive行为不在已验范围。历史实验原始目录未随代码整批纳入；不得因提交而重跑已耗尽的live claim。
+上述早期SDK03范围不包括部署或常驻worker/UI。当前国内版图片/身份/header修复见[2026-11-06报告](evidence/codebuddy-repair-20261106-01/REPORT.md)：100项离线回归、构建及正式加载通过；两模型正式UI各8项通过，覆盖多轮文本/思考、真实工具及错误恢复、图片工具结果和历史、流式取消与恢复。两模型默认已恢复，另以不发模型请求的UI复核确认刷新后所检查内容可见。源码、构建、独立SDK、本机sender、正式服务与UI分列，不继承旧验收；本轮独立SDK真实上游未重跑。
+
+真实refresh、官方完整重试、keepalive与恢复行为仍不在本轮完整对齐范围。历史实验原始目录未随代码整批纳入；不得重跑已耗尽的live claim。

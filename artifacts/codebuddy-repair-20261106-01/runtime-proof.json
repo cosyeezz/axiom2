@@ -1,0 +1,64 @@
+{
+  "frozenAt": 1793956377446,
+  "modules": [
+    {
+      "path": "app/dist/server/agent-worker.js",
+      "sha256": "6311623b8fd91ad303788b65157cbbcdadbf80f796df9aff7e71eb63908f5ab1",
+      "mtimeMs": 1793956338228.7532
+    },
+    {
+      "path": "app/dist/native-providers/codebuddy/request.js",
+      "sha256": "c0b7eb43538b64237dc3c60a4f1467d6ad67b6604e47601f9025b2208c301d38",
+      "mtimeMs": 1793956338049.0935
+    },
+    {
+      "path": "app/dist/native-providers/codebuddy/ids.js",
+      "sha256": "6444866706898b685db8a8cf0bf95951d25c2654d2c46382ec1217209c8d938f",
+      "mtimeMs": 1793956338043.1814
+    },
+    {
+      "path": "app/dist/native-providers/codebuddy/client.js",
+      "sha256": "21200590b09c9aee02eab3b1a1b92f1a03953418be091f20e277bbcf9896e475",
+      "mtimeMs": 1793956338055.8772
+    },
+    {
+      "path": "app/dist/native-providers/codebuddy/http.js",
+      "sha256": "95e1cc3ce356532565bae8d53d2f91c4937f19d27515855c6a59eac931bf5566",
+      "mtimeMs": 1793956338042.4993
+    },
+    {
+      "path": "app/dist/server/providers/codebuddy-chat.js",
+      "sha256": "b5b8d8c654b80cf8935cfa549797d46858231945ddd39e33dda4f3bd45024bff",
+      "mtimeMs": 1793956338060.3525
+    }
+  ],
+  "supersedesFirstBuildForIdentityEvictionFix": true,
+  "verification": {
+    "at": 1793956511350,
+    "serverPid": 4787,
+    "modulesUnchanged": true,
+    "allWorkersFresh": true,
+    "workers": [
+      {
+        "pid": 4942,
+        "parent": 4787,
+        "startedAt": 1793956419000
+      },
+      {
+        "pid": 4943,
+        "parent": 4787,
+        "startedAt": 1793956420000
+      },
+      {
+        "pid": 5241,
+        "parent": 4787,
+        "startedAt": 1793956484000
+      },
+      {
+        "pid": 5350,
+        "parent": 4787,
+        "startedAt": 1793956501000
+      }
+    ]
+  }
+}

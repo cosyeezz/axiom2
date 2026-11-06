@@ -1,0 +1,11 @@
+{
+  "model": "glm-5.3",
+  "noModelRequests": true,
+  "passed": true,
+  "beforeRefreshAssistantCount": 4,
+  "afterRefreshAssistantCount": 4,
+  "recoveredAnswerVisible": true,
+  "rememberedCodeVisible": true,
+  "sessionSidebarSelected": true,
+  "modelSelectionVisible": true
+}

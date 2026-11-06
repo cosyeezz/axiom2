@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { codeBuddySessionId, codeBuddyUuid7 } from "./ids.js";
 import type { NativeContext, NativeInputContent, NativeModel, NativeStreamOptions, NativeThinkingLevel } from "../contracts.js";
 import { waitForNative } from "../abort.js";
 import { codeBuddyBaseUrl, codeBuddyHeaders } from "./identity.js";
@@ -29,15 +29,16 @@ function checkTemperature(value: unknown) {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 2) return fail();
 }
 
-function content(value: NativeInputContent, model: NativeModel, tool = false): unknown {
+function content(value: NativeInputContent, model: NativeModel): unknown {
   if (typeof value === "string") return value;
   if (!Array.isArray(value)) return fail();
   const blocks = value.map(part => {
     if (part.type === "text" && typeof part.text === "string") return { type: "text", text: part.text };
-    if (!tool && part.type === "image" && model.input.includes("image") && typeof part.data === "string" && /^(image\/(?:png|jpeg|gif|webp))$/.test(part.mimeType ?? "") &&
+    // CLI 2.179.0 normalizeMessageImages retains image_url blocks in product-gateway tool results.
+    if (part.type === "image" && model.input.includes("image") && typeof part.data === "string" && /^(image\/(?:png|jpeg|gif|webp))$/.test(part.mimeType ?? "") &&
       part.data.length > 0 && part.data.length <= 8 * 1024 * 1024 && /^[A-Za-z0-9+/]*={0,2}$/.test(part.data))
       return { type: "image_url", image_url: { url: `data:${part.mimeType};base64,${part.data}` } };
-    return fail(); // No silent image stripping or guessed image-result wire representation.
+    return fail(); // Never silently strip unsupported images.
   });
   return blocks.every(block => block.type === "text") ? blocks.map(block => block.text).join("\n") : blocks;
 }
@@ -55,7 +56,7 @@ export function codeBuddyMessages(model: NativeModel, context: NativeContext) {
     else if (message.role === "toolResult") {
       if (pending.get(message.toolCallId) !== message.toolName) return fail("tool");
       pending.delete(message.toolCallId);
-      messages.push({ role: "tool", tool_call_id: message.toolCallId, content: content(message.content, model, true) });
+      messages.push({ role: "tool", tool_call_id: message.toolCallId, content: content(message.content, model) });
     } else if (message.role === "assistant") {
       if (!Array.isArray(message.content)) return fail();
       const text: string[] = [], reasoning: string[] = [], calls: Record<string, unknown>[] = [];
@@ -136,7 +137,7 @@ export async function prepareCodeBuddyRequest(model: NativeModel, access: string
   if (Buffer.byteLength(serialized) > 10 * 1024 * 1024) return fail();
   const identity = options.identity ?? {};
   if (!codeBuddyObject(identity) || Object.keys(identity).some(key => !["invocationId", "rootRequestId", "parentSessionId", "agentType", "intent", "runtime", "purpose"].includes(key))) return fail("target");
-  const session = options.sessionId ?? randomUUID(), run = options.continuationId ?? randomUUID(), invocation = identity.invocationId ?? randomUUID().replaceAll("-", "");
+  const session = options.sessionId ?? codeBuddySessionId(), run = options.continuationId ?? codeBuddyUuid7(), invocation = identity.invocationId ?? codeBuddyUuid7();
   const fixed: Record<string, string> = { ...codeBuddyHeaders, Authorization: `Bearer ${access}`, Accept: "text/event-stream", "Content-Type": "application/json",
     "X-Conversation-ID": session, "X-Conversation-Request-ID": run, "X-Request-ID": invocation, "X-Conversation-Message-ID": invocation };
   for (const id of [session, run, invocation]) if (!identifier(id)) return fail("target");
@@ -149,7 +150,9 @@ export async function prepareCodeBuddyRequest(model: NativeModel, access: string
     if (supplied.has(lower)) return fail("target"); supplied.add(lower);
     const protectedHeader = headers.has(key) || /^(?:authorization|proxy-authorization|host|cookie|content-length|transfer-encoding|connection|user-agent|x-(?:conversation|request|root|parent|agent|ide|product|domain|user|enterprise|department|codebuddy))/.test(lower);
     if (protectedHeader) { if (value !== headers.get(key)) return fail("target"); continue; }
-    if (value !== null) headers.set(key, value);
+    // Only CLI-evidenced fields generated above may reach the wire. SDK tracing,
+    // host branding and arbitrary caller x-* headers are not protocol extensions.
+    // Existing protected fields still reject conflicting values rather than overriding auth.
   }
   return { url: `${codeBuddyBaseUrl}/chat/completions`, body: serialized, headers, seenCalls, tools: structuredClone(definitions), toolChoice: body.tool_choice, invocation, run, session };
 }

@@ -23,20 +23,27 @@ test("real Agent and ModelRuntime keep native sender, tool execution, history, r
   const keys = ["no_proxy", "AXIOM_EXECUTION_PROFILE", "AXIOM_MODEL_ACCOUNT_BINDINGS", "AXIOM_MODEL_MANAGED_ACCOUNTS"], saved = keys.map(key => process.env[key]);
   keys.forEach(key => delete process.env[key]); process.env.no_proxy = "*";
   globalThis.fetch = async () => { throw Error("Unexpected generic Fetch"); };
-  const tracker = new ProviderRequestTracker(), requests: { body: any; run: string; invocation: string }[] = [], serverErrors: unknown[] = [];
+  const tracker = new ProviderRequestTracker(), requests: { body: any; session: string; run: string; invocation: string }[] = [], serverErrors: unknown[] = [];
   let toolCalls = 0, responses = 0, approvals = 0, cancelledBodyClosed = false, pendingCancel: http.ServerResponse | undefined;
   const server = http.createServer(async (req, res) => {
     try {
       assert.equal(req.url, "/v2/chat/completions"); assert.equal(req.method, "POST"); assert.equal(req.httpVersion, "1.1");
       assert.equal(req.headers["user-agent"], codeBuddyHeaders["User-Agent"]); assert.equal(req.headers.authorization, "Bearer SYNTHETIC");
       assert.equal(req.headers.connection, "close"); assert.equal(tracker.snapshot().providers[0].current, 1);
+      assert.deepEqual(Object.keys(req.headers).sort(), [...Object.keys(codeBuddyHeaders).map(key => key.toLowerCase()),
+        "authorization", "accept", "content-type", "x-conversation-id", "x-conversation-request-id", "x-request-id", "x-conversation-message-id",
+        "host", "content-length", "connection"].sort());
       const chunks: Buffer[] = []; for await (const chunk of req) chunks.push(Buffer.from(chunk));
       const bytes = Buffer.concat(chunks); assert.equal(Number(req.headers["content-length"]), bytes.length);
       const body = JSON.parse(bytes.toString()); assert.equal(body.model, "deepseek-v4.1-flash"); assert.equal(body.reasoning_effort, "none");
-      assert.equal(req.headers["x-conversation-id"], "owned-session");
+      for (const key of Object.keys(body)) assert.ok(["model", "messages", "stream", "stream_options", "tools", "reasoning_effort", "max_tokens", "temperature", "top_p"].includes(key));
+      assert.match(String(req.headers["x-conversation-id"]), /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      assert.notEqual(req.headers["x-conversation-id"], "owned-session");
+      assert.equal(req.headers["x-axiom-session"], undefined);
+      assert.equal(req.headers["traceparent"], undefined);
       assert.ok(body.messages.some((message: any) => message.role === "system" && message.content.includes("CALLER_POLICY")));
       assert.equal(body.tools[0].function.parameters.properties.path.type, "string");
-      requests.push({ body, run: String(req.headers["x-conversation-request-id"]), invocation: String(req.headers["x-request-id"]) });
+      requests.push({ body, session: String(req.headers["x-conversation-id"]), run: String(req.headers["x-conversation-request-id"]), invocation: String(req.headers["x-request-id"]) });
       res.writeHead(200, { "content-type": "text/event-stream" });
       const choice = (delta: unknown, finish_reason: string | null) => `data: ${JSON.stringify({ model: body.model, choices: [{ index: 0, delta, finish_reason }] })}\n\n`;
       if (requests.length === 1) res.end(choice({ tool_calls: [{ index: 0, id: "owned-call", type: "function", function: { name: "read_fixture", arguments: '{"path":"fixture.txt"}' } }] }, "tool_calls") + "data: [DONE]\n\n");
@@ -67,10 +74,17 @@ test("real Agent and ModelRuntime keep native sender, tool execution, history, r
       tools: [{ name: "read_fixture", label: "Read owned fixture", description: "Read fixture", parameters: Type.Object({ path: Type.String() }),
         execute: async (_id, params) => { toolCalls++; assert.ok(params && typeof params === "object" && "path" in params); assert.equal(params.path, "fixture.txt"); return { content: [{ type: "text", text: "OWNED_TOOL_RESULT" }], details: {} }; } }] },
       beforeToolCall: async () => { approvals++; return undefined; },
-      streamFn: (m, c, o) => wrapped(m, c, withCodeBuddyRunIdentity(m, { ...o, maxRetries: 0, maxTokens: 64, timeoutMs: 3000, onResponse: () => { responses++; } }, { sessionId: "owned-session", continuationId })) });
+      streamFn: (m, c, o) => wrapped(m, c, withCodeBuddyRunIdentity(m, { ...o, maxRetries: 0, maxTokens: 64, timeoutMs: 3000, headers: { "x-axiom-session": "owned-session", traceparent: "private-trace" }, onResponse: () => { responses++; } }, { sessionId: "owned-session", continuationId })) });
     await agent.prompt("ASK_READ"); assert.equal(agent.state.errorMessage, undefined); assert.equal(toolCalls, 1); assert.equal(approvals, 1);
     continuationId = "second-run"; await agent.prompt("ASK_NEXT"); assert.equal(agent.state.errorMessage, undefined);
-    assert.equal(requests.length, 3); assert.deepEqual(requests.map(request => request.run), ["first-run", "first-run", "second-run"]);
+    assert.equal(requests.length, 3);
+    assert.equal(new Set(requests.map(request => request.session)).size, 1);
+    assert.equal(requests[0].run, requests[1].run);
+    assert.notEqual(requests[1].run, requests[2].run);
+    for (const request of requests) {
+      for (const id of [request.session.replaceAll("-", ""), request.run, request.invocation]) assert.match(id, /^[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$/);
+      assert.ok(!["first-run", "second-run", "owned-session"].includes(request.run));
+    }
     assert.equal(new Set(requests.map(request => request.invocation)).size, 3);
     const history = requests[2].body.messages;
     assert.ok(history.some((message: any) => message.role === "assistant" && message.tool_calls?.[0].id === "owned-call"));

@@ -5,7 +5,8 @@ import { createCodeBuddyClient } from "../../native-providers/codebuddy/client.j
 import { CodeBuddyProtocolError } from "../../native-providers/codebuddy/failure.js";
 import { validCodeBuddyToken } from "../../native-providers/codebuddy/json.js";
 import { codeBuddyBaseUrl, codeBuddyId } from "../../native-providers/codebuddy/identity.js";
-import type { CodeBuddyStreamOptions, CodeBuddyIdentity } from "../../native-providers/codebuddy/request.js";
+import { createCodeBuddyIdentityScope } from "../../native-providers/codebuddy/ids.js";
+import type { CodeBuddyStreamOptions } from "../../native-providers/codebuddy/request.js";
 import type { NativeContext, NativeModel } from "../../native-providers/contracts.js";
 
 import { CODEBUDDY_CONTINUATION_METADATA, CODEBUDDY_IDENTITY_METADATA } from "../codebuddy-run-identity.js";
@@ -19,6 +20,7 @@ export function assertCodeBuddyChatModel(model: Model<Api>) {
 /** Pi boundary only; no protocol serializer, network retry or tool execution lives here. */
 export function codeBuddyChat(auth: ProviderAuth, transport?: typeof fetch) {
   let client = createCodeBuddyClient(transport);
+  const identities = createCodeBuddyIdentityScope();
   let disposed = false;
   const tickets = new Map<string, { access: string; expires: number }>();
   const issue = (access: string, expires = Infinity) => {
@@ -102,9 +104,14 @@ export function codeBuddyChat(auth: ProviderAuth, transport?: typeof fetch) {
         const maxTokens = sampling.max_tokens;
         if (options.maxTokens !== undefined && typeof maxTokens === "number" && maxTokens > options.maxTokens) throw new CodeBuddyProtocolError("request");
         delete sampling.temperature; delete sampling.max_tokens;
-        const nativeOptions: CodeBuddyStreamOptions = { signal: options.signal, timeoutMs: options.timeoutMs, sessionId: options.sessionId,
-          continuationId: options.metadata?.[CODEBUDDY_CONTINUATION_METADATA] as string | undefined,
-          identity: options.metadata?.[CODEBUDDY_IDENTITY_METADATA] as CodeBuddyIdentity | undefined,
+        const run = options.metadata?.[CODEBUDDY_CONTINUATION_METADATA];
+        // Host session/run values are local lookup keys, never protocol identities.
+        // No arbitrary host metadata may populate CLI identity/agent/runtime headers.
+        if (options.metadata?.[CODEBUDDY_IDENTITY_METADATA] !== undefined ||
+          options.sessionId !== undefined && (typeof options.sessionId !== "string" || !options.sessionId) ||
+          run !== undefined && (typeof run !== "string" || !run)) throw new CodeBuddyProtocolError("request");
+        const ownedIdentity = identities.resolve(options.sessionId, run as string | undefined);
+        const nativeOptions: CodeBuddyStreamOptions = { signal: options.signal, timeoutMs: options.timeoutMs, ...ownedIdentity,
           headers: options.headers, fetch: options.fetch, reasoning,
           temperature, maxTokens, samplingParams: sampling,
           toolChoice: advanced.toolChoice, thinkingBudgets: advanced.thinkingBudgets,
@@ -151,7 +158,7 @@ export function codeBuddyChat(auth: ProviderAuth, transport?: typeof fetch) {
     return output;
   }
   return { auth: wrappedAuth, stream, consumeAccess,
-    invalidate() { tickets.clear(); client.dispose(); if (!disposed) client = createCodeBuddyClient(transport); },
-    dispose() { disposed = true; tickets.clear(); client.dispose(); } };
+    invalidate() { tickets.clear(); identities.clear(); client.dispose(); if (!disposed) client = createCodeBuddyClient(transport); },
+    dispose() { disposed = true; tickets.clear(); identities.clear(); client.dispose(); } };
 
 }

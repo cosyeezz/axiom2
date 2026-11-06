@@ -111,8 +111,9 @@ test("observer binds native transport identity and retains run identity without 
         assert.equal(providerRequestDefaultTransport(f.runtime, model), codeBuddyNativeFetch);
         // This test verifies registry/observer wiring; actual Node sender is separately loopback-tested.
         return async (_url, init) => { sent++; assert.equal(tracker.snapshot().providers[0].current, 1);
-          const headers = new Headers(init?.headers); assert.equal(headers.get("x-conversation-id"), "session");
-          assert.equal(headers.get("x-conversation-request-id"), "run"); return result(); };
+          const headers = new Headers(init?.headers);
+          assert.match(headers.get("x-conversation-id")!, /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+          assert.match(headers.get("x-conversation-request-id")!, /^[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$/); return result(); };
       });
     const response = await wrapped(f.model, context, withCodeBuddyRunIdentity(f.model, { sessionId: "session" }, { sessionId: "session", continuationId: "run" })).result();
     assert.equal(response.stopReason, "stop", response.errorMessage); assert.equal(sent, 1);
