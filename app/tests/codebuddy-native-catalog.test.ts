@@ -37,6 +37,26 @@ test("invalid catalog cannot publish partial metadata or coercible limits", () =
     assert.throws(() => parseCodeBuddyConfiguration(value));
 });
 
+test("non-chat catalog entries without limits are skipped instead of failing every model", () => {
+  // Real /v3/config lists image/video generation entries with no token limits. Pi requires
+  // both limits, so one such entry must not deny the whole account catalog.
+  const parsed = parseCodeBuddyConfiguration({ models: [
+    { id: "deepseek-v4.1-flash", maxInputTokens: 1000000, maxOutputTokens: 128000, supportsImages: true, supportsReasoning: true },
+    { id: "hunyuan-image-alpha", name: "Hunyuan Image" },
+    { id: "kling-video-v3", name: "Kling Video" },
+    { id: "minimax-video-h3", name: "MiniMax Video" },
+  ] });
+  const ids = parsed.map(model => model.id);
+  assert.ok(ids.includes("deepseek-v4.1-flash"));
+  for (const dropped of ["hunyuan-image-alpha", "kling-video-v3", "minimax-video-h3"]) assert.ok(!ids.includes(dropped));
+  // Baseline entries keep their known limits, so they are never dropped.
+  assert.equal(parsed.length, codeBuddyBuiltinModels().length);
+  // A model that only lacks one limit is skipped too, and a bad limit value still fails closed.
+  const half = parseCodeBuddyConfiguration({ models: [{ id: "half", maxInputTokens: 32000 }] }).map(model => model.id);
+  assert.ok(!half.includes("half"));
+  assert.throws(() => parseCodeBuddyConfiguration({ models: [{ id: "bad", maxInputTokens: 0, maxOutputTokens: 10 }] }));
+});
+
 test("directory request uses fixed authenticated CN URL with no repository payload or redirects", async () => {
   let calls = 0;
   const result = await fetchCodeBuddyCatalog("FIXTURE", signal(), async (input, init) => {

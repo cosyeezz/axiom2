@@ -89,7 +89,9 @@ export function codeBuddyChat(auth: ProviderAuth, transport?: typeof fetch) {
           if (block.type === "toolCall" && (block.namespace !== undefined || block.argumentsError !== undefined) || block.type === "thinking" && block.redacted)
             throw new CodeBuddyProtocolError("request");
         }
-        if (options.cacheRetention !== undefined || options.transport !== undefined && options.transport !== "sse" && options.transport !== "auto" || options.websocketConnectTimeoutMs !== undefined)
+        // Pi's cacheRetention is a host-level policy knob without CLI evidence here; the native
+        // serializer now owns the CLI-evidenced cache_retention value, so it is not caller-input.
+        if (options.transport !== undefined && options.transport !== "sse" && options.transport !== "auto" || options.websocketConnectTimeoutMs !== undefined)
           throw new CodeBuddyProtocolError("request");
         const context: NativeContext = { systemPrompt: getCurrentSystemPrompt(collapsed.messages), tools: declarations, messages: collapsed.messages.filter(item => item.role !== "system") };
         const nativeModel: NativeModel = { id: model.id, name: model.name, contextWindow: model.contextWindow, maxOutputTokens: model.maxTokens,

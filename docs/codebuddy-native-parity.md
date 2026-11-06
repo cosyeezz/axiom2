@@ -1,8 +1,14 @@
-# CodeBuddy 2.179.0：原生组件与真实对照
+# CodeBuddy：原生组件与真实对照
 
 ## 结论
 
 已完成独立原生核心、Pi薄适配及 **`codebuddy-cn / deepseek-v4.1-flash / off` 的真实SDK工具与下一轮闭环**。官方CLI也已真实执行并返回精确文本；两侧指定模型/off/默认UA及流字段已有实际对照。
+
+2026-11-06 又用 **官方 CLI 2.181.0 + mitmproxy 真实抓包** 重新对照了同条件请求，发现并修复了 7 处 wire 偏差（`accept`、四个 `X-Agent-*`、`X-Root-Request-ID`、`cache_retention` 取值、`temperature`）。修复后两侧 header 名集合与 body 字段集合已一致，仅剩 CLI 自身追踪/账号字段、gzip、keep-alive 与 `extra_vars`。见[真实 wire 对照](evidence/codebuddy-cli-wire-20261106-01/REPORT.md)。
+
+2026-11-07 已用未限流新账号（Axiom account `wbcn`）完成**两侧真实成功对比**：官方 CLI exit 0 且输出精确 marker；Axiom `start → text → usage → done(stop)`，均 HTTP 200 与完整 SSE。
+
+同一轮还修复了模型目录拉取失败：真实 `/v3/config` 含 4 个无 token 限制的图像/视频生成条目，它们曾导致整个目录刷新报「OAuth 模型目录刷新未完成」。现在这类非聊天条目被跳过，目录从 11 个扩展到 37 个。
 
 这不是完全等价证明：官方与SDK最终成功场景的system/prompt/工具/输出预算不同；官方观察case仍保留失败状态。没有部署、重启或UI验收，不声称服务端不可区分。
 

@@ -32,11 +32,17 @@ test("real Agent and ModelRuntime keep native sender, tool execution, history, r
       assert.equal(req.headers.connection, "close"); assert.equal(tracker.snapshot().providers[0].current, 1);
       assert.deepEqual(Object.keys(req.headers).sort(), [...Object.keys(codeBuddyHeaders).map(key => key.toLowerCase()),
         "authorization", "accept", "content-type", "x-conversation-id", "x-conversation-request-id", "x-request-id", "x-conversation-message-id",
+        "x-root-request-id", "x-agent-type", "x-agent-intent", "x-agent-runtime", "x-agent-purpose",
         "host", "content-length", "connection"].sort());
+      assert.equal(req.headers.accept, "application/json");
+      assert.equal(req.headers["x-root-request-id"], req.headers["x-conversation-request-id"]);
+      assert.equal(req.headers["x-agent-type"], "main"); assert.equal(req.headers["x-agent-intent"], "craft");
+      assert.equal(req.headers["x-agent-runtime"], "other"); assert.equal(req.headers["x-agent-purpose"], "conversation");
       const chunks: Buffer[] = []; for await (const chunk of req) chunks.push(Buffer.from(chunk));
       const bytes = Buffer.concat(chunks); assert.equal(Number(req.headers["content-length"]), bytes.length);
       const body = JSON.parse(bytes.toString()); assert.equal(body.model, "deepseek-v4.1-flash"); assert.equal(body.reasoning_effort, "none");
-      for (const key of Object.keys(body)) assert.ok(["model", "messages", "stream", "stream_options", "tools", "reasoning_effort", "max_tokens", "temperature", "top_p"].includes(key));
+      assert.equal(body.cache_retention, "long");
+      for (const key of Object.keys(body)) assert.ok(["model", "messages", "stream", "stream_options", "tools", "reasoning_effort", "max_tokens", "temperature", "top_p", "cache_retention"].includes(key));
       assert.match(String(req.headers["x-conversation-id"]), /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
       assert.notEqual(req.headers["x-conversation-id"], "owned-session");
       assert.equal(req.headers["x-axiom-session"], undefined);

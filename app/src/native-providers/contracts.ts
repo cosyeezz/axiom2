@@ -111,6 +111,8 @@ export interface NativeStreamOptions {
   temperature?: unknown;
   maxTokens?: unknown;
   samplingParams?: unknown;
+  /** Explicit prompt-cache retention; omitted means the CLI default for this client. */
+  cacheRetention?: "short" | "long";
   onPayload?(payload: unknown): unknown | Promise<unknown>;
   onResponse?(response: { status: number; headers: Record<string, string> }): void | Promise<void>;
   onProviderEvent?(event: unknown): void | Promise<void>;

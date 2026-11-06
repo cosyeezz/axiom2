@@ -101,7 +101,14 @@ export async function prepareCodeBuddyRequest(model: NativeModel, access: string
     if (!mapped) return fail("thinking");
     effort = mapped;
   } else if (model.thinking.levels?.off) effort = "none";
+  // CLI resolveCacheRetention: an explicit value wins; otherwise the 1H-cache disable switch
+  // selects "short", and the default is "long". Latched per session by the CLI.
+  const disableLongCache = options.cacheRetention === undefined && (() => {
+    const raw = process.env.CODEBUDDY_DISABLE_PROMPT_CACHING_1H ?? process.env.CODEBUDDY_CN_DISABLE_PROMPT_CACHING_1H;
+    return typeof raw === "string" && ["1", "true", "yes"].includes(raw.trim().toLowerCase());
+  })();
   const body: Record<string, unknown> = { model: model.id, messages, stream: true, stream_options: { include_usage: true },
+    cache_retention: options.cacheRetention ?? (disableLongCache ? "short" : "long"),
     ...(tools.length ? { tools } : {}), ...(effort ? { reasoning_effort: effort, ...(effort !== "none" ? { reasoning_summary: "auto" } : {}) } : {}) };
   if (options.toolChoice !== undefined) {
     const choice = options.toolChoice, object = codeBuddyObject(choice), fn = codeBuddyObject(object?.function);
@@ -114,18 +121,19 @@ export async function prepareCodeBuddyRequest(model: NativeModel, access: string
     if (!Number.isSafeInteger(max) || (max as number) <= 0 || model.maxOutputTokens !== undefined && (max as number) > model.maxOutputTokens) return fail();
     body.max_tokens = max;
   }
-  if (options.temperature !== undefined) {
-    checkTemperature(options.temperature);
-    body.temperature = options.temperature;
-  }
+  // CLI sends temperature 1 on every chat-completions call; caller value overrides.
+  if (options.temperature !== undefined) checkTemperature(options.temperature);
   if (options.samplingParams !== undefined) {
     const sampling = codeBuddyObject(options.samplingParams);
     if (!sampling) return fail();
     for (const [key, value] of Object.entries(sampling)) {
+      // Temperature has one channel only; a duplicate source is rejected, not merged.
+      if (key === "temperature") return fail("target");
       checkSampling(key, value); body[key] = value;
     }
   }
-  const protectedValues = JSON.stringify([body.model, body.messages, body.tools, body.stream, body.stream_options, body.reasoning_effort, body.reasoning_summary, body.tool_choice]);
+  body.temperature = options.temperature ?? 1;
+  const protectedValues = JSON.stringify([body.model, body.messages, body.tools, body.stream, body.stream_options, body.reasoning_effort, body.reasoning_summary, body.tool_choice, body.cache_retention]);
   const replacement = await waitForNative(options.onPayload?.(body), signal);
   signal.throwIfAborted();
   const payload = replacement === undefined ? body : codeBuddyObject(replacement);
@@ -133,9 +141,9 @@ export async function prepareCodeBuddyRequest(model: NativeModel, access: string
   try { serialized = JSON.stringify(payload); final = codeBuddyObject(JSON.parse(serialized)); }
   catch { return fail("target"); }
   // Validate the actual serialized bytes, not objects with getters/toJSON supplied by a hook.
-  if (!final || JSON.stringify([final.model, final.messages, final.tools, final.stream, final.stream_options, final.reasoning_effort, final.reasoning_summary, final.tool_choice]) !== protectedValues ||
+  if (!final || JSON.stringify([final.model, final.messages, final.tools, final.stream, final.stream_options, final.reasoning_effort, final.reasoning_summary, final.tool_choice, final.cache_retention]) !== protectedValues ||
       final.n !== undefined && final.n !== 1 || final.store !== undefined && final.store !== false ||
-      Object.keys(final).some(key => !["model", "messages", "tools", "stream", "stream_options", "reasoning_effort", "reasoning_summary", "tool_choice", "max_tokens", "temperature", "n", "store", ...samplingKeys].includes(key))) return fail("target");
+      Object.keys(final).some(key => !["model", "messages", "tools", "stream", "stream_options", "reasoning_effort", "reasoning_summary", "tool_choice", "cache_retention", "max_tokens", "temperature", "n", "store", ...samplingKeys].includes(key))) return fail("target");
   if (max !== undefined && final.max_tokens === undefined || final.max_tokens !== undefined && (!Number.isSafeInteger(final.max_tokens) || (final.max_tokens as number) <= 0 || max !== undefined && (final.max_tokens as number) > (max as number))) return fail();
   if (final.temperature !== undefined) checkTemperature(final.temperature);
   for (const key of samplingKeys) if (Object.hasOwn(final, key)) checkSampling(key, final[key]);
@@ -143,8 +151,11 @@ export async function prepareCodeBuddyRequest(model: NativeModel, access: string
   const identity = options.identity ?? {};
   if (!codeBuddyObject(identity) || Object.keys(identity).some(key => !["invocationId", "rootRequestId", "parentSessionId", "agentType", "intent", "runtime", "purpose"].includes(key))) return fail("target");
   const session = options.sessionId ?? codeBuddySessionId(), run = options.continuationId ?? codeBuddyUuid7(), invocation = identity.invocationId ?? codeBuddyUuid7();
-  const fixed: Record<string, string> = { ...codeBuddyHeaders, Authorization: `Bearer ${access}`, Accept: "text/event-stream", "Content-Type": "application/json",
-    "X-Conversation-ID": session, "X-Conversation-Request-ID": run, "X-Request-ID": invocation, "X-Conversation-Message-ID": invocation };
+  // CLI buildConversationHeaders always emits these for a main conversation call; explicit
+  // identity still overrides. Values are CLI defaults, not fabricated account attributes.
+  const fixed: Record<string, string> = { ...codeBuddyHeaders, Authorization: `Bearer ${access}`, Accept: "application/json", "Content-Type": "application/json",
+    "X-Conversation-ID": session, "X-Conversation-Request-ID": run, "X-Request-ID": invocation, "X-Conversation-Message-ID": invocation,
+    "X-Root-Request-ID": run, "X-Agent-Type": "main", "X-Agent-Intent": "craft", "X-Agent-Runtime": "other", "X-Agent-Purpose": "conversation" };
   for (const id of [session, run, invocation]) if (!identifier(id)) return fail("target");
   for (const [field, header] of [["rootRequestId", "X-Root-Request-ID"], ["parentSessionId", "X-Parent-Conversation-ID"], ["agentType", "X-Agent-Type"], ["intent", "X-Agent-Intent"], ["runtime", "X-Agent-Runtime"], ["purpose", "X-Agent-Purpose"]] as const) {
     const value = identity[field]; if (value !== undefined) { if (!identifier(value)) return fail("target"); fixed[header] = value; }

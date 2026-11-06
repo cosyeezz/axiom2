@@ -33,7 +33,9 @@ test("native request keeps caller policy and off, emits distinct trusted identit
     assert.equal(headers.get("user-agent"), "CLI/2.179.0 CodeBuddy/2.179.0"); assert.equal(headers.get("authorization"), "Bearer FIXTURE");
     assert.equal(headers.get("x-conversation-id"), "session-fixture"); assert.equal(headers.get("x-conversation-request-id"), "run-fixture");
     assert.equal(headers.get("x-request-id"), "invocation-fixture"); assert.equal(headers.get("x-conversation-message-id"), "invocation-fixture");
-    assert.equal(headers.get("x-agent-runtime"), null); assert.equal(init?.redirect, "error");
+    assert.equal(headers.get("x-agent-runtime"), "other"); assert.equal(headers.get("x-agent-type"), "main");
+    assert.equal(headers.get("x-root-request-id"), "run-fixture"); assert.equal(headers.get("accept"), "application/json");
+    assert.equal(body.cache_retention, "long"); assert.equal(init?.redirect, "error");
     return sse([chunk({ reasoning_content: "Do not hide noncompliance.", content: "完成", tool_calls: [] }, "stop"),
       { choices: [], usage: { prompt_tokens: 100, completion_tokens: 12, total_tokens: 112, prompt_tokens_details: { cached_tokens: 20 } } }]);
   }, { options: { reasoning: "off", validateToolInput: validate, sessionId: "session-fixture", continuationId: "run-fixture", identity: { invocationId: "invocation-fixture" },

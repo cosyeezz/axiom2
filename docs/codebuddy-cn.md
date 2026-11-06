@@ -16,6 +16,10 @@ Axiom 内置 `codebuddy-cn` 供应商，直接调用 `https://copilot.tencent.co
 
 目录按模型声明可用的思考等级，例如 GLM-5.2 使用 high/xhigh，DeepSeek-V4-Pro 使用 low/high/xhigh，DeepSeek-V4.1-Flash 使用 low/high/max。
 
+请求头与体已按官方 CLI 2.181.0 真实抓包对齐：`Accept: application/json`、`X-Agent-Type/Intent/Runtime/Purpose`（`main`/`craft`/`other`/`conversation`）、`X-Root-Request-ID` 等于逻辑 run 头、body 含 `cache_retention`（默认 `long`，`CODEBUDDY_DISABLE_PROMPT_CACHING_1H` 为真时 `short`）与默认 `temperature: 1`。CLI 额外发送的 OTel/B3 追踪头、Stainless SDK 元数据、`X-User-Id`/`X-Domain`/`X-Private-Data` 和 `extra_vars` 不伪造、也不透传。gzip、keep-alive 与 CLI 重试仍未实现，属已知差异。详见 [wire 对照](evidence/codebuddy-cli-wire-20261106-01/REPORT.md)。
+
+模型目录从 `/v3/config` 实时拉取（UI「重新拉取」走 `configuration.catalog`）。真实账号返回 37 个条目，其中 4 个是图像/视频生成模型，没有 token 限制；这些非聊天条目会被跳过而不是让整个目录刷新失败。缺 `maxInputTokens` 或 `maxOutputTokens` 的条目无法表示为聊天模型，因此不进入目录；非法限制值仍会拒绝整个配置。
+
 调用复用 pi 的 OpenAI Completions 流解析，支持文本、思考内容、工具调用、工具结果和 usage。请求强制流式；开启思考时附加 `reasoning_summary: auto`。可关闭模型的 off 经 pi 映射为显式 `reasoning_effort: "none"` 并省略 summary，不再删除关闭信号；若上游仍返回 thinking，会如实保留而不是隐藏。此修复源于真实 GLM/off 仍出现 thinking 的反例，已验范围与失败记录见[真实长会话验证报告](codebuddy-e2e-validation.md)，不保证所有模型或后续所有请求一致。目录标注不能关闭的模型不提供关闭选项。
 
 Axiom 完整保留系统提示和工具约束。参考实现有替换 agent 系统提示的兼容策略，本实现未采用。若上游拒绝某类提示，会报告错误，不会悄悄删改提示重试。提前撤销的令牌导致 401/403 时会提示重新登录；自动刷新以令牌到期时间为依据。

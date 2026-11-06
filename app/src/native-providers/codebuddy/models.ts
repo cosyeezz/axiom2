@@ -82,6 +82,10 @@ export function parseCodeBuddyConfiguration(configuration: unknown, baseline: re
           model.thinking = { supported: true, levels };
         } else model.thinking.supported = true;
       }
+      // Pi needs both limits to represent a chat model: a usable output cap and a context
+      // window for accounting. Entries without them are non-chat assets (image/video
+      // generation), so they are skipped instead of failing the whole catalog refresh.
+      if (!model.contextWindow || !model.maxOutputTokens) continue;
       result.set(model.id, model);
     }
   }
