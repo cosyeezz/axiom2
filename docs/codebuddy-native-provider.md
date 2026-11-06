@@ -22,7 +22,8 @@
 - CN product-gateway保留图片工具结果的tool角色、call ID与image_url块，不使用custom-model图片hoist；见[2.179.0静态依据](evidence/codebuddy-repair-20261106-01/CLI-STATIC.md)。
 - 额外SDK headers不透传；Pi宿主session/run仅作RAM映射键，独立生成CLI形状UUIDv7（session带横线，run/invocation32hex）。映射在provider runtime内稳定、dispose/invalidate清理，不提供官方跨进程恢复等价。
 - 全部工具参数严格schema校验、无coercion，完整成功后才交宿主审批和执行。组件不直接运行工具。
-- 不支持的签名、namespace、强制grammar等明确拒绝；不以删除上下文或伪造权限换取成功。
+- 跨模型历史仅投影可读thinking为`reasoning_content`，不回放`thinkingSignature`等私有状态；可读回答/system/tools不删改，空thinking和完全空assistant按CLI省略。工具历史保留SDK的`call_id|item_id`原值并严格配对，不套用Responses专用ID规范化，header身份校验不放宽；见[CLI历史投影依据](evidence/codebuddy-cross-model-20261106-01/CLI-SLICES.md)。
+- 不支持的redacted思考、namespace、强制grammar等明确拒绝；不以删除真实上下文、合成工具结果或伪造权限换取成功。
 
 ## 验证与范围
 
@@ -30,6 +31,8 @@
 
 此前限定独立SDK实测完成2语义轮、3次模型HTTP200、1次工具/宿主审批钩子、工具后精确输出及下一轮续接，三次DONE+干净EOF。官方CLI真实文本成功，但官方观察实验未全部验收通过；失败历史不转为成功。双方成功场景的system/prompt/工具/输出预算不同，不能称同输入或完整wire/TLS等价。
 
-上述早期SDK03范围不包括部署或常驻worker/UI。当前国内版图片/身份/header修复见[2026-11-06报告](evidence/codebuddy-repair-20261106-01/REPORT.md)：100项离线回归、构建及正式加载通过；两模型正式UI各8项通过，覆盖多轮文本/思考、真实工具及错误恢复、图片工具结果和历史、流式取消与恢复。两模型默认已恢复，另以不发模型请求的UI复核确认刷新后所检查内容可见。源码、构建、独立SDK、本机sender、正式服务与UI分列，不继承旧验收；本轮独立SDK真实上游未重跑。
+上述早期SDK03范围不包括部署或常驻worker/UI。当前国内版图片/身份/header修复见[2026-11-06报告](evidence/codebuddy-repair-20261106-01/REPORT.md)：100项离线回归、构建及正式加载通过；两模型正式UI各8项通过，覆盖多轮文本/思考、真实工具及错误恢复、图片工具结果和历史、流式取消与恢复。两模型默认已恢复，另以不发模型请求的UI复核确认刷新后所检查内容可见。源码、构建、独立SDK、本机sender、正式服务与UI分列，不继承旧验收；该图片/身份验收未另行重跑独立SDK真实上游。
+
+随后修复OpenAI Responses历史切换到Workbuddy/DeepSeek/high的本地拒绝，见[跨模型续接报告](evidence/codebuddy-cross-model-20261106-01/REPORT.md)：106项离线闭包通过，变更fixture后仅复验相关11项及build通过；原失败实际116条上下文按Pi规范投影，仅RAM离线验证通过。单次独立生产SDK合成外源历史实发HTTP200/stop，可读思考、私有签名不出站、完整复合工具ID及正确回忆/计算均通过，无新工具执行或全局默认变更。正式4317已重启并核产物指纹/进程时序；这不是精确源模型UI切换或原116条上下文全量live验收，不能混同初轮16项UI结果。
 
 真实refresh、官方完整重试、keepalive与恢复行为仍不在本轮完整对齐范围。历史实验原始目录未随代码整批纳入；不得重跑已耗尽的live claim。

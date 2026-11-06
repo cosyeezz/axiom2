@@ -58,6 +58,13 @@ test("image support never strips unsupported or invalid images and retains tool 
   await assert.rejects(prepareCodeBuddyRequest(model, "FIXTURE", input, {}, signal));
 });
 
+test("composite tool ID support does not broaden protocol identity headers", async () => {
+  for (const options of [
+    { sessionId: "invalid|identity" }, { continuationId: "invalid|identity" },
+    { identity: { invocationId: "invalid|identity" } }, { identity: { rootRequestId: "invalid|identity" } },
+  ]) await assert.rejects(prepareCodeBuddyRequest(model, "FIXTURE", { messages: [{ role: "user", content: "Continue" }] }, options, signal));
+});
+
 test("caller identity and arbitrary SDK headers cannot expand the protocol header allowlist", async () => {
   const prepared = await prepareCodeBuddyRequest(model, "FIXTURE", { messages: [{ role: "user", content: "Axiom caller content stays." }] }, {
     headers: { "x-axiom-session": "local-id", "x-sdk-version": "pi", "traceparent": "local-trace", "Accept-Language": "private" },

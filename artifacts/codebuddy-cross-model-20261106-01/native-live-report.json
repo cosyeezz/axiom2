@@ -1,0 +1,17 @@
+{
+  "case": "01-native-foreign-history",
+  "model": "deepseek-v4.1-flash",
+  "thinking": "high",
+  "passed": false,
+  "payloadCallbacks": 0,
+  "responseCount": 0,
+  "textDeltas": 0,
+  "emittedToolCalls": 0,
+  "sourceHistorySynthetic": true,
+  "formalUi": false,
+  "settingsMutated": false,
+  "toolsExecuted": 0,
+  "category": "bounded-native-history-check-failed",
+  "gate": "sdk-initialize",
+  "ms": 0
+}

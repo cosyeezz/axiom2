@@ -16,6 +16,9 @@ export interface CodeBuddyIdentity {
 }
 export interface CodeBuddyStreamOptions extends NativeStreamOptions { identity?: CodeBuddyIdentity }
 const identifier = (value: unknown, max = 160): value is string => typeof value === "string" && value.length > 0 && value.length <= max && /^[a-zA-Z0-9_.:/-]+$/.test(value);
+// Chat-completions history preserves call IDs, including the SDK's call_id|item_id.
+// This content-only allowance must not broaden protocol identity/header validation.
+const callIdentifier = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= 160 && /^[a-zA-Z0-9_.:/|\-]+$/.test(value);
 const toolName = (value: unknown): value is string => typeof value === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(value);
 const fail = (code: ConstructorParameters<typeof CodeBuddyProtocolError>[0] = "request"): never => { throw new CodeBuddyProtocolError(code); };
 const samplingKeys = ["top_p", "frequency_penalty", "presence_penalty", "seed", "stop"];
@@ -62,14 +65,16 @@ export function codeBuddyMessages(model: NativeModel, context: NativeContext) {
       const text: string[] = [], reasoning: string[] = [], calls: Record<string, unknown>[] = [];
       for (const block of message.content) {
         if (block.type === "text" && typeof block.text === "string") text.push(block.text);
-        else if (block.type === "thinking" && typeof block.thinking === "string" && !block.redacted) reasoning.push(block.thinking);
+        else if (block.type === "thinking" && typeof block.thinking === "string" && !block.redacted) { if (block.thinking.length) reasoning.push(block.thinking); }
         else if (block.type === "toolCall") {
-          if (!identifier(block.id) || !toolName(block.name) || !codeBuddyObject(block.arguments) || seenCalls.has(block.id) || ["error", "aborted", "length"].includes(message.stopReason ?? "")) return fail("tool");
+          if (!callIdentifier(block.id) || !toolName(block.name) || !codeBuddyObject(block.arguments) || seenCalls.has(block.id) || ["error", "aborted", "length"].includes(message.stopReason ?? "")) return fail("tool");
           seenCalls.add(block.id); pending.set(block.id, block.name);
           calls.push({ id: block.id, type: "function", function: { name: block.name, arguments: JSON.stringify(block.arguments) } });
         } else return fail();
       }
-      messages.push({ role: "assistant", content: text.join(""), ...(reasoning.length ? { reasoning_content: reasoning.join("") } : {}), ...(calls.length ? { tool_calls: calls } : {}) });
+      // CLI sanitizeEmptyContent omits assistant entries with no text, reasoning or calls.
+      if (text.join("") || reasoning.length || calls.length)
+        messages.push({ role: "assistant", content: text.join(""), ...(reasoning.length ? { reasoning_content: reasoning.join("") } : {}), ...(calls.length ? { tool_calls: calls } : {}) });
     } else return fail();
   }
   if (pending.size) return fail("tool");

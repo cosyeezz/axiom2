@@ -84,7 +84,9 @@ export function codeBuddyChat(auth: ProviderAuth, transport?: typeof fetch) {
           if (tool.constrainedSampling) (message.diagnostics ??= []).push({ type: "codebuddy-constrained-sampling", timestamp: Date.now(), details: { policy: "local-schema-validation-only" } });
         }
         for (const item of collapsed.messages) if (item.role === "assistant") for (const block of item.content) {
-          if (block.type === "toolCall" && (block.namespace !== undefined || block.argumentsError !== undefined) || block.type === "thinking" && (block.redacted || block.thinkingSignature !== undefined))
+          // Foreign thinkingSignature is opaque SDK replay state, not a CN wire field.
+          // The native serializer projects only readable thinking, never the signature.
+          if (block.type === "toolCall" && (block.namespace !== undefined || block.argumentsError !== undefined) || block.type === "thinking" && block.redacted)
             throw new CodeBuddyProtocolError("request");
         }
         if (options.cacheRetention !== undefined || options.transport !== undefined && options.transport !== "sse" && options.transport !== "auto" || options.websocketConnectTimeoutMs !== undefined)

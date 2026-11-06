@@ -43,6 +43,11 @@ test("real Agent and ModelRuntime keep native sender, tool execution, history, r
       assert.equal(req.headers["traceparent"], undefined);
       assert.ok(body.messages.some((message: any) => message.role === "system" && message.content.includes("CALLER_POLICY")));
       assert.equal(body.tools[0].function.parameters.properties.path.type, "string");
+      const foreign = body.messages.find((m: any) => m.tool_calls?.some((c: any) => c.id === "source_call|fc_source"));
+      assert.equal(foreign.reasoning_content, "SOURCE_VISIBLE_REASONING");
+      assert.equal(foreign.tool_calls[0].id, "source_call|fc_source");
+      assert.ok(body.messages.some((m: any) => m.role === "tool" && m.tool_call_id === "source_call|fc_source" && m.content === "SOURCE_TOOL_VALUE"));
+      assert.ok(!bytes.toString().includes("SOURCE_OPAQUE_SIGNATURE"));
       requests.push({ body, session: String(req.headers["x-conversation-id"]), run: String(req.headers["x-conversation-request-id"]), invocation: String(req.headers["x-request-id"]) });
       res.writeHead(200, { "content-type": "text/event-stream" });
       const choice = (delta: unknown, finish_reason: string | null) => `data: ${JSON.stringify({ model: body.model, choices: [{ index: 0, delta, finish_reason }] })}\n\n`;
@@ -71,6 +76,14 @@ test("real Agent and ModelRuntime keep native sender, tool execution, history, r
     const wrapped = observeProviderRequests(runtime.streamSimple.bind(runtime), event => tracker.observe("fixture", event),
       (m, o) => providerRequestHttpTransport(runtime!, m, o), m => providerRequestDefaultTransport(runtime!, m));
     agent = new Agent({ sessionId: "owned-session", initialState: { model, thinkingLevel: "off", systemPrompt: "CALLER_POLICY: use only the declared fixture tool, preserve history.",
+      messages: [
+        { role: "user", content: "SOURCE_READ", timestamp: 1 },
+        { role: "assistant", api: "openai-responses", provider: "openai", model: "source-model", timestamp: 2, stopReason: "toolUse",
+          content: [{ type: "thinking", thinking: "SOURCE_VISIBLE_REASONING", thinkingSignature: "SOURCE_OPAQUE_SIGNATURE" },
+            { type: "toolCall", id: "source_call|fc_source", name: "read_fixture", arguments: { path: "fixture.txt" } }],
+          usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } },
+        { role: "toolResult", toolCallId: "source_call|fc_source", toolName: "read_fixture", content: [{ type: "text", text: "SOURCE_TOOL_VALUE" }], isError: false, timestamp: 3 },
+      ],
       tools: [{ name: "read_fixture", label: "Read owned fixture", description: "Read fixture", parameters: Type.Object({ path: Type.String() }),
         execute: async (_id, params) => { toolCalls++; assert.ok(params && typeof params === "object" && "path" in params); assert.equal(params.path, "fixture.txt"); return { content: [{ type: "text", text: "OWNED_TOOL_RESULT" }], details: {} }; } }] },
       beforeToolCall: async () => { approvals++; return undefined; },

@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "modelInvocations": 0,
+  "frozenModulesUnchanged": true,
+  "serverPid": 20276,
+  "httpStatus": 200,
+  "restartFreshnessVerified": true,
+  "exhaustedClaims": 1,
+  "oneShotNativePassed": true,
+  "unadmittedUiDisabled": true,
+  "noLiveRunnerActive": true
+}

@@ -1,0 +1,57 @@
+{
+  "frozenAt": 1793959086849,
+  "restart": {
+    "oldPid": 4787,
+    "newPid": 20276,
+    "http": 200,
+    "websocket": "connected"
+  },
+  "modules": [
+    {
+      "path": "app/dist/server/agent-worker.js",
+      "sha256": "6311623b8fd91ad303788b65157cbbcdadbf80f796df9aff7e71eb63908f5ab1",
+      "mtimeMs": 1793958517909.2227
+    },
+    {
+      "path": "app/dist/native-providers/codebuddy/request.js",
+      "sha256": "33f9a1cd0f008b64e49d290906b69fe603e1f72b20ac8d9eb2eb92d4402d1504",
+      "mtimeMs": 1793958517749.6887
+    },
+    {
+      "path": "app/dist/native-providers/codebuddy/ids.js",
+      "sha256": "6444866706898b685db8a8cf0bf95951d25c2654d2c46382ec1217209c8d938f",
+      "mtimeMs": 1793958517745.8933
+    },
+    {
+      "path": "app/dist/native-providers/codebuddy/client.js",
+      "sha256": "21200590b09c9aee02eab3b1a1b92f1a03953418be091f20e277bbcf9896e475",
+      "mtimeMs": 1793958517756.8713
+    },
+    {
+      "path": "app/dist/native-providers/codebuddy/http.js",
+      "sha256": "95e1cc3ce356532565bae8d53d2f91c4937f19d27515855c6a59eac931bf5566",
+      "mtimeMs": 1793958517745.3406
+    },
+    {
+      "path": "app/dist/server/providers/codebuddy-chat.js",
+      "sha256": "813b09a11d78e96066f7d43ca285fd8878b21c0f16afdb4342873a9dc859c905",
+      "mtimeMs": 1793958517760.861
+    }
+  ],
+  "verification": {
+    "serverStartedAt": 1793958932000,
+    "allFresh": true,
+    "workers": [
+      {
+        "pid": 20446,
+        "parent": 20276,
+        "startedAt": 1793958961000
+      },
+      {
+        "pid": 20447,
+        "parent": 20276,
+        "startedAt": 1793958961000
+      }
+    ]
+  }
+}

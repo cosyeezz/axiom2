@@ -1,0 +1,20 @@
+{
+  "upstreamRequests": 0,
+  "syntheticRequests": 1,
+  "passed": true,
+  "preFailureMessages": 116,
+  "messages": 116,
+  "assistants": 50,
+  "signedThinking": 25,
+  "compositeToolIds": 61,
+  "redactedThinking": 0,
+  "namespacedTools": 0,
+  "argumentErrors": 0,
+  "systemMessages": 1,
+  "otherRoleMessages": 0,
+  "opaqueSignaturesAbsent": true,
+  "originalCompositePairsPreserved": true,
+  "stopReason": "stop",
+  "failureCodes": [],
+  "sourceUnchanged": true
+}
